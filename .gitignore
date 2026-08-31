@@ -1,0 +1,12 @@
+# 构建产物。工具一律用 go run 跑，不需要留二进制。
+*.exe
+tmp/
+
+# 覆盖率剖面。跑 go test -coverprofile 时随手落下的，不是仓库内容。
+*.cov
+*.cover
+cover.out
+
+# 本地移植核对日志与一次性裁决脚本，不属于模块源码。
+/*.txt
+/tmp-*.sh
