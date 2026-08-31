@@ -1,4 +1,4 @@
-# core/agent
+# Agent
 
 ## 模块定位
 
@@ -62,7 +62,7 @@
 | `Factory` | 创建新 Agent，或从持久化会话恢复 Agent | 不由本模块提供具体实现 |
 | `Registry` | 管理活 Agent、Factory 和 Observer | 不持久化 Agent，不驱动回合 |
 | `Handle` | 同时交付 `Agent` 与一次性 `Dispose` 能力 | 不向普通查询方暴露销毁权限 |
-| `Inbox` | 维护 `next-turn`、`next-step` 两条待办投影 | 不是模型可见的会话历史 |
+| `Inbox` | 维护 `next-turn`、`next-step` 两条待办队列的当前状态 | 不是模型可见的会话历史 |
 | `ModelSelectionRef` | 在步骤边界一致地切换模型和推理档位 | 不实现模型路由器 |
 | Initiator Context | 标记一条调用链由哪个 Agent 发起 | 不代表存活证明或授权 |
 
@@ -75,7 +75,7 @@
 | `ID` | Agent 与会话共用的运行身份 |
 | `Options` | 默认模型提供方、模型和最大输出 Token |
 | `Session` | 当前活会话；会话事件日志是耐久事实来源 |
-| `Inbox` | 尚未进入模型历史的待处理消息投影 |
+| `Inbox` | 尚未进入模型历史的待处理消息状态 |
 | `Status` | 当前为 `idle` 或 `running` |
 | `Scope` | Agent 局部资源与 Observer 的作用域 |
 | `Cancel` | 中止当前活动，并按选项清理或保留 Inbox |
@@ -153,7 +153,7 @@ Registry 支持：
 
 ## Inbox 与事件日志
 
-Inbox 是“尚未运行的工作”的运行时投影，不是聊天历史。它包含两条有序队列：
+Inbox 是根据事件记录整理出的当前待办状态，源码中称为 projection。它不是聊天历史，包含两条有序队列：
 
 | 队列 | 用途 |
 |---|---|
@@ -162,7 +162,7 @@ Inbox 是“尚未运行的工作”的运行时投影，不是聊天历史。�
 
 主要操作包括 `NextTurn`、`NextStep`、`HasPending`、`Clear`、`Claim`、`Append`、`Prepend`、`Replace`、`Remove` 和 `Splice`。
 
-每次变更都先向会话追加 `agent/inbox/spliced` 事件，再更新内存投影。事件记录目标队列、规整后的起点、删除数量、插入消息和是否属于取消。因此：
+每次变更都先向会话追加 `agent/inbox/spliced` 事件，再更新内存中的当前状态。事件记录目标队列、规整后的起点、删除数量、插入消息和是否属于取消。因此：
 
 - Agent 恢复时可以从事件日志重建 Inbox。
 - 认领与未运行即取消可以被区分。
@@ -218,6 +218,17 @@ Observer 通过 `scope.Scope` 登记并按 Agent 的载体作用域过滤：
 
 选择内容包括 Provider、Model 和 Reasoning Effort。没有选择时保持 Agent 原始配置。
 
+## 作用域与默认模型
+
+`core/scope` 是 Agent 控制面的基础设施。每个作用域拥有不透明身份、可选父作用域和一组按后进先出顺序释放的资源。它同时解决两类问题：
+
+- 工具、提示词、Skill 和 Observer 沿父链继承，离 Agent 更近的同名注册覆盖外层注册。
+- Agent 事件只向自己的作用域和祖先作用域传播，不向子作用域或兄弟作用域传播。
+- 父链绑定拒绝重复绑定和成环；改链只能使用首次绑定返回的句柄。
+- `Scope.Dispose` 幂等执行全部清理，并汇总清理错误。
+
+`core/agentdefaultmodel` 管理部署级默认模型。组合配置给出基础选择，动态设置可以覆盖 Provider、Model 和 Reasoning Effort；保存后，新选择立即被读取，不要求重建 Agent。它只提供默认值，不替代单个 Agent 的显式模型选择，也不负责模型路由和凭据管理。
+
 ## 并发设计
 
 - `Registry` 可以被循环、协议桥和子 Agent 等多个 goroutine 并发使用，内部状态由互斥锁保护。
@@ -233,7 +244,7 @@ Observer 通过 `scope.Scope` 登记并按 Agent 的载体作用域过滤：
 - 活 Agent 公共接口与运行状态。
 - 创建/恢复工厂契约。
 - 活 Agent 注册表、运行期归属和生命周期公布。
-- 耐久 Inbox 投影及未运行工作记账。
+- 耐久 Inbox 当前状态及未运行工作记账。
 - 生命周期、步骤、模型请求和错误扩展点。
 - 调用链发起者传递。
 - 步骤一致的动态模型选择。
@@ -255,10 +266,13 @@ Observer 通过 `scope.Scope` 登记并按 Agent 的载体作用域过滤：
 |---|---|
 | `core/agent/runtime.go` | `Agent`、状态、运行时选项和步骤/请求决策类型 |
 | `core/agent/registry.go` | Factory、Registry、生命周期、查询和 Observer 派发 |
-| `core/agent/inbox.go` | Inbox 投影、认领与变更 |
+| `core/agent/inbox.go` | Inbox 当前状态、认领与变更 |
 | `core/agent/types.go` | Inbox 事件类型和持久化负载 |
 | `core/agent/observer.go` | 12 组 Observer 的签名和语义 |
 | `core/agent/initiator.go` | 调用链发起者 Context |
 | `core/agent/modelselection.go` | 动态模型选择及提示词/请求一致性接线 |
 | `core/agent/consumedwork.go` | 从事件日志折叠已消费和被取消的工作 |
 | `core/agent/doc.go` | 包级设计说明和移植裁决 |
+| `core/scope/scope.go` | 作用域身份、父链、事件准入和资源释放 |
+| `core/scope/layers.go` | 分层注册、继承与近层覆盖 |
+| `core/agentdefaultmodel/config.go` | 部署默认模型与动态设置覆盖 |
