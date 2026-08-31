@@ -6,6 +6,8 @@
 
 项目参考 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的能力和行为语义，但不逐行翻译 TypeScript。Go 已有成熟机制的部分直接采用 Go 的实现方式；每项移植或排除决定都记录在 `docs/portmap/`。
 
+文档入口：[项目文档](docs/README.md) · [core/agent 模块](docs/core/agent.md)
+
 ## 项目边界
 
 - 面向长期运行、多用户的服务端进程，而不是桌面编程助手。
@@ -18,7 +20,7 @@
 
 | 能力 | 主要包 |
 |---|---|
-| Agent 生命周期与 ReAct 循环 | `core/agent`、`core/agentloop`、`core/session` |
+| Agent 生命周期与 ReAct 循环 | [`core/agent`](docs/core/agent.md)、`core/agentloop`、`core/session` |
 | 系统提示词与工具运行时 | `core/systemprompt`、`core/tools` |
 | 模型抽象、OpenAI 兼容协议、重试与计量 | `llm`、`llm/openaicompat`、`llm/llmretry`、`llm/tokenmeter` |
 | 模型响应录制与回放 | `llm/replay`、`llm/mockserver` |
@@ -33,28 +35,103 @@
 | 可替换存储与对象存储 | `storage`、`storage/domain`、`storage/postgres`、`fs/objectstore` |
 | 设置、凭据、附件与工作区 | `settings`、`credentials`、`attachment`、`workspace` |
 
-## 运行结构
+## 架构
 
-```text
-宿主 Go 服务
-  |
-  | 模型、工具、Skill、人格、存储实现
-  v
-core/agentloop
-  |
-  +-- core/systemprompt <- context/* <- skill
-  +-- session/projection <- session event log
-  +-- compaction / spill
-  +-- llm -> llm/llmretry -> llm/openaicompat
-  +-- core/tools -> guard/* -> interaction/*
-  |
-  v
-session/persistence -> storage/domain -> storage backend
+### 整体分层
+
+```mermaid
+flowchart TB
+    subgraph Host["宿主 Go 服务"]
+        HostCapabilities["模型提供方 · 业务工具 · Skill · 人格<br/>存储后端 · 传输层 · 用户鉴权"]
+    end
+
+    subgraph Runtime["ds-harness-go 通用运行时"]
+        direction TB
+
+        Protocol["协议适配<br/>sdk/sdkprotocol · sdk/sdkserver · acp/acp"]
+        Async["长期任务与多 Agent<br/>subagent/* · jobs/* · schedule/schedule · goal/* · workflow/*"]
+        Control["Agent 控制面：core/agent<br/>公共契约 · Registry · 生命周期 · Inbox · Observer"]
+        Loop["Agent 执行面：core/agentloop<br/>回合 · 步骤 · 模型请求 · 工具调用循环"]
+
+        Prompt["上下文与提示词<br/>core/systemprompt · context/* · skill"]
+        Tools["工具运行时<br/>core/tools · guard/* · interaction/* · mcp"]
+        Model["模型调用<br/>llm · llm/llmretry · llm/openaicompat"]
+        Session["会话与上下文管理<br/>core/session · session/projection · compaction · spill"]
+        Persistence["状态与持久化<br/>session/persistence · storage/domain · storage backend"]
+
+        Protocol --> Control
+        Async --> Control
+        Control --> Loop
+        Loop --> Prompt
+        Loop --> Tools
+        Loop --> Model
+        Loop --> Session
+        Session --> Persistence
+    end
+
+    HostCapabilities -->|显式装配| Protocol
+    HostCapabilities -->|模型、工具、Skill、存储实现| Control
 ```
 
-一次回合从 Agent 收件箱认领消息开始。运行时组装系统提示词和历史投影，调用模型；如果模型请求工具，则完成校验、审批、执行和结果记录，再进入下一步模型调用。模型不再请求工具时，本回合结束。
+框内是 `ds-harness-go` 的通用运行时，宿主业务不进入运行时核心。宿主提供具体能力和后端，运行时负责把它们装配进 Agent 生命周期并驱动执行。
 
-会话事件日志是状态权威来源。Agent 进程内对象不承担长期状态；恢复时由持久化事件和投影重新构建会话及循环状态。
+`core/agent` 与 `core/agentloop` 刻意分开：前者定义活 Agent 的稳定公共接口和控制面，后者实现 ReAct 执行循环。协议层、子 Agent 和后台任务只需要依赖 `core/agent`，不必绑定循环实现。
+
+### 一轮对话
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Host as 宿主 / 协议层
+    participant Agent as core/agent
+    participant Inbox as Agent Inbox
+    participant Loop as core/agentloop
+    participant Context as 提示词与历史投影
+    participant LLM as llm
+    participant Tools as core/tools
+    participant Session as 会话事件日志
+    participant Persistence as 持久化后端
+
+    Host->>Agent: Followup / Steer / Inject
+    Agent->>Session: 追加 inbox/spliced 事件
+    Agent->>Inbox: 更新待办投影
+    Agent->>Loop: 唤醒驱动
+    Loop->>Inbox: 认领输入
+    Loop->>Session: 记录回合开始与用户消息
+
+    loop 每个模型步骤
+        Loop->>Context: 组装系统提示词和模型历史
+        Context->>Session: 读取事件投影
+        Context-->>Loop: 返回模型上下文
+        Loop->>LLM: 发送模型请求
+        LLM-->>Loop: 返回文本或工具调用
+
+        alt 模型请求工具
+            Loop->>Tools: 校验、审批并执行
+            Tools-->>Loop: 返回工具结果
+            Loop->>Session: 记录步骤、工具调用和结果
+        else 模型完成回答
+            Loop->>Session: 记录最终响应与回合结束
+            Loop-->>Agent: 状态回到 idle
+        end
+    end
+
+    Session->>Persistence: 按持久化策略写入事件和检查点
+```
+
+会话事件日志是状态的权威来源。Inbox 变化、用户消息、步骤、模型调用和工具结果都通过事件表达；内存对象只是当前投影。进程重启后，运行时由持久化事件重建会话、Inbox 和模型历史。
+
+### 接口与实现分离
+
+| 运行时接口或协调层 | 可替换实现 |
+|---|---|
+| `llm` | `llm/openaicompat` 或宿主自定义适配器 |
+| `storage` | `storage/postgres` 或宿主存储后端 |
+| `fs` | `fs/objectstore`，面向 S3、MinIO 等对象存储 |
+| `session/persistence` | `storage/domain` 与具体存储后端 |
+| `sdk/sdkserver` | 宿主自己的传输层与进程模型 |
+
+运行时不通过接口名称推断部署方式。`fs` 是文件能力抽象，不等于访问服务器本地磁盘；`sdk/sdkserver` 提供协议服务能力，不强制宿主采用指定 HTTP 框架。模型、存储、对象存储和传输实现均由宿主选择。
 
 ## 包结构
 
@@ -144,6 +221,8 @@ go run ./tools/portcheck
 
 关键文档：
 
+- `docs/README.md`：文档站首页和模块导航。
+- `docs/core/agent.md`：Agent 公共契约、架构、能力与边界。
 - `docs/DESIGN.md`：运行时边界、持久化和装配设计。
 - `docs/portmap/rulings.md`：DSH 包级裁决。
 - `docs/portmap/decisions.md`：符号级裁决依据。
