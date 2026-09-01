@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // requireCode 断言 err 是一个 *[fs.Error] 并且带着期望的那个码。

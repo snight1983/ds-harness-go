@@ -123,7 +123,7 @@ func parseOffsetInstant(value string) (int64, error) {
 
 // CanonicalizeTimeZone 验一个 IANA 时区名，交回这台机器上加载出来的那个时区。
 //
-// 源: packages/schedule/schedule/src/domain.ts:251-275
+// 源: packages/schedule/schedule/src/domain.ts:246-270（canonicalizeTimeZone）
 //
 // 新增: DSH 交回的是**规范化之后的名字**（`Intl` 会把 Asia/Calcutta 这类别名折成
 // 主名）。Go 的 [time.LoadLocation] 只验、不折别名，所以这里交回的是加载好的
@@ -134,7 +134,7 @@ func parseOffsetInstant(value string) (int64, error) {
 // 绝不会掉进这台机器的本地时区——那会让同一条规则在不同机器上算出不同的时刻。
 //
 // 本包**不** import time/tzdata，理由和
-// [ds-harness-go/context/timecontext] 那一条一样：那四百多 KB 该由做最终二进制的
+// [github.com/snight1983/ds-harness-go/context/timecontext] 那一条一样：那四百多 KB 该由做最终二进制的
 // 人决定要不要带。部署里没有 zoneinfo 时，这里报的是 [CodeInvalidTimeZone]，
 // 解法是在 main 包里 import _ "time/tzdata"。
 func CanonicalizeTimeZone(value string) (*time.Location, error) {

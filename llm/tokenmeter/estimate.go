@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // charsPerToken 是这套启发式的密度：多少个字符算一个 token。
@@ -35,7 +35,7 @@ const blockOverhead = 4
 
 // RoleOverhead 是每一条消息的角色开销。
 //
-// 源: packages/llm/token-meter/src/estimate.ts:19
+// 源: packages/llm/token-meter/src/estimate.ts:18-19（ROLE_OVERHEAD）
 //
 // 它导出，因为一次响应的定价（[TokenMeter.Measure] 里那次提供方助手内容的估价）
 // 要在内容价之外自己补上这一笔。
@@ -66,7 +66,7 @@ func textChars(text string) int {
 
 // EstimateContent 给一串内容块估价。
 //
-// 源: packages/llm/token-meter/src/estimate.ts:26-49
+// 源: packages/llm/token-meter/src/estimate.ts:32-61（estimateContent）
 //
 // 新增: DSH 这个函数不会抛。Go 这边会返回错误，因为落进兜底那一支的块要靠
 // json.Marshal 量长度，而 [llm.UnknownBlock] 的 MarshalJSON 在原始字节不是合法
@@ -114,7 +114,7 @@ func EstimateContent(content llm.Content) (int, error) {
 
 // EstimateMessage 给一条消息估价：内容价加上一份角色开销。
 //
-// 源: packages/llm/token-meter/src/estimate.ts:56-58
+// 源: packages/llm/token-meter/src/estimate.ts:63-70（estimateMessage）
 func EstimateMessage(message llm.Message) (int, error) {
 	content, err := EstimateContent(message.Content)
 	if err != nil {
@@ -125,7 +125,7 @@ func EstimateMessage(message llm.Message) (int, error) {
 
 // EstimateSystemTokens 给请求头里的系统提示估价。
 //
-// 源: packages/llm/token-meter/src/estimate.ts:65-68
+// 源: packages/llm/token-meter/src/estimate.ts:72-80（estimateSystemTokens）
 //
 // 新增: DSH 那边收的是 EpochHeader | undefined，头不在或者 system 不在都算 0。
 // Go 这边 [session.EpochHeader] 是值类型、System 是空串表示没有，所以「头不在」
@@ -141,7 +141,7 @@ func EstimateSystemTokens(header session.EpochHeader) int {
 
 // EstimateToolsTokens 给请求头里那张工具表估价。
 //
-// 源: packages/llm/token-meter/src/estimate.ts:75-78
+// 源: packages/llm/token-meter/src/estimate.ts:82-90（estimateToolsTokens）
 //
 // 整张表一起排成 JSON 再量长度，而不是逐个工具加起来：工具 schema 是原样进请求体的
 // 一整段 JSON，它的定价对象就是那段文本本身。
@@ -158,7 +158,7 @@ func EstimateToolsTokens(header session.EpochHeader) (int, error) {
 
 // EstimateHeader 给整个请求头估价：系统提示加工具表。
 //
-// 源: packages/llm/token-meter/src/estimate.ts:85-87
+// 源: packages/llm/token-meter/src/estimate.ts:92-99（estimateHeader）
 func EstimateHeader(header session.EpochHeader) (int, error) {
 	tools, err := EstimateToolsTokens(header)
 	if err != nil {

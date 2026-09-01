@@ -12,7 +12,7 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // CheckStoredIdentity 验一份读回来的头上写的会话身份是不是请求的那个。

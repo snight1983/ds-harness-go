@@ -16,13 +16,13 @@ package tokenmeter
 import (
 	"fmt"
 
-	"ds-harness-go/compaction"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/compaction"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ShadowPriceClaim 是一张「我马上要盖掉这段，它值这么多」的认领单。
 //
-// 源: packages/llm/token-meter/src/surface-projection.ts:22-26
+// 源: packages/llm/token-meter/src/surface-projection.ts:26-38（ShadowPriceClaim）
 //
 // 它由压缩那边写下的 compaction/summary ／ compaction/prune 事件举起来，
 // 只对**紧挨着的下一条**事件有效。
@@ -37,7 +37,7 @@ type ShadowPriceClaim struct {
 
 // surfaceTokensFold 是投影侧折进一条事件之后的结果。
 //
-// 源: packages/llm/token-meter/src/surface-projection.ts:28-34
+// 源: packages/llm/token-meter/src/surface-projection.ts:40-46（SurfaceTokensFold）
 type surfaceTokensFold struct {
 	// deltaTokens 是这一步带来的净变化，带符号。
 	deltaTokens int

@@ -8,8 +8,8 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。

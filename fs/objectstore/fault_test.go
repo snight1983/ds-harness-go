@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // denyAll 让这台服务端对每个请求都答 403。

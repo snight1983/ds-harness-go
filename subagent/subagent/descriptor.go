@@ -21,8 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // EventDescriptor 是那条耐久的子 agent 身份事件。
@@ -37,7 +37,7 @@ const EventDescriptor session.EventType = "subagent/descriptor"
 //
 // 新增: DSH 靠 `declare module` 把它合并进 SessionEventMap。Go 没有声明合并，
 // [session.Vocabulary] 是个闭合的值，所以由本包交出这张单子、装配方自己拼
-// （成例见 [ds-harness-go/plan/planmode.EventTypes]）：
+// （成例见 [github.com/snight1983/ds-harness-go/plan/planmode.EventTypes]）：
 //
 //	vocabulary := session.CoreVocabulary().With(subagent.EventTypes()...)
 //
@@ -50,7 +50,7 @@ func EventTypes() []session.EventType {
 // DescriptorVersion 是当下这份描述符的格式版本，盖进每一条追加出去的
 // [EventDescriptor]，且被 [FoldDescriptor] 一字不差地要求。
 //
-// 源: packages/subagent/subagent/src/descriptor.ts:44-49
+// 源: packages/subagent/subagent/src/descriptor.ts:42-48（SUBAGENT_DESCRIPTOR_VERSION）
 //
 // 多认一个组装输入是一次有意的版本变更，绝不是悄悄多一个字段。
 const DescriptorVersion = 2
@@ -147,7 +147,7 @@ func (d DescriptorData) Validate() error {
 // 因为它要靠重载把「一次性不许给 agentProvider」写进类型。Go 这边是一个函数加
 // [DescriptorData.Validate]；调用方自己填 Version（或者留 0 让这里补上）。
 // 脱钩那一步在 Go 里就是 [encoding/json.Marshal] 再解回来——成例见
-// [ds-harness-go/session] 的 doc.go 里那条关于 snapshotJsonValue 的说明。
+// [github.com/snight1983/ds-harness-go/session] 的 doc.go 里那条关于 snapshotJsonValue 的说明。
 func SnapshotDescriptor(input DescriptorData) (DescriptorData, error) {
 	if input.Version == 0 {
 		input.Version = DescriptorVersion
@@ -155,6 +155,9 @@ func SnapshotDescriptor(input DescriptorData) (DescriptorData, error) {
 	if err := input.Validate(); err != nil {
 		return DescriptorData{}, err
 	}
+	// 走不到（下面两支）：这份结构只有整数、字符串和一个 *tools.Restriction，
+	// 排得出来也读得回去。留着是因为「脱钩」这条约束靠的正是这一来一回，把它
+	// 断言成不会失败，日后往结构里添一个排不出去的字段时就没有人报警了。
 	encoded, err := json.Marshal(input)
 	if err != nil {
 		return DescriptorData{}, fmt.Errorf("%w：描述符排不成无损 JSON：%w", ErrInvalidRequest, err)
@@ -168,7 +171,7 @@ func SnapshotDescriptor(input DescriptorData) (DescriptorData, error) {
 
 // FoldDescriptor 把一份持久的孩子日志折成它那份支持得了的描述符。
 //
-// 源: packages/subagent/subagent/src/descriptor.ts:296-303
+// 源: packages/subagent/subagent/src/descriptor.ts:305-323（foldSubagentDescriptor）
 //
 // **第一条** [EventDescriptor] 说了算——立起孩子的那个提供方只追加一条，所以后来
 // 一条同类型的事件改不动那份声明出来的组装。

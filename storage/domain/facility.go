@@ -31,8 +31,8 @@ import (
 	"strings"
 	"sync"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/storage"
 )
 
 // FormName 是这个设施在存储中枢上约定的形态名。

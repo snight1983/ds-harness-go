@@ -17,7 +17,7 @@ import (
 
 // Server 是一台跑着的模拟服务器，以及它记下来的请求。
 //
-// 源: packages/test-support/llm-mock-server/src/index.ts:157-168
+// 源: packages/test-support/llm-mock-server/src/index.ts:156-168（MockLlmServer）
 type Server struct {
 	resolved   resolvedOptions
 	baseURL    string

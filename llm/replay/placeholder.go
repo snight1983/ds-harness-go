@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strings"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ErrScriptedPlaceholder 是「剧本里那个占位符解算不了」。

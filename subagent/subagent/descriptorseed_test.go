@@ -6,7 +6,7 @@ package subagent
 import (
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestSeedDescriptorTurnAppendsTheRecordToAnInheritedPrefix(t *testing.T) {

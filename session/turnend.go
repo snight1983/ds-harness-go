@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // TurnEndReasonKind 是回合结束理由的判别标签。
@@ -33,7 +33,7 @@ const (
 
 // TurnEndReason 说明一个回合为什么结束。
 //
-// 源: packages/core/session/src/types.ts:296-311
+// 源: packages/core/session/src/types.ts:171-172（TurnEndReason）
 //
 // 这个联合是**开放**的：DSH 那边 TurnEndReasonMap 是一个可被插件合并扩展的
 // 映射，本包只登记核心的六个，读到别的落进 [UnknownTurnEnd] 原样保管。
@@ -245,7 +245,7 @@ const (
 
 // TurnEndCancelCause 是一次取消的具体来路。
 //
-// 源: packages/core/session/src/types.ts:277-294
+// 源: packages/core/session/src/types.ts:137-142（AgentCancelCause）
 //
 // 这个联合是**封闭**的：不认识的标签返回 [ErrUnknownCancelCause]，不留 Unknown
 // 变体。理由写在 [ErrUnknownCancelCause] 上——DSH 那边 AgentCancelCause 是一个

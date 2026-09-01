@@ -1,6 +1,6 @@
 // Package compaction 是压缩这一层和后端无关的那一半：四条 compaction/* 事件的
-// 词汇、那条替换用的检查点标记、下刀处的工具配对平衡，以及守住「一次压缩改的是
-// 哪一段」说得清的那几条不变量。
+// 词汇、那条替换用的检查点标记、下刀处的工具配对平衡、守住「一次压缩改的是
+// 哪一段」说得清的那几条不变量，以及各个后端要照着实现的那道接缝。
 //
 // 源: packages/compaction/compaction/src/index.ts
 //
@@ -16,7 +16,7 @@
 // 前三样里只有那条 user/message 上表面。另外三条只进日志，记的是这次改动的锁、
 // 输入和计价。不过模型的裁剪走 [EventCompactionPrune]，它顶替 summary 的位置。
 //
-// 本包提供四件事：
+// 本包提供五件事：
 //
 //  1. **词汇。**[EventTypes] 交出这四种事件类型，装配方拼进 [session.Vocabulary]。
 //     [StartData]、[SummaryData]、[EndData]、[PruneData] 是它们的负载。
@@ -25,10 +25,13 @@
 //  3. **下刀处。**[BalanceIndex] 增量地算出表面上每一刀有没有把一次工具调用和它的
 //     结果劈开。压缩只能从配平的地方下刀。
 //  4. **不变量。**[Trace] 逐条验事件，[ValidateLog] 把一整段日志走一遍。
+//  5. **接缝。**[Engine] 是各个后端要实现的那三个方法，[AgentContext] 和
+//     [ManualAgentContext] 是它们收的那一小片 agent。
 //
 // 不管的：**怎么压**。谁去调模型、按什么策略挑被遮的那一段、什么时候触发，
 // 那是各个后端（compaction/basic、compaction/toolresultpruner）和 Agent 装配层的事。
-// 本包只写下「不管哪个后端，写进日志的东西必须长成什么样」。
+// 本包只写下「不管哪个后端，写进日志的东西必须长成什么样」，以及它得摆出什么形状
+// 才叫一个压缩后端。
 //
 // # 为什么要有这一层
 //
@@ -108,11 +111,24 @@
 //     一次没有摘要的成功结束意味着表面被换掉了、而换上去的是什么、按什么价格算的，
 //     日志里查不到——那正好是本包剩下那几条不变量在守的东西。
 //
-//  11. **`CompactionEngine` 那一族不在本包。**`CompactionAgentContext`、
-//     `ManualCompactAgentContext`、`CompactionEngine` 和 `src/index.ts` 的默认导出
-//     都要 Agent 才拼得起来，归第 6 块，裁决仍然是 PENDING。不变量那一侧的 `apply`
-//     同样只是往注册表上挂一个安装器，核心的 [ValidateLog] 在这里写完了——
-//     成例是 core/session 的 session.Trace。
+//  11. **抽象类换成接口，服务登记那一半整个没有。**DSH 的 `CompactionEngine`
+//     是 `abstract class ... extends Service`，一个类兼两职：既是所有后端的
+//     抽象基类，构造函数又顺手把自己挂到 cordis 的 `ctx.compaction` 上。
+//     Go 没有抽象类，也没有那个容器，所以只剩 [Engine] 一个接口——挂哪个实现
+//     由装配方自己拿着。那段 `declare module` 在 Go 里没有对应物。
+//     连带的还有 `AbortSignal` 一律换成头一个参数的 [context.Context]，
+//     包括 DSH 那个**可选的** `compactRegion(..., signal?)`：一个可以不传的
+//     取消口正是漏传的来源，而一次过模型的压缩漏传取消，等于取消不掉。
+//
+//  12. **`runMaintenance` 拆成了 [Maintainer]。**DSH 让
+//     `ManualCompactAgentContext` 接口继承 `CompactionAgentContext` 再加这个方法。
+//     Go 这边是嵌 [AgentContext] 加一个单方法接口字段，签名和 core/agent 里
+//     Agent.RunMaintenance 逐字相同——于是一个真的 agent 结构上就满足它，
+//     装配方直接填进去，不用现包一层适配。少掉的是 DSH 那个 `<T>` 泛型，
+//     取舍和 core/agent 那一处相同：要产出的调用方自己在闭包里接住。
+//
+//  13. **不变量那一侧的 `apply` 整条 SKIP。**它只是往注册表上挂一个安装器，
+//     核心的 [ValidateLog] 在这里写完了——成例是 core/session 的 session.Trace。
 //
 // # 覆盖率为什么到不了 99%
 //

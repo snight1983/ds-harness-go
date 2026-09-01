@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // unknownIntent 是一个本包造不出来、但嵌入能造出来的第三种写意图。

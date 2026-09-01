@@ -9,8 +9,8 @@ import (
 	"context"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // KillResult 是一次 [Registry.Kill] 的结果。
@@ -25,13 +25,13 @@ const (
 	KillAlreadyFinished KillResult = "already-finished"
 )
 
-// Registry 是后台作业注册表这条缝。进程内那台实现在 ds-harness-go/jobs/localjobs。
+// Registry 是后台作业注册表这条缝。进程内那台实现在 github.com/snight1983/ds-harness-go/jobs/localjobs。
 //
 // 源: packages/jobs/jobs/src/index.ts:62-177
 //
 // 新增: DSH 是一个抽象类，子类当插件装上去就注册成 ctx.jobs。Go 这边它是一个
 // 接口，装配方把实现直接交给需要它的那几个包（成例见
-// [ds-harness-go/subagent/reporttool.Service]）。DSH 那道
+// [github.com/snight1983/ds-harness-go/subagent/reporttool.Service]）。DSH 那道
 // `new.target === JobRegistry` 的守卫因此没有对应物：接口实例化不了。
 type Registry interface {
 	// Start 先把访问、校验、属主清理和实现方自己那道准入过一遍，然后起活儿并
@@ -83,8 +83,8 @@ type Registry interface {
 	//
 	// 新增: DSH 的可见范围由 cordis 上下文的作用域隐式决定，交回一个 `() => void`。
 	// Go 这边那个作用域是显式的 owner 参数，交回的也是本仓库统一的那种带 ctx 的
-	// 释放函数（见 [ds-harness-go/core/agent.Registry.OnCreated]）。owner 必填，
-	// 想罩住每一个属主就交一个 [ds-harness-go/core/scope.NewRoot] 造的无身份作用域
+	// 释放函数（见 [github.com/snight1983/ds-harness-go/core/agent.Registry.OnCreated]）。owner 必填，
+	// 想罩住每一个属主就交一个 [github.com/snight1983/ds-harness-go/core/scope.NewRoot] 造的无身份作用域
 	// ——它落在全局层，和 DSH 把插件装在无作用域上下文上是同一件事。
 	OnJobDone(
 		ctx context.Context,

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // newRegistry 造一条全开的不变量注册表。

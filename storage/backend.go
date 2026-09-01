@@ -163,7 +163,7 @@ type Snapshot struct {
 
 // KVUnit 是一个已打开的单元。
 //
-// 源: packages/storage/storage/src/backend.ts:57-104
+// 源: packages/storage/storage/src/backend.ts:66-115（KvUnit）
 //
 // 值对这一层来说是**不透明的 JSON**：没有 schema、没有事件、没有任何领域含义。
 //

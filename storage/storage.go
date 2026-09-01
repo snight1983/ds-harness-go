@@ -134,7 +134,7 @@ func (s *Storage) sortedForms() []string {
 
 // FormAs 解析一个已挂载的数据形态，并把它断言成 T。
 //
-// 源: packages/storage/storage/src/index.ts:89-92
+// 源: packages/storage/storage/src/index.ts:36-41（StorageForms）
 //
 // 新增: 这是 DSH 那个 `get domain()` 在 Go 里的等价物。那边靠声明合并让
 // ctx.storage.domain 直接带上类型；Go 没有这个机制，所以由调用方在解析时报出它要的类型。

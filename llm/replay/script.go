@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"strings"
 
-	"ds-harness-go/compaction"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/compaction"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // EntryKind 是一条录下来的调用的判别标签。
@@ -38,7 +38,7 @@ const (
 // 这三种里的任何一种。
 //
 // 新增: DSH 那边是一个带 kind 字段的可判别联合。Go 这边照本仓库对联合的一贯做法办
-// （成例见 [ds-harness-go/llm.StreamChunk] 和 [ds-harness-go/llm.ContentBlock]）：
+// （成例见 [github.com/snight1983/ds-harness-go/llm.StreamChunk] 和 [github.com/snight1983/ds-harness-go/llm.ContentBlock]）：
 // 一个封闭接口加三个具体类型，于是「漏了一个分支」由类型开关的 default 当场接住，
 // 正是 DSH 那句 assertNever 想要的效果。
 type Entry interface {
@@ -159,10 +159,10 @@ var packedRowTypes = map[session.RowType]bool{
 
 // ParseSessionLog 把一份会话 .jsonl 的正文读成它那串事件。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:168-206
+// 源: packages/test-support/llm-replay/src/index.ts:171-224（parseSessionLog）
 //
 // 第 0 行是会话头（一条 `{type:"session",…}` 记录），此后每一个非空行是一条
-// [ds-harness-go/session.Event] 或者一行打包过的分块行（展开回它那串事件，于是一份
+// [github.com/snight1983/ds-harness-go/session.Event] 或者一行打包过的分块行（展开回它那串事件，于是一份
 // 开着 packChunks 录下来的夹具推得出同一份剧本）。头被跳过；坏掉的行当场失败。
 //
 // 投影出来的夹具会把事件信封省掉，所以解码之前先把缺的 seq/time 补上，调用方拿到的
@@ -238,11 +238,11 @@ func fillEnvelope(fields map[string]json.RawMessage, nextSeq int) {
 
 // ParseSessionHeader 从 .jsonl 的头行读出回放要的身份、次序和 seed 边界。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:216-225
+// 源: packages/test-support/llm-replay/src/index.ts:226-240（parseSessionHeader）
 //
 // 新增: DSH 手挑 id / createdAt / seedLength 三个字段并逐个 typeof 判类型、类型不对
 // 就静默回落到默认值，是因为它那边没有一个认得这份头的解码器。Go 这边有，所以整行
-// 直接落进 [ds-harness-go/session.SessionHeader]，一份类型不对的头**当场失败**而不是
+// 直接落进 [github.com/snight1983/ds-harness-go/session.SessionHeader]，一份类型不对的头**当场失败**而不是
 // 悄悄变成默认值——夹具里的头是录出来的，它长错了只可能是夹具坏了。
 //
 // 整份文本一个非空行都没有时交回零值头，和 DSH 拿 `{}` 兜底同义。
@@ -263,7 +263,7 @@ func ParseSessionHeader(text string) (session.SessionHeader, error) {
 
 // DeriveScript 从一段录好的会话日志重建出那份按 stream() 调用切开的剧本。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:239-292
+// 源: packages/test-support/llm-replay/src/index.ts:242-312（deriveReplayScript）
 //
 // 把 assistant/chunk 在每一个 finish 处切开，靠 turn 和 step 的变化发现上一次调用
 // 没有收尾。一条明确标了「它是一次本地 LLM 流式调用」的 compaction/summary，在它
@@ -339,7 +339,7 @@ func DeriveScript(events []session.Event) ([]Entry, error) {
 // 源: packages/test-support/llm-replay/src/index.ts:249-273
 //
 // 新增: 这里读的是一个只有三个字段的窄结构，而不是整份
-// [ds-harness-go/compaction.SummaryData]。理由和 DSH 那句「JSONL 解码跨的是一道没有
+// [github.com/snight1983/ds-harness-go/compaction.SummaryData]。理由和 DSH 那句「JSONL 解码跨的是一道没有
 // 类型的持久边界」是同一条：推导只关心那三件事，拿整份负载去解会让一条与回放无关的
 // 字段变化把整段推导拖垮。
 func compactionEntry(event session.Event) (Entry, bool, error) {
@@ -373,7 +373,7 @@ func compactionEntry(event session.Event) (Entry, bool, error) {
 
 // OverridePatch 是增补形式旁挂文件里的一条定位补丁。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:304-309
+// 源: packages/test-support/llm-replay/src/index.ts:314-325（ReplayOverridePatch）
 //
 // 它把推导出来的第 At 次调用（0 基）换成 Entry；At 等于推导长度时是追加——那是一次
 // 事后才录下来的调用，比如一次注入的瞬时失败之后那次重试。
@@ -386,7 +386,7 @@ type OverridePatch struct {
 
 // OverrideDoc 是一份旁挂文件读回来的样子。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:317
+// 源: packages/test-support/llm-replay/src/index.ts:327-333（ReplayOverrideDoc）
 //
 // 新增: DSH 那边是 `ReplayEntry[] | { patches }` 这个联合。Go 这边合成一个结构体，
 // 靠 Replacement 是不是 nil 来分：整份替换和空替换（一份**零次调用**的剧本）因此仍旧
@@ -403,8 +403,8 @@ type OverrideDoc struct {
 // 源: packages/test-support/llm-replay/src/index.ts:431-441
 //
 // 新增: DSH 拿一个 REPLAY_CHUNK_TYPES 集合逐个比对字符串。Go 这边
-// [ds-harness-go/llm.UnmarshalStreamChunk] 本来就对不认识的标签交回
-// [ds-harness-go/llm.ErrUnknownChunkType]，那张手抄的集合因此不必存在——而且顺带
+// [github.com/snight1983/ds-harness-go/llm.UnmarshalStreamChunk] 本来就对不认识的标签交回
+// [github.com/snight1983/ds-harness-go/llm.ErrUnknownChunkType]，那张手抄的集合因此不必存在——而且顺带
 // 把每一块的**字段**也验了，DSH 那边只验了标签。
 func readChunks(raw json.RawMessage, file, location string) ([]llm.StreamChunk, error) {
 	var items []json.RawMessage

@@ -16,10 +16,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ErrInvalidDefinition 表示一份命令定义本身不合法，登记被拒。
@@ -147,7 +147,7 @@ func newCommandLayer(key *scope.Key) (*commandLayer, error) {
 	})}, nil
 }
 
-// IsEmpty 实现 [ds-harness-go/core/scope.Layer]。
+// IsEmpty 实现 [github.com/snight1983/ds-harness-go/core/scope.Layer]。
 func (l *commandLayer) IsEmpty() bool { return l.commands.IsEmpty() }
 
 // Log 是一条会话日志：追加得进新事件。
@@ -259,7 +259,7 @@ func NewRuntime(options Options) (*Runtime, error) {
 //
 // 源: packages/interaction/commands/src/index.ts:270-277
 //
-// 落在哪一层由 owner 的身份决定：[ds-harness-go/core/scope.NewRoot] 造的作用域落在
+// 落在哪一层由 owner 的身份决定：[github.com/snight1983/ds-harness-go/core/scope.NewRoot] 造的作用域落在
 // 全局层；有身份的作用域落在自己那一层，对那个 agent 及其子孙遮蔽掉同名的全局命令。
 func (r *Runtime) Register(
 	ctx context.Context,

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // WriteBehindOptions 是一个写控制器的调度策略和落盘出口。

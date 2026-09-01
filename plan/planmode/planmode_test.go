@@ -24,17 +24,17 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/commands"
-	"ds-harness-go/interaction/userquestions"
-	"ds-harness-go/llm"
-	"ds-harness-go/plan/planmode"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/interaction/userquestions"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/plan/planmode"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // testSection 是这些用例里那段部署方拥有的计划指引。
@@ -71,7 +71,7 @@ func (a *stubAgent) Send(llm.Message, agent.InboxTarget, bool) {}
 func (a *stubAgent) Followup(llm.Message)                      {}
 func (a *stubAgent) Steer(message llm.Message)                 { a.steered = append(a.steered, message) }
 func (a *stubAgent) Inject(message llm.Message)                { a.injected = append(a.injected, message) }
-func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget) {}
+func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget)    {}
 
 // append 往这个 agent 的日志里写一条事件。
 func (a *stubAgent) append(t *testing.T, event session.Event) {
@@ -1041,3 +1041,7 @@ func TestOffIsTheOnlyWordThatLeaves(t *testing.T) {
 		t.Fatalf("那段话该被带进去，拿到 %d 条", len(w.agent.steered))
 	}
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

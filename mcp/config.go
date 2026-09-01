@@ -28,12 +28,12 @@ var serverNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
 
 // ReconnectConfig 是一台 MCP 服务器断线之后的自动重连策略。
 //
-// 源: packages/mcp/mcp-client/src/connection.ts:28-37
+// 源: packages/mcp/mcp-client/src/connection.ts:27-37（ReconnectConfig）
 //
 // 新增: DSH 那四个字段全是可选的，`enabled` 缺省为**真**。Go 的零值是 false，
 // 照抄会让一份没填的配置把重连悄悄关掉，所以这里取反成 Disabled——零值就等于
 // 「开着」，和 DSH 的默认行为对齐。做法和
-// [ds-harness-go/interaction/commands.Definition.SkipInputRecord] 逐字相同。
+// [github.com/snight1983/ds-harness-go/interaction/commands.Definition.SkipInputRecord] 逐字相同。
 // 三个数值字段的零值同样表示「没填」，由 [resolveReconnectPolicy] 补默认值。
 type ReconnectConfig struct {
 	// Disabled 为真时断了就不再重连。
@@ -58,7 +58,7 @@ const (
 
 // ReconnectPolicy 是解算完的重连策略，监督者照着它跑。
 //
-// 源: packages/mcp/mcp-client/src/connection.ts:53
+// 源: packages/mcp/mcp-client/src/connection.ts:52-53（ResolvedReconnectPolicy）
 type ReconnectPolicy struct {
 	// Enabled 表示断了要不要重连。
 	Enabled bool
@@ -115,7 +115,7 @@ func resolveReconnectPolicy(config ReconnectConfig, path string) (ReconnectPolic
 
 // Config 是一台走 Streamable HTTP 的 MCP 服务器的配置。
 //
-// 源: packages/mcp/mcp-client/src/index.ts:76-95
+// 源: packages/mcp/mcp-client/src/index.ts:75-95（StreamableHttpConfig）
 //
 // 新增: DSH 这里是 StdioConfig | StreamableHttpConfig 的联合。stdio 那一支随子进程
 // 那一块一起不移（见包注释），所以联合塌成了一个结构体。

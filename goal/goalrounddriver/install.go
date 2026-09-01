@@ -13,12 +13,12 @@ import (
 	"slices"
 	"sync"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PluginName 是本包在那套插件命名里占的位置。

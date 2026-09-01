@@ -23,11 +23,11 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/interaction/commands"
-	"ds-harness-go/invariants"
-	"ds-harness-go/plan/planmode"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/plan/planmode"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // modeEvent 造一条负载由调用方原样给的 plan/mode。

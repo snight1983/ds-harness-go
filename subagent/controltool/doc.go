@@ -21,9 +21,10 @@
 //
 // DSH 从 cordis 上下文上直接取 `ctx.tools`、`ctx.subagents`、`ctx.agents`，执行体
 // 里的 `exec.agent` 也直接就是那个 Agent 对象。Go 这两样都没有：服务经 Config
-// 显式交进来，而 [ds-harness-go/core/tools.ExecutionInput.Agent] 是一把不透明的
+// 显式交进来，而 [github.com/snight1983/ds-harness-go/core/tools.ExecutionInput.Agent] 是一把不透明的
 // 作用域钥匙，所以由装配方经 AgentOf 交一条查回去的路（做法和
-// ds-harness-go/sessionquery/querytool、ds-harness-go/subagent/reporttool 逐字相同）。
+// github.com/snight1983/ds-harness-go/sessionquery/querytool、
+// github.com/snight1983/ds-harness-go/subagent/reporttool 逐字相同）。
 //
 // # 面向模型的文字保持英文
 //

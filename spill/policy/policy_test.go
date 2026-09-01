@@ -25,12 +25,12 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/spill"
-	"ds-harness-go/spill/policy"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/spill"
+	"github.com/snight1983/ds-harness-go/spill/policy"
 )
 
 // ownerSession 是测试里那个 agent 所属的会话。

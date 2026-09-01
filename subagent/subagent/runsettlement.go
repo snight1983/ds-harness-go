@@ -11,8 +11,8 @@ import (
 	"context"
 	"strings"
 
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // finalText 把孩子最后那段输出里的文本块摊平成作业的最终文本。

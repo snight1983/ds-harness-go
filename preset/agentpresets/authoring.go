@@ -39,7 +39,7 @@ var ErrPresetExists = errors.New("agent-presets: 这个 id 已经被占了")
 
 // PresetExistsError 带上那个被占的 id。
 //
-// 源: packages/preset/agent-presets/src/authoring.ts:36-46
+// 源: packages/preset/agent-presets/src/authoring.ts:37-47（presetExists）
 type PresetExistsError struct {
 	// PresetID 是那个已经被占的 id。
 	PresetID string
@@ -75,7 +75,7 @@ func (e *PresetNotWritableError) Unwrap() error { return ErrPresetNotWritable }
 
 // WritableRoot 交出本地创作出来的预设写去的那个根。
 //
-// 源: packages/preset/agent-presets/src/authoring.ts:65-71
+// 源: packages/preset/agent-presets/src/authoring.ts:49-62（writableRoot）
 //
 // 也就是按优先级排下来第一个 user 根。一个都没有时报 [PresetNotWritableError]：
 // 随部署发出去的那一套属于部署，让一个浏览器改得动它，等于把「重置回一份已知的
@@ -93,7 +93,7 @@ func WritableRoot(roots []Root) (string, error) {
 
 // ReadComposition 读一份预设的组合文本。
 //
-// 源: packages/preset/agent-presets/src/authoring.ts:78-80
+// 源: packages/preset/agent-presets/src/authoring.ts:64-71（readComposition）
 func ReadComposition(preset Preset) (string, error) {
 	content, err := os.ReadFile(preset.Path)
 	if err != nil {
@@ -191,7 +191,7 @@ func copyFile(from, to string, mode os.FileMode) error {
 
 // CopyComposition 靠整目录复制一份已有的预设来建一份新的。
 //
-// 源: packages/preset/agent-presets/src/authoring.ts:136-170
+// 源: packages/preset/agent-presets/src/authoring.ts:105-165（copyComposition）
 //
 // 副本带走源目录里的一切——组合、元数据、技能目录、素材——因为一份预设是它那个
 // 目录，不是那一个文件。符号链接顺链取实体，好让副本自成一体。
@@ -250,7 +250,7 @@ func copyAndStampMetadata(dir string, source Preset, name string) error {
 
 // DeleteComposition 删掉一份本地创作的预设。
 //
-// 源: packages/preset/agent-presets/src/authoring.ts:182-196
+// 源: packages/preset/agent-presets/src/authoring.ts:167-191
 //
 // 随部署发出去的那一份被拒：它属于部署。一份**正有活会话装着**的预设**不拒**——
 // 那份组合在建会话时就读完了、此后不再重读，所以那个会话照原样接着跑。

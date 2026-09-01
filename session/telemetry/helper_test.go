@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // fakeView 是一个只把头、日志和种子长度摆在那儿的假活会话。

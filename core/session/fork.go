@@ -12,13 +12,13 @@ import (
 	"slices"
 	"strconv"
 
-	"ds-harness-go/core/scope"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // ForkErrorCode 是一次分叉被拒的分类。
 //
-// 源: packages/core/session/src/index.ts:771-777
+// 源: packages/core/session/src/index.ts:761-774（SessionForkErrorCode）
 type ForkErrorCode string
 
 const (
@@ -36,7 +36,7 @@ const (
 
 // ForkError 是一次分叉被拒。
 //
-// 源: packages/core/session/src/index.ts:779-785
+// 源: packages/core/session/src/index.ts:776-782（SessionForkError）
 //
 // 新增: DSH 是一个 `name = 'SessionForkError'` 的 Error 子类，调用方靠
 // `instanceof` 认它。Go 里用 [errors.As] 取出这个类型再读 [ForkError.Code]。

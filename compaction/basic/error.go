@@ -19,7 +19,7 @@ var ErrInvalidConfig = errors.New("compaction/basic: 配置不合法")
 
 // TargetPressureError 是「某个路由的压力参数算不出来」这一类配置失败。
 //
-// 源: packages/compaction/compaction-basic/src/config.ts:52-60
+// 源: packages/compaction/compaction-basic/src/config.ts:51-60（TargetPressureConfigError）
 //
 // 它单独有一个类型，是因为自动压缩那一侧会在**每一个步骤边界**上重算一次压力，
 // 而配错了的参数每次都会以同样的方式失败。调用方按 [TargetPressureError.TargetKey]

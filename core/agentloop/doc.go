@@ -7,7 +7,7 @@
 //
 // # 这一层和 core/agent 的分工
 //
-// [ds-harness-go/core/agent] 定义「一个活 agent 长什么样」——[agent.Agent] 这个
+// [github.com/snight1983/ds-harness-go/core/agent] 定义「一个活 agent 长什么样」——[agent.Agent] 这个
 // 面、它的收件箱投影、装着活 agent 的注册表、以及别人往循环上挂钩子的那些扩展点。
 // 它**不造** agent，也不驱动任何东西。
 //
@@ -36,6 +36,6 @@
 // [ReactLoopAgent.Cancel] 调它的 cancel 并把原因带上，跑在里面的每一层
 // （模型流、工具派发、提示词装配）顺着 ctx 参数拿到同一次取消。
 //
-// 取消的**原因**是 [ds-harness-go/session.TurnEndCancelCause]，它会被记进
+// 取消的**原因**是 [github.com/snight1983/ds-harness-go/session.TurnEndCancelCause]，它会被记进
 // turn/end 那条事件，所以「这一轮为什么停」在日志里读得出来。
 package agentloop

@@ -6,7 +6,7 @@
 //
 // # 它凭什么敢自动发话
 //
-// 只凭一样：[ds-harness-go/goal/goal.View] 上那个进程本地的 [goal.Armed]。
+// 只凭一样：[github.com/snight1983/ds-harness-go/goal/goal.View] 上那个进程本地的 [goal.Armed]。
 // 目标本身是耐久的，活化不是——重启之后每个目标都是 [goal.Disarmed]，谁都不会
 // 因为一段旧日志被自动推起来。本包装上去的第一件事就是把已经在场的 agent 一律
 // 打回原形（见 [Install]），为的正是不从上一个生产方那里继承一份看不见的授权。

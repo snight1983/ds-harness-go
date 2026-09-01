@@ -5,7 +5,7 @@
 //
 // 新增: DSH 那边 LlmRuntime extends Service，登记走 ctx.effect、通知走 cordis 事件、
 // 瀑布走 ctx.waterfall。Go 这边一样也不照抄：生命周期挂在显式传进来的
-// [ds-harness-go/core/scope.Scope] 上，通知是一张显式的观察者表，瀑布是一张
+// [github.com/snight1983/ds-harness-go/core/scope.Scope] 上，通知是一张显式的观察者表，瀑布是一张
 // 有序的规则表加一次递归下钻——和本仓库 core/agent、core/session 完全一致。
 
 package llm
@@ -18,8 +18,8 @@ import (
 	"slices"
 	"sync"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // 这些是本运行时自己会挂出来的失败码。它们和 [ContextWindowExceededCode] 那一族
@@ -171,7 +171,7 @@ type RuntimeOptions struct {
 
 // Runtime 是抽象的 llm 服务：一张适配器注册表加一个流式模型调用 API。
 //
-// 源: packages/llm/llm/src/index.ts:307-1000
+// 源: packages/llm/llm/src/index.ts:322-1066（LlmRuntime）
 //
 // 新增: 三张表加两张观察者表都由一把互斥锁护着——DSH 是单线程 JS，不需要。
 // 观察者一律在锁**外面**叫，理由和 core/agent 那边逐字相同：一个观察者反手来问
@@ -204,7 +204,7 @@ type Runtime struct {
 	// 也就是往瀑布最外面插一层。这里给它一个专门的位置而不是往 streamRules 里塞，
 	// 因为 [scope.AnonymousEntries] 只能追加到最里面，而这份检查**必须**在最外面：
 	// 它要验的是消费方最终看到的那条流，不是适配器吐出来的那条。这和 fs 包
-	// 让 [ds-harness-go/fs.Policy] 自己攥着一个 fail 字段是同一个搬法。
+	// 让 [github.com/snight1983/ds-harness-go/fs.Policy] 自己攥着一个 fail 字段是同一个搬法。
 	fail invariants.Fail
 }
 
@@ -282,7 +282,7 @@ func (r *Runtime) attach(owner *scope.Scope, label string, register func() func(
 //
 // 源: packages/llm/llm/src/index.ts:323-355
 //
-// 三条规则和 [ds-harness-go/credentials.Notifier] 的 fanOut 逐字相同：每一个都跑到、
+// 三条规则和 [github.com/snight1983/ds-harness-go/credentials.Notifier] 的 fanOut 逐字相同：每一个都跑到、
 // 普通失败只记日志、不变量违例留第一条等跑完再抛。
 //
 // 新增: DSH 还有一支专门接住「监听器是个 async 函数、它返回的 Promise 被拒绝」的
@@ -333,7 +333,7 @@ func (r *Runtime) emitAdaptersUpdated() {
 
 // AdapterRegistration 是一次活着的适配器登记：能释放，也能原子地换掉整份路由名单。
 //
-// 源: packages/llm/llm/src/index.ts:262-284
+// 源: packages/llm/llm/src/index.ts:277-299（AdapterRegistrationHandle）
 type AdapterRegistration struct {
 	runtime *Runtime
 	adapter Adapter
@@ -554,7 +554,7 @@ func (r *Runtime) registration(provider string) (*adapterRegistration, error) {
 // DirectoryRegistration 是一次活着的可配置提供方声明，是
 // [AdapterRegistration] 在目录那一侧的对应物。
 //
-// 源: packages/llm/llm/src/index.ts:286-305
+// 源: packages/llm/llm/src/index.ts:301-320（DirectoryRegistrationHandle）
 type DirectoryRegistration struct {
 	runtime  *Runtime
 	dispose  func(context.Context) error
@@ -1000,7 +1000,7 @@ func resolveCallWithInfo(config CallConfig, info ResolvedModelInfo) (CallConfig,
 
 // PreparedCall 是一次配置和适配器登记一起解算出来的模型调用。
 //
-// 源: packages/llm/llm/src/index.ts:155-175
+// 源: packages/llm/llm/src/index.ts:157-177（PreparedLlmCall）
 //
 // 新增: DSH 交出来的是一个 Object.freeze 过的字面量。Go 这边是一个字段全不导出、
 // 只给读取方法的指针类型——访问器就是 Object.freeze 在 Go 里的等价物：拿到它的人

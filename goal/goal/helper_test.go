@@ -10,7 +10,7 @@
 //   - **把 nil 当成一次失败**。errorCode 收到 nil 会当场 Fatal：一条本该被拒的
 //     调用悄悄成功了，是这份测试最该抓住的那一种回归。
 //   - **拿一个假会话糊弄过去**。stubAgent 手里握的是一台**真的**
-//     [ds-harness-go/core/session.Session]：本包排出去的每一份字节都要真的过一遍
+//     [github.com/snight1983/ds-harness-go/core/session.Session]：本包排出去的每一份字节都要真的过一遍
 //     那台会话的信封校验，不然「写下的改动读得回来」这件事根本没验到。
 //   - **拿墙上时钟去验时刻**。所有用例走的都是 stubClock，于是 createdAt /
 //     updatedAt 是可以逐个数字断言的；时钟回拨那一条不变量也才试得出来。
@@ -25,11 +25,11 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // asError 是 [errors.As] 的一层泛型薄壳，省掉每个调用点那次 `var x *T` 的声明。
@@ -86,7 +86,7 @@ func userEvent(t *testing.T, source *Source) session.Event {
 		t.Fatalf("排用户消息失败：%v", err)
 	}
 	// 带上表面标记：一条真的用户消息一定是上表面的，会话在追加时会拿这一条去验
-	// （少了它 [ds-harness-go/core/session.Session.Append] 当场拒收）。只走折叠的
+	// （少了它 [github.com/snight1983/ds-harness-go/core/session.Session.Append] 当场拒收）。只走折叠的
 	// 那些用例不看这个字段，但两边共用同一个造事件的地方，它就该造出那条真会落进
 	// 日志的样子。
 	return session.Event{
@@ -149,7 +149,7 @@ func scopeOf(t *testing.T, label string, parent *scope.Scope) *scope.Scope {
 	return owner
 }
 
-// stubAgent 是一个只为满足 [ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
+// stubAgent 是一个只为满足 [github.com/snight1983/ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
 //
 // 本包用得着的只有 ID、Session 和 Scope 三样；剩下的方法在这里都是空的，被叫到
 // 说明本包越界了。
@@ -189,7 +189,7 @@ func (a *stubAgent) Cancel(session.TurnEndCancelCause, agent.CancelOptions) {}
 func (a *stubAgent) Send(llm.Message, agent.InboxTarget, bool)              {}
 func (a *stubAgent) Steer(llm.Message)                                      {}
 func (a *stubAgent) Inject(llm.Message)                                     {}
-func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget) {}
+func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget)                 {}
 func (a *stubAgent) Followup(llm.Message)                                   {}
 
 func (a *stubAgent) WhenIdle(context.Context) error { return nil }
@@ -326,3 +326,7 @@ func mustCreate(t *testing.T, service *Service, owner agent.Agent, objective str
 	}
 	return view
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

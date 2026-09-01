@@ -15,8 +15,8 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
 )
 
 // generationCloseTimeout 是等一代连接自己收敛的上限。
@@ -263,7 +263,7 @@ func (s *supervisor) serve(ctx context.Context, session *sdk.ClientSession, disp
 
 // closeGeneration 关掉一代连接，并且等它真的收敛。
 //
-// 源: packages/mcp/mcp-client/src/connection.ts:181-190（waitForClose）、285-291、336-341
+// 源: packages/mcp/mcp-client/src/connection.ts:180-190（waitForClose）、285-291、336-341
 //
 // 等收敛而不是关完就走，是因为一条关不掉的传输意味着对面那一端还在；再叠一条
 // 新连接上去，两条会同时对着同一台服务器说话。DSH 写这条时针对的是 stdio 那种

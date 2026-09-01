@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // ErrInvalidConfig 表示一份注册表配置本身就不成立。
@@ -83,7 +83,7 @@ type collectResult struct {
 
 // layer 是一个作用域在这张注册表里的全部贡献。
 //
-// 源: packages/skill/skill/src/index.ts:327-344（SkillLayer）
+// 源: packages/skill/skill/src/index.ts:328-345（SkillLayer）
 type layer struct {
 	// providers 是这一层注册的提供方，按插入顺序。
 	providers *scope.NamedEntries[*registration]
@@ -121,7 +121,7 @@ func (l *layer) IsEmpty() bool {
 
 // Options 是造一个 [Registry] 的选项。
 //
-// 源: packages/skill/skill/src/index.ts:278-282（Config）
+// 源: packages/skill/skill/src/index.ts:279-283（Config）
 type Options struct {
 	// CollectCacheMaxEntries 是缓存里最多留几份跑完的目录。
 	//
@@ -145,7 +145,7 @@ type Options struct {
 
 // Registry 是分层的技能注册表。
 //
-// 源: packages/skill/skill/src/index.ts:346-661
+// 源: packages/skill/skill/src/index.ts:347-662（SkillRegistry）
 //
 // 注册落在调用方作用域那一层：宿主和仓库级插件落全局层，挂在某个 agent 预设常驻
 // 组合里的插件落那个预设自己那层。读的时候把全局层和视角作用域这条链合起来，
@@ -823,7 +823,7 @@ func compareIndexedCandidates(left, right indexedCandidate) int {
 
 // waitWithCancel 让一次提供方调用和 ctx 的取消赛跑。
 //
-// 源: packages/skill/skill/src/index.ts:819-842（waitWithAbort）
+// 源: packages/skill/skill/src/index.ts:820-843（waitWithAbort）
 //
 // 保留它的理由和 DSH 自己写的一样：一个不合作的提供方不该把调用方吊死。手段换成
 // Go 的写法——调用跑在一个 goroutine 里，取消时立刻交回；那个 goroutine 自己会随

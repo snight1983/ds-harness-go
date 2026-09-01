@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/core/scope"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // CreatedObserver 是一次会话公布的观察者，**有否决权**。
@@ -87,7 +87,7 @@ func (l *storeLayer) IsEmpty() bool {
 
 // entry 是一个会话在存储里那一份登记的全部可变状态。
 //
-// 源: packages/core/session/src/index.ts:64-73（SessionEntry）
+// 源: packages/core/session/src/index.ts:399-410（SessionEntry）
 //
 // 除了 id、session、carrierKey、store 四个造出来就不再变的字段，其余全部由
 // [Store.mutex] 守着。
@@ -258,7 +258,7 @@ func (s *Store) OnFlush(
 
 // CreateOptions 是建一个新会话时给的东西。
 //
-// 源: packages/core/session/src/types.ts:106-123
+// 源: packages/core/session/src/types.ts:96-117（CreateSessionOptions）
 //
 // 新增: DSH 把除 seed 之外的字段裹在一个可选的 `meta` 对象里。这里摊平了：
 // 那层嵌套在 DSH 里**不承载任何语义**——`meta` 整个不给、和给了一个每项都不填的
@@ -290,7 +290,7 @@ type CreateOptions struct {
 	SeedLength int
 
 	// Origin 非空表示这是一个子 agent 的会话，取值只有
-	// [ds-harness-go/session.OriginSubagent]。
+	// [github.com/snight1983/ds-harness-go/session.OriginSubagent]。
 	Origin sessionlog.Origin
 
 	// DelegationDepth 是委派层数，根会话是 0。
@@ -302,7 +302,7 @@ type CreateOptions struct {
 
 // RestoreOptions 是从持久化存储里读回一个会话时给的东西。
 //
-// 源: packages/core/session/src/types.ts:125-136
+// 源: packages/core/session/src/types.ts:119-130（RestoredSessionOptions）
 //
 // 这两份数据的**所有权交给这次调用**：它们是刚从存储里读出来、别处没有别名的
 // 一份图，验过之后原样接手，不复制。
@@ -722,7 +722,7 @@ func (s *Store) eventObservers(key *scope.Key) []EventObserver {
 
 // collectObservers 把全局层和载体作用域父链上各层的同一张表叠成一份名单。
 //
-// 源: packages/core/session/src/index.ts:39-42（collectSessionCallbacks）
+// 源: packages/core/session/src/index.ts:374-377（collectSessionCallbacks）
 //
 // 顺序是全局在前、远祖次之、载体自己最后——和本仓库其他几处作用域派发一致。
 func collectObservers[T any](
@@ -772,7 +772,7 @@ func (s *Store) callDisposedObserver(id sessionlog.SessionID, observer DisposedO
 
 // callEventObserver 跑一个追加观察者，把它的 panic 兜成一条日志。
 //
-// 源: packages/core/session/src/index.ts:44-63（invokeContainedSessionObservers）
+// 源: packages/core/session/src/index.ts:379-397（invokeContainedSessionObservers）
 //
 // 事件一旦进了日志这次追加就算提交了，所以这里**只记不报**：一个观察者坏了不能
 // 让一条已经被接受的事件回头变成失败，也不能挡住后面的观察者看见它。

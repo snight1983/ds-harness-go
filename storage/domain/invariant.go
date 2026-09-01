@@ -9,7 +9,7 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // RegisterInvariants 装上「变更事件的约定」这条检查，返回注销函数。

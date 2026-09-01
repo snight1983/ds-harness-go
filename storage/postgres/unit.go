@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage"
 )
 
 // kvUnit 是一个开在某份介质上的单元。

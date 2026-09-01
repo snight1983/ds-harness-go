@@ -12,7 +12,7 @@ import (
 
 // Code 是一次会话查询失败的稳定分类，供机器路由。
 //
-// 源: packages/session-query/session-query/src/config.ts:20-37
+// 源: packages/session-query/session-query/src/config.ts:19-37（SessionQueryErrorCode）
 //
 // 新增: DSH 那边这是一个字符串字面量联合，配一个 `SessionQueryError extends
 // HarnessError` 把它收窄。Go 这边分派靠 errors.Is，所以 Code 自己就实现 error：
@@ -73,7 +73,7 @@ const (
 
 // Error 是一次带分类的会话查询失败。
 //
-// 源: packages/session-query/session-query/src/config.ts:40-48
+// 源: packages/session-query/session-query/src/config.ts:39-48（SessionQueryError）
 //
 // errors.Is 认得它的 [Code]，errors.Unwrap 拿得到底层那条（后端报上来的
 // 原始错误、或者 [session] 包的哨兵）。两条链是分开的：Code 说的是

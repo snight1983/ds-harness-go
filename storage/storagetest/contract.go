@@ -28,7 +28,7 @@ import (
 	"reflect"
 	"testing"
 
-	"ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage"
 )
 
 // Harness 是一次一致性测试要用的东西：一个开在空介质上的新后端，

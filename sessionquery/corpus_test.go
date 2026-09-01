@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
 )
 
 // newCorpus 排一份挂了两处观察的语料，并发度用默认值。

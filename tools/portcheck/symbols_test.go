@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/tools/internal/rulingtable"
+	"github.com/snight1983/ds-harness-go/tools/internal/rulingtable"
 )
 
 func writeFile(t *testing.T, path, content string) {

@@ -5,7 +5,7 @@
 //
 // 和 bash 那条接缝（一个上下文一个执行器，第二次装载直接报错）不一样，这里**多个**
 // 提供方共存：各自按唯一的名字登记，调用方点名取用。形状对着的是
-// [ds-harness-go/llm.Runtime.RegisterAdapter] 那张适配器注册表，不是单实例的执行器。
+// [github.com/snight1983/ds-harness-go/llm.Runtime.RegisterAdapter] 那张适配器注册表，不是单实例的执行器。
 //
 // 本包扮演的是这条能力接缝的**服务定义**那一角。提供方（spawn／fork／acp）和面向
 // 模型的消费方（tool-subagent）各自成包。
@@ -25,11 +25,11 @@ import (
 	"log/slog"
 	"sync"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // RuntimeOptions 是造这条接缝的服务时给的东西。
@@ -57,7 +57,7 @@ type RuntimeOptions struct {
 
 // Runtime 是按名字的提供方注册表，外加一次性运行、耐久发现和可续孩子那几件操作。
 //
-// 源: packages/subagent/subagent/src/index.ts:170-514
+// 源: packages/subagent/subagent/src/index.ts:196-649（SubagentRuntime）
 type Runtime struct {
 	listing ListingServices
 	// setups 是部署往每一个还没公布的可续孩子里组合的那些贡献。
@@ -73,7 +73,7 @@ type Runtime struct {
 	continuations *ContinuationManager
 
 	// mutex 守住下面那张注册表和它的次序。观察者一律在锁外调用，规矩和
-	// [ds-harness-go/core/agent.Registry] 逐字相同：一个观察者反手来问
+	// [github.com/snight1983/ds-harness-go/core/agent.Registry] 逐字相同：一个观察者反手来问
 	// [Runtime.List] 是完全正当的，在锁里叫它就是自锁。
 	mutex     sync.Mutex
 	providers map[string]Provider
@@ -96,6 +96,7 @@ type Runtime struct {
 func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 	emitter, err := newLifecycleEmitter(options.Logger)
 	if err != nil {
+		// 走不到：newLifecycleEmitter 自己那条失败路（见它那句「走不到」）也走不到。
 		return nil, err
 	}
 	runtime := &Runtime{
@@ -356,7 +357,7 @@ func assertCapabilities(provider Provider, request StartRequest) error {
 		{request.OutputSchema != nil, capabilities.OutputSchema, "outputSchema"},
 		{request.MaxDepth != nil, capabilities.DepthLimit, "depthLimit"},
 		// 新增: DSH 靠 `toolFilter !== undefined` 判「要没要」。Go 的
-		// [ds-harness-go/core/tools.Restriction] 是值类型，没有「不在」，所以
+		// [github.com/snight1983/ds-harness-go/core/tools.Restriction] 是值类型，没有「不在」，所以
 		// 「两张名单都是 nil」就是没要——和 [ContinuationManager.StartContinuable]
 		// 拍描述符时用的是同一条判据。
 		{request.ToolFilter.Allow != nil || request.ToolFilter.Deny != nil, capabilities.ToolFilter, "toolFilter"},

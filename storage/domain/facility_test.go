@@ -15,9 +15,9 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/storage"
-	"ds-harness-go/storage/storagetest"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )
 
 // TestNewRequiresAHubAndABackendName 钉住建设施时那两个没有缺省值的必填项。

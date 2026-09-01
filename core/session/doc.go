@@ -6,19 +6,19 @@
 //
 // 源: packages/core/session/src/index.ts:1-36
 //
-// # 为什么和 ds-harness-go/session 分成两个包
+// # 为什么和 github.com/snight1983/ds-harness-go/session 分成两个包
 //
 // DSH 那个包里既有词汇（事件信封、负载、表面折叠、不变量），也有活的对象
 // （Session、SessionStore）。本仓库把它劈成两半：
 //
-//   - [ds-harness-go/session] 是**词汇**——纯值和纯函数，持久化后端、查询、
+//   - [github.com/snight1983/ds-harness-go/session] 是**词汇**——纯值和纯函数，持久化后端、查询、
 //     回放、统计都只需要它，谁都不必为了读一条事件而把一个内存注册表拖进来。
 //   - 本包是**活的那一半**——可变状态、发布钩子、作用域派发。它依赖词汇，
 //     词汇不依赖它。
 //
 // 这条边界不是审美：本仓库里 session/persistence、session/projection、
 // session/stats 这些包全部只 import 词汇那一半。合成一个包的话，一个只想
-// 排一条事件的调用方会连带拿到 [Store] 和它整套 [ds-harness-go/core/scope]
+// 排一条事件的调用方会连带拿到 [Store] 和它整套 [github.com/snight1983/ds-harness-go/core/scope]
 // 依赖。
 //
 // 两个包的 Go 包名都是 session，本包在源码里把词汇那一半 import 成
@@ -69,7 +69,7 @@
 // # 这里没有照抄的部分
 //
 // 新增: deepFreeze / freezeRestoredObject / structuredClone / snapshotJsonValue
-// 全部不移。Go 的结构体是值，切片那一层由 [ds-harness-go/session.Event.Clone]
+// 全部不移。Go 的结构体是值，切片那一层由 [github.com/snight1983/ds-harness-go/session.Event.Clone]
 // 复制；「冻结」在 Go 里由「交出去的是复制品」兑现。DSH 靠 snapshotJsonValue
 // 回传 undefined 判断「排不成 JSON」，Go 这边负载本来就是 json.RawMessage，
 // 那件事变成 json.Valid。
@@ -79,7 +79,7 @@
 // [Store] 同包，一个不导出的字段做的是同一件事，而且不必回收。
 //
 // 新增: assertSessionEventEnvelope 里那圈信封键白名单不移——它在 Go 里是
-// [ds-harness-go/session.Event] 的 UnmarshalJSON 干的活，而且干得更早。
+// [github.com/snight1983/ds-harness-go/session.Event] 的 UnmarshalJSON 干的活，而且干得更早。
 // 同理 `data !== undefined`、`ignorable !== true`、Number.isSafeInteger 那几条
 // 在 Go 的类型上不可能违反，见 [validateSeedEvent] 各处的注释。
 package session

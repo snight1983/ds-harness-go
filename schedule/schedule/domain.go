@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // maxSafeInteger 是 IEEE 754 双精度还能逐个数清楚的最大整数。
@@ -26,7 +26,7 @@ const maxSafeInteger int64 = 1<<53 - 1
 
 // Folded 是一次纯回放的结果。
 //
-// 源: packages/schedule/schedule/src/domain.ts:88-94
+// 源: packages/schedule/schedule/src/domain.ts:89-95（FoldedSchedules）
 type Folded struct {
 	// Active 是此刻还活着的记录，保持它们**被创建时**的先后。
 	Active []Record
@@ -36,7 +36,7 @@ type Folded struct {
 
 // EveryOccurrence 是固定频率那一次「跳过错过的」之后的结论。
 //
-// 源: packages/schedule/schedule/src/domain.ts:96-102
+// 源: packages/schedule/schedule/src/domain.ts:97-103（EveryOccurrence）
 type EveryOccurrence struct {
 	// OccurrenceAt 是在做决定的那一刻，锚点对齐的**最后一次**该响的时刻。
 	OccurrenceAt string
@@ -246,7 +246,7 @@ func decodeEveryRecord(object map[string]json.RawMessage) (Record, error) {
 
 // DecodeChange 严格读一份 v1 的 schedule/change 负载。
 //
-// 源: packages/schedule/schedule/src/domain.ts:459-508
+// 源: packages/schedule/schedule/src/domain.ts:460-511（decodeScheduleChange）
 func DecodeChange(raw json.RawMessage) (Change, error) {
 	object, ok := decodeObject(raw)
 	if !ok {
@@ -383,7 +383,7 @@ func dispatchedRecord(record Record, change Change) (Record, bool, error) {
 
 // FoldEvents 把种子边界之后属于本包的那一串事件折成此刻的状态。
 //
-// 源: packages/schedule/schedule/src/domain.ts:573-621
+// 源: packages/schedule/schedule/src/domain.ts:622-645（foldScheduleEvents）
 //
 // seedLength 是这条日志从父会话那里继承来的前缀长度：分叉出来的孩子不拥有父那一段
 // 提醒，也不该在自己这边把它们再响一遍。
@@ -449,7 +449,7 @@ func FoldEvents(events []session.Event, seedLength int) (Folded, error) {
 
 // AllocateID 取下一个好念的 id，而且**一个都不重用**。
 //
-// 源: packages/schedule/schedule/src/domain.ts:623-636
+// 源: packages/schedule/schedule/src/domain.ts:647-661（allocateScheduleId）
 //
 // 从「用过的个数加一」起步而不是从「活着的个数加一」：删掉一条之后再建一条，
 // 新的那条必须拿一个新号，否则一条指向老号的旧日志会在回放时接到新记录上。
@@ -482,7 +482,7 @@ func normalizePrompt(prompt string) (string, error) {
 
 // CreateAfterRecord 验一条 after 规则并算出它的耐久目标。
 //
-// 源: packages/schedule/schedule/src/domain.ts:638-668
+// 源: packages/schedule/schedule/src/domain.ts:663-693（createAfterScheduleRecord）
 //
 // now 是**一次**取到的墙上时钟采样，由调用方传进来：同一次创建里的每一处时间判断
 // 都得用同一个数，否则「严格在未来」这条检查会和实际算出来的目标对不上。
@@ -505,7 +505,7 @@ func CreateAfterRecord(id ID, prompt string, afterSeconds int64, now time.Time) 
 
 // CreateAtRecord 验一条绝对规则并算出它**唯一**的那个 UTC 目标。
 //
-// 源: packages/schedule/schedule/src/domain.ts:670-720
+// 源: packages/schedule/schedule/src/domain.ts:695-744（createAtScheduleRecord）
 //
 // 新增: at 在 DSH 那边的静态类型是 `string | LocalAtInput`，这里是一段还没解的
 // JSON。两种写法怎么判别、每一种怎么折，都在 [resolveAtInput] 里。
@@ -527,7 +527,7 @@ func CreateAtRecord(id ID, prompt string, at json.RawMessage, now time.Time) (Re
 
 // CreateEveryRecord 验一条固定频率规则并算出它第一个对齐创建时刻的目标。
 //
-// 源: packages/schedule/schedule/src/domain.ts:722-757
+// 源: packages/schedule/schedule/src/domain.ts:746-782（createEveryScheduleRecord）
 //
 // 锚点是**创建的那一刻**，所以第一次响是在一个整间隔之后，不是立刻。
 func CreateEveryRecord(id ID, prompt string, everySeconds int64, now time.Time) (Record, error) {
@@ -553,7 +553,7 @@ func CreateEveryRecord(id ID, prompt string, everySeconds int64, now time.Time) 
 
 // NewView 按某一次墙上时钟采样，推出一条记录面向模型的完整样子。
 //
-// 源: packages/schedule/schedule/src/domain.ts:759-772
+// 源: packages/schedule/schedule/src/domain.ts:784-796（scheduleView）
 //
 // 新增: DSH 那边 `Date.parse` 解不动会得到 NaN，比较下来就是 scheduled。这里交回
 // 一个错——本包造出来和折出来的记录里 ScheduledAt 一定合法，但 [Record] 是导出的，
@@ -583,7 +583,7 @@ func jsonString(value any) string {
 
 // RenderReminderFraming 排一次性提醒响的时候那段固定的、抗注入的措辞。
 //
-// 源: packages/schedule/schedule/src/domain.ts:774-788
+// 源: packages/schedule/schedule/src/domain.ts:798-811（renderReminderFraming）
 //
 // 「抗注入」落在两件事上：那句话明说了正文是**不可信的提醒内容、不是新的用户指令**，
 // 而且正文和 id 都以 JSON 字面量的形式出现——一段想越狱的提醒正文没法在这里
@@ -620,7 +620,7 @@ type everyReminderPayload struct {
 
 // RenderEveryReminderBatchFraming 把一批固定频率提醒排成一段抗注入的措辞。
 //
-// 源: packages/schedule/schedule/src/domain.ts:790-807
+// 源: packages/schedule/schedule/src/domain.ts:813-831（renderEveryReminderBatchFraming）
 //
 // 成批而不是一条一条：几条同时到期的提醒如果各发一次跟进消息，模型会被连着打断
 // 好几次；合成一条，它一次就看全了。

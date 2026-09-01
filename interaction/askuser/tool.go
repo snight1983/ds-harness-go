@@ -11,10 +11,10 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/userquestions"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/userquestions"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ToolName 是这件工具在注册表里的名字。
@@ -322,7 +322,7 @@ func toValue(answer userquestions.Answer) askValue {
 // 源: packages/interaction/tool-ask-user/src/index.ts:80-99
 //
 // 接缝报的错原样返回：[userquestions.Error] 带着 ErrorName/ErrorCode，
-// [ds-harness-go/core/tools] 那道结果收敛会把它抄进 Failure.Info，下游按代号分流，
+// [github.com/snight1983/ds-harness-go/core/tools] 那道结果收敛会把它抄进 Failure.Info，下游按代号分流，
 // 不必解析错误文本。
 func (t *Tool) execute(ctx context.Context, args json.RawMessage, exec *tools.RunContext) (json.RawMessage, error) {
 	var decoded askArgs

@@ -30,7 +30,7 @@ type SearchDocument interface{ searchDocument() EventSearchDocument }
 
 // FilterSessions 用一组**与**关系的逻辑会话谓词过滤，保持输入顺序。
 //
-// 源: packages/session-query/session-query/src/filters.ts:18-25
+// 源: packages/session-query/session-query/src/filters.ts:12-24（filterSessionResults）
 func FilterSessions[T LogicalRecord](records []T, filters []SessionFilter) ([]T, error) {
 	predicates := make([]func(Record) bool, 0, len(filters))
 	for _, filter := range filters {
@@ -51,7 +51,7 @@ func FilterSessions[T LogicalRecord](records []T, filters []SessionFilter) ([]T,
 
 // FilterEventDocuments 用一组**与**关系的事件谓词过滤语义文档，保持输入顺序。
 //
-// 源: packages/session-query/session-query/src/filters.ts:27-38
+// 源: packages/session-query/session-query/src/filters.ts:26-38（filterSessionEventDocuments）
 func FilterEventDocuments[T SearchDocument](documents []T, filters []EventFilter) ([]T, error) {
 	predicates := make([]func(EventSearchDocument) bool, 0, len(filters))
 	for _, filter := range filters {
@@ -122,7 +122,7 @@ func MaterializeSessionFilters(filters []SessionFilter) ([]SessionFilter, error)
 
 // MaterializeEventFilters 在跨过异步边界之前，复制并验一遍事件过滤器。理由同上。
 //
-// 源: packages/session-query/session-query/src/filters.ts:72-100
+// 源: packages/session-query/session-query/src/filters.ts:70-98（materializeSessionEventResultFilters）
 func MaterializeEventFilters(filters []EventFilter) ([]EventFilter, error) {
 	owned := make([]EventFilter, 0, len(filters))
 	for _, filter := range filters {
@@ -158,7 +158,7 @@ func MaterializeEventFilters(filters []EventFilter) ([]EventFilter, error) {
 
 // CompileTextFilter 编出一个字面的、忽略大小写、空白宽松的语义文字匹配器。
 //
-// 源: packages/session-query/session-query/src/filters.ts:102-121
+// 源: packages/session-query/session-query/src/filters.ts:100-118（compileSessionTextFilter）
 //
 // 调用方给的每一段都被 [regexp.QuoteMeta] 转义，所以查询串里的正则元字符
 // 一律当普通字符看——这是防注入的那一步，不是可选的美化。段与段之间换成

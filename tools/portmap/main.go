@@ -1,4 +1,4 @@
-// 本文件的作用：把 DeepSeek Harness 的 TypeScript 源码里**所有**导出符号机器提取出来，
+// Command portmap 把 DeepSeek Harness 的 TypeScript 源码里**所有**导出符号机器提取出来，
 // 生成一份可复现的清单。这份清单是「抄全了没有」的唯一基准。
 //
 // 为什么需要它：这个移植工作最大的风险不是写错，是**悄悄漏掉**——我判断某个东西
@@ -61,7 +61,7 @@ var (
 )
 
 func main() {
-	root := flag.String("root", `C:\codestudy\deepseek-harness-master`, "DeepSeek Harness 源码根目录")
+	root := flag.String("root", `C:\codestudy\deepseek-harness-dsh-v0.1.2-alpha.3`, "DeepSeek Harness 源码根目录")
 	out := flag.String("out", `C:\code\ds-harness-go\docs\portmap\dsh-exports.tsv`, "清单输出路径")
 	flag.Parse()
 

@@ -1,7 +1,7 @@
 // 本文件的作用：那件 report 工具本身——它给模型看的说明、那段用法指引、
 // 往一个孩子作用域里装的那两笔登记，以及把这份贡献挂上可续装配表的那一步。
 //
-// 源: packages/subagent/tool-subagent-report/src/index.ts:17-142
+// 源: packages/subagent/tool-subagent-report/src/index.ts:16-140
 
 package reporttool
 
@@ -11,12 +11,12 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -40,8 +40,8 @@ const SectionName = "tool:" + ToolName
 //
 // 新增: DSH 这个值是 117，而 tool-subagent 那段用的是 **116.5**——它要挤在
 // tool-ralph 的 116 和这一段中间。Go 的
-// [ds-harness-go/core/systemprompt.PromptSection.Order] 是 int，116 和 117 之间
-// 没有空位，所以 [ds-harness-go/subagent/subagenttool.SectionOrder] 占了 117，
+// [github.com/snight1983/ds-harness-go/core/systemprompt.PromptSection.Order] 是 int，116 和 117 之间
+// 没有空位，所以 [github.com/snight1983/ds-harness-go/subagent/subagenttool.SectionOrder] 占了 117，
 // 这一段顺推到 118。次序只有**相对关系**是有意义的，每一对的先后都没变。
 const SectionOrder = 118
 
@@ -89,8 +89,8 @@ const missingAgent = "the report tool requires an agent-bound caller"
 // Service 是本包用得到的那一小块子 agent 运行时。
 //
 // 新增: DSH 注入整个 `ctx.subagents`。这里只写出真正被调到的那两个方法，装配方交
-// 进来的 [ds-harness-go/subagent/subagent.Runtime] 自然满足它（窄口子的理由同
-// [ds-harness-go/sessionquery/querytool.Service]）。
+// 进来的 [github.com/snight1983/ds-harness-go/subagent/subagent.Runtime] 自然满足它（窄口子的理由同
+// [github.com/snight1983/ds-harness-go/sessionquery/querytool.Service]）。
 type Service interface {
 	// ReportFrom 把一个活着的可续孩子选出来的内容投给它耐久的直系父。
 	ReportFrom(
@@ -115,7 +115,7 @@ type Config struct {
 	//
 	// 新增: DSH 从孩子那个 cordis 上下文上直接取 `childCtx.tools`。Go 没有那个容器，
 	// 所以服务经这里显式交进来（成例见
-	// [ds-harness-go/subagent/subagent.ChildCompositionServices]）。
+	// [github.com/snight1983/ds-harness-go/subagent/subagent.ChildCompositionServices]）。
 	Tools *tools.Runtime
 	// Prompts 是系统提示词注册表，那段指引登记在它上面，必填。
 	Prompts *systemprompt.Registry
@@ -123,7 +123,7 @@ type Config struct {
 	//
 	// 新增: DSH 的 exec.agent 就是 agent 对象本身。Go 这边它是一把不透明的钥匙，
 	// 所以由装配方交一条查回去的路，做法和
-	// [ds-harness-go/sessionquery/querytool.Config.AgentOf] 逐字相同。
+	// [github.com/snight1983/ds-harness-go/sessionquery/querytool.Config.AgentOf] 逐字相同。
 	AgentOf func(agent *scope.Key) (agent.Agent, error)
 	// Delivery 是被接受的汇报在父那边的排期策略；空串取 [DefaultDelivery]。
 	Delivery subagent.ReportDelivery
@@ -142,10 +142,10 @@ type Controller struct {
 
 // New 造一个控制器。
 //
-// 源: packages/subagent/tool-subagent-report/src/index.ts:136-142
+// 源: packages/subagent/tool-subagent-report/src/index.ts:129-140
 //
 // 新增: 取值合法性 DSH 交给 schemastery 的 `z.union(['quiet','next-step'])`。
-// Go 这边 [ds-harness-go/subagent/subagent.ReportDelivery] 是个开放的字符串类型，
+// Go 这边 [github.com/snight1983/ds-harness-go/subagent/subagent.ReportDelivery] 是个开放的字符串类型，
 // 所以在这里挡一道——一个拼错的排期策略要是漏到运行期，表现是汇报静静地不唤醒父，
 // 那种毛病很难从现场看出来。
 func New(config Config) (*Controller, error) {
@@ -260,9 +260,9 @@ func (c *Controller) execute(
 // Contribute 把 report 和它那段用法指引装进**一个**可续孩子的作用域。这两笔登记
 // 都归那个作用域所有，所以对这个孩子的父和兄弟都不可见。
 //
-// 源: packages/subagent/tool-subagent-report/src/index.ts:49-129
+// 源: packages/subagent/tool-subagent-report/src/index.ts:38-127（installReportTool）
 //
-// 新增: 它的签名**恰好**就是 [ds-harness-go/subagent/subagent.ActivationSetupContribution]，
+// 新增: 它的签名**恰好**就是 [github.com/snight1983/ds-harness-go/subagent/subagent.ActivationSetupContribution]，
 // 所以这个方法值可以直接登记出去，不需要中间再包一层。
 func (c *Controller) Contribute(
 	ctx context.Context,
@@ -297,7 +297,7 @@ func (c *Controller) Contribute(
 
 // Install 把这份贡献挂上可续孩子的装配表，交回撤销这次登记的函数。
 //
-// 源: packages/subagent/tool-subagent-report/src/index.ts:136-142
+// 源: packages/subagent/tool-subagent-report/src/index.ts:129-140
 //
 // 新增: 本仓库其余工具包的 Install 收 (ctx, owner, deps)，因为它们是直接往一个
 // 作用域上装。这一个不是：它登记的是一份**等孩子出生才装**的贡献，作用域是那时候

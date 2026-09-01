@@ -11,10 +11,10 @@ import (
 	"regexp"
 	"slices"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/skill"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/skill"
 )
 
 // gesturePattern 是那个 `/名字` 手势。
@@ -34,7 +34,7 @@ var gesturePattern = regexp.MustCompile(`(^|\s)/([a-z0-9]+(?:-[a-z0-9]+)*)(\s|$)
 // invokedSkillNames 从这一步认领的那些消息里挑出 `/名字` 手势，按第一次出现的
 // 顺序去重。
 //
-// 源: packages/skill/tool-skill/src/index.ts:418-431
+// 源: packages/skill/tool-skill/src/index.ts:410-430
 //
 // 只扫来源是「用户自己说的」的那些消息的文本块：别的来源伪造不出这个手势。
 // 挑出来的名字**没有**对着注册表验过。

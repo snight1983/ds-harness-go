@@ -1,7 +1,7 @@
 // 本文件的作用：这一行的全部内容——它贡献的那段人设配置，以及把它装到一个提示词
 // 注册表上的那一次登记。
 //
-// 源: packages/preset/persona/src/index.ts:34-68
+// 源: packages/preset/persona/src/index.ts:29-64
 
 package persona
 
@@ -9,8 +9,8 @@ import (
 	"context"
 	"errors"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
 )
 
 // Config 是这一行贡献的人设。
@@ -42,7 +42,7 @@ type Config struct {
 
 // Install 把这一行装到一个提示词注册表上，返回撤销它的函数。
 //
-// 源: packages/preset/persona/src/index.ts:60-68
+// 源: packages/preset/persona/src/index.ts:50-64
 //
 // owner 决定这份人设算谁的：一个有身份的 agent 作用域会**遮蔽**掉部署方那份人设；
 // 而注册表持有的那一层上已经有一份同名登记了，装在那里是同一层里重名，当场报错。

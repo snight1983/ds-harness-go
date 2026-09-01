@@ -31,10 +31,10 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // objectSchema 是给夹具工具用的那份最小入参 schema。

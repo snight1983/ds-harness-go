@@ -39,6 +39,7 @@
 ## 设计与移植
 
 - [详细设计](DESIGN.md)：服务端边界、移植原则和各能力块的底层设计。
+- [性能与压力基线](performance-baseline.md)：长会话、并发 Agent、持久化、SDK 洪泛和 shutdown 的实测数字与判读方法。
 - [包级移植裁决](portmap/rulings.md)：上游能力的移植或排除决定。
 - [符号级裁决](portmap/decisions.md)：逐符号实现依据。
 - [能力覆盖表](portmap/capabilities.md)：能力与当前实现的对应关系。

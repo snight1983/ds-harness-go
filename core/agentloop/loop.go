@@ -14,19 +14,19 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	sessionlog "ds-harness-go/session"
-	"ds-harness-go/settings"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/settings"
 )
 
 // ---- 启动器指定的会话身份 ----
 
 // LauncherAgentIdentity 是启动器为一个配置出来的 agent 选定的那一个会话身份。
 //
-// 源: packages/core/agent-loop/src/index.ts:189-200
+// 源: packages/core/agent-loop/src/index.ts:245-256（LauncherAgentIdentity）
 //
 // Resume 把「读回已有的持久化历史」和「用这个确切身份新建一个会话」分开，
 // 这两件事在配置里对应 resumeSessionId 和 sessionId 两个键。
@@ -39,7 +39,7 @@ type LauncherAgentIdentity struct {
 
 // ConfiguredAgentIdentities 是按配置项的 id 索引的那些启动器身份。
 //
-// 源: packages/core/agent-loop/src/index.ts:202-203
+// 源: packages/core/agent-loop/src/index.ts:258-259（ConfiguredAgentIdentities）
 //
 // 新增: DSH 那边这份表是启动器在任何 Loader 条目挂载之前经
 // `ctx.provide(CONFIGURED_AGENT_IDENTITIES_KEY, ...)` 放到 cordis 上下文上的，
@@ -86,7 +86,7 @@ func applyLauncherIdentities(
 
 // SettingsNamespace 是本包那个设置小节的命名空间。
 //
-// 源: packages/core/agent-loop/src/index.ts:235-236
+// 源: packages/core/agent-loop/src/index.ts:292-293（AGENT_LOOP_SETTINGS_NAMESPACE）
 var SettingsNamespace = mustNamespace("agent-loop")
 
 // mustNamespace 把一个**字面量**命名空间解出来，不合法就 panic。
@@ -104,7 +104,7 @@ func mustNamespace(value string) settings.Namespace {
 
 // Settings 是本包里那几个由用户拥有的字段。
 //
-// 源: packages/core/agent-loop/src/index.ts:238-247
+// 源: packages/core/agent-loop/src/index.ts:295-303（AgentLoopSettings）
 //
 // 它**刻意**是 [Config] 的一个真子集：Agents 是一份开机时消费一次的组装清单，
 // 存下来的改动只会看起来像是生效了。
@@ -133,13 +133,13 @@ type ConfiguredAgent struct {
 
 // Config 是这个循环工厂的配置。
 //
-// 源: packages/core/agent-loop/src/index.ts:253-272
+// 源: packages/core/agent-loop/src/index.ts:310-328（Config）
 type Config struct {
 	// MaxParallelToolCalls 是每个步骤里同时在飞的并行安全调用上限。
 	// 1 表示串行；0 表示没给，用 [DefaultMaxParallelToolCalls]。
 	//
 	// 新增: DSH 是 `maxParallelToolCalls?: number`，分得开「没给」和「给了 0」。
-	// Go 里这里用 0 表示没给，理由和 [ds-harness-go/llm.CallConfig].MaxTokens
+	// Go 里这里用 0 表示没给，理由和 [github.com/snight1983/ds-harness-go/llm.CallConfig].MaxTokens
 	// 那一条一样：上限为零的池一个工具调用都跑不动，没人会那么要求，
 	// 所以零值不和任何真实取值撞车。
 	MaxParallelToolCalls int
@@ -171,16 +171,18 @@ type Config struct {
 // 源: packages/core/agent-loop/src/index.ts:28（`import type { SessionPersistence }`）
 //
 // 新增: 这是一个**消费方一侧**声明的接口，不是从持久化那个包引来的。DSH 引的是
-// 那边的服务类型，而 Go 这边 [ds-harness-go/session/persistence.Store] 到目前为止
+// 那边的服务类型，而 Go 这边 [github.com/snight1983/ds-harness-go/session/persistence.Store] 到目前为止
 // 还没有 Prepare（它那份文档说明协调器、会话预备件和 Store.Prepare 一起推迟到收尾
 // 那一块做）。在消费方这边按**实际用到的两个方法**声明接口，是 Go 的常规做法：
 // 本包因此不必等那个包写完，而那个包写完之后，只要方法名对得上就直接满足这里。
 type SessionPersistence interface {
-	// Prepare 读回一段持久化会话，交出一个**还没登记进存储**的活会话。
+	// Prepare 读回一段持久化会话，交出一段**还没登记进存储**的准备期。
 	//
-	// 交出来的会话由调用方负责公布或者丢弃。丢弃它不需要额外的释放动作，
-	// 理由见 [AgentLoop.prepare] 上关于 DSH 那个 SessionPreparation 的说明。
-	Prepare(ctx context.Context, id sessionlog.SessionID) (*session.Session, error)
+	// 交出来的会话由调用方负责公布或者丢弃，两条路都要调
+	// [github.com/snight1983/ds-harness-go/core/session.Preparation.Release]：
+	// 提供方（比如持久化编排器）在准备期里攥着一份预留，公布成了它被接手、
+	// 半路放弃了它要还回去。释放是幂等的，所以直接 defer 就行。
+	Prepare(ctx context.Context, id sessionlog.SessionID) (*session.Preparation, error)
 
 	// List 列出所有落了地的会话头。
 	//
@@ -262,7 +264,7 @@ type ConfigStartFailedObserver func(sessionID sessionlog.SessionID, err error)
 
 // factoryOwnership 是工厂这一级的归属：活着的那些 agent 的拆除，加上配置驱动的启动活儿。
 //
-// 源: packages/core/agent-loop/src/index.ts:38-89（FactoryOwnership）
+// 源: packages/core/agent-loop/src/index.ts:95-146（FactoryOwnership）
 //
 // 新增: DSH 那个类里有三样东西——一个 accepting 标志、一个 AbortController（拆除
 // 开始时以 `agent loop is not active` 中止）、以及一个 `Promise.withResolvers<void>`
@@ -463,7 +465,7 @@ func abortCause(ctx context.Context, id sessionlog.SessionID) error {
 
 // AgentLoop 是那份具体的 agent 造法，也是驱动这一层的服务。
 //
-// 源: packages/core/agent-loop/src/index.ts:295-711
+// 源: packages/core/agent-loop/src/index.ts:351-774（AgentLoop）
 //
 // 新增: DSH 那个类继承 cordis 的 Service、带一个 static inject 依赖清单和一份
 // schemastery 的运行期 Config schema。Go 里前两样由 [New] 的显式参数顶掉，
@@ -868,7 +870,7 @@ func (l *AgentLoop) waitForDrainingConfiguredIdentity(ctx context.Context, sessi
 
 // preparedAgent 是备好但还没公布的那一套资源，共享同一份拆除。
 //
-// 源: packages/core/agent-loop/src/index.ts:149-158（PreparedAgent）
+// 源: packages/core/agent-loop/src/index.ts:205-214（PreparedAgent）
 type preparedAgent struct {
 	// agent 是造好的那个驱动。
 	agent *ReactLoopAgent
@@ -904,7 +906,7 @@ type untangleKey struct{}
 //
 // DSH 用 `using preparation = SessionPreparation.create(...)` 包住备好的会话，
 // 靠 `Symbol.dispose` 保证一份没公布成的会话被释放掉。Go 这边不需要：
-// [ds-harness-go/core/session.Store.Prepare] 只读存储那张表来铸身份，
+// [github.com/snight1983/ds-harness-go/core/session.Store.Prepare] 只读存储那张表来铸身份，
 // **一行都不写进去**，所以一个备好却没公布的会话不占任何东西，丢掉它就够了。
 func (l *AgentLoop) prepare(
 	ctx context.Context,
@@ -1162,23 +1164,34 @@ func (l *AgentLoop) CreateAgent(
 	if err != nil {
 		return agent.Handle{}, err
 	}
-	return l.setupAndPublish(ctx, owner, options.SessionID, live,
+	// 这条路的会话是活会话存储当场造的，提供方那边没有攥着任何待还的状态，
+	// 所以准备期没有释放动作——DSH 那句 `SessionPreparation.create(...)`
+	// 同样不带 release。裹一层是为了让公布那条路只有一个形状。
+	return l.setupAndPublish(ctx, owner, options.SessionID,
+		session.NewPreparation(live, session.PreparationOptions{}),
 		options.AgentOptions, options.Setup, agent.StartStartup)
 }
 
-// setupAndPublish 围着一个到手的会话备好一个 agent、跑完 setup、把它公布出去。
+// setupAndPublish 围着一段到手的准备期备好一个 agent、跑完 setup、把它公布出去。
 //
-// 源: packages/core/agent-loop/src/index.ts:606-622
+// 源: packages/core/agent-loop/src/index.ts:686-708
+//
+// 那段准备期在这里**结束**，无论公布成没成：DSH 写的是 `using ownedPreparation
+// = preparation`，Go 的对应物就是下面这句 defer。提供方那份状态可能已经被公布
+// 那一步接手走了，那时候释放是空操作——[session.Preparation.Release] 保证幂等，
+// 所以这里不需要分两条路。
 func (l *AgentLoop) setupAndPublish(
 	ctx context.Context,
 	owner *scope.Scope,
 	id sessionlog.SessionID,
-	live *session.Session,
+	preparation *session.Preparation,
 	options agent.Options,
 	setup agent.Setup,
 	source agent.SessionStartSource,
 ) (agent.Handle, error) {
-	prepared, err := l.prepare(ctx, owner, id, options, live)
+	defer preparation.Release()
+
+	prepared, err := l.prepare(ctx, owner, id, options, preparation.Session())
 	if err != nil {
 		return agent.Handle{}, err
 	}
@@ -1257,21 +1270,26 @@ func (l *AgentLoop) resumeWith(
 		return agent.Handle{}, fmt.Errorf("core/agentloop: 把 agent %q 的读取挂到 owner 上失败：%w", string(id), err)
 	}
 
-	// 一份在取消之后才到的会话没人要了，直接丢掉——它没登记进任何地方
-	// （见 [AgentLoop.prepare] 上那段关于 SessionPreparation 的说明）。
-	live, loadErr := raceAbort(loadCtx, id, func() (*session.Session, error) {
+	// 一份在取消之后才到的准备期没人要了，但**不能**就这么扔掉：提供方那边
+	// 还攥着一份预留，不还回去这个会话身份就一直被扣着，后面谁都续不了它。
+	// 所以竞速输掉那一支也要走 Release——这正是 DSH 那个
+	// `(abandoned) => { abandoned[Symbol.dispose]() }` 回调的作用。
+	preparation, loadErr := raceAbort(loadCtx, id, func() (*session.Preparation, error) {
 		return persistence.Prepare(loadCtx, id)
-	}, func(*session.Session) {})
+	}, func(abandoned *session.Preparation) { abandoned.Release() })
 	unfollowErr := unfollowOwner(ctx)
 	if loadErr != nil {
 		return agent.Handle{}, errors.Join(loadErr, unfollowErr)
 	}
 	if unfollowErr != nil {
+		preparation.Release()
 		return agent.Handle{}, unfollowErr
 	}
 	if !l.ownership.isActive() {
+		preparation.Release()
 		return agent.Handle{}, errLoopNotActive
 	}
 
-	return l.setupAndPublish(ctx, owner, id, live, options.AgentOptions, options.Setup, agent.StartResume)
+	return l.setupAndPublish(ctx, owner, id, preparation,
+		options.AgentOptions, options.Setup, agent.StartResume)
 }

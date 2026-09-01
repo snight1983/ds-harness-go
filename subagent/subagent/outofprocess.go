@@ -19,9 +19,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // MaxDiagnosticBytes 是 [Result.Diagnostic] 的 UTF-8 字节上限。
@@ -53,7 +53,7 @@ func limitDiagnostic(diagnostic string) string {
 
 // NoStartCapabilities 是一个跨进程后端的能力申报：一样都没有。
 //
-// 源: packages/subagent/subagent/src/out-of-process.ts:50-55
+// 源: packages/subagent/subagent/src/out-of-process.ts:51-63（NO_START_CAPABILITIES）
 //
 // 一个在别的进程里的孩子兑现不了那些由父来执行的开工期特性（OutputSchema／
 // MaxDepth／ToolFilter／Persona），所以服务在 Start 跑起来之前就把要这些东西的
@@ -65,7 +65,7 @@ func NoStartCapabilities() Capabilities { return Capabilities{} }
 
 // AssertPositiveTimeout 拒掉一个配出来的非正时限。
 //
-// 源: packages/subagent/subagent/src/out-of-process.ts:64-68
+// 源: packages/subagent/subagent/src/out-of-process.ts:65-76（assertPositiveFinite）
 //
 // 它约束的是一次拆解或者收摊的等待：零和负数会把那次等待直接跳过或者卡死。
 //
@@ -133,6 +133,8 @@ func ValidateConfiguredCwd(prefix, cwd string) (string, error) {
 	}
 	absolute, err := filepath.Abs(cwd)
 	if err != nil {
+		// 走不到：上面那道空串检查过了之后，filepath.Abs 只在 os.Getwd 失败时
+		// 才失败——那是进程自己的工作目录被摘掉了，测里造不出来。
 		return "", fmt.Errorf("%s：配置里的 cwd 解不成绝对路径：%w", prefix, err)
 	}
 	if err := AssertUsableCwd(prefix, "配置里的 cwd", absolute); err != nil {
@@ -163,7 +165,7 @@ func ResolveChildCwd(prefix, configured, parentCwd string) (string, error) {
 
 // RunResultSettlement 是 [SettleRunResult] 的那几样输入。
 //
-// 源: packages/subagent/subagent/src/out-of-process.ts:157-172
+// 源: packages/subagent/subagent/src/out-of-process.ts:164-180（RunResultSettlement）
 //
 // 新增: DSH 这个结构里还有 signal 和 onAbort 两项，为的是在结清时
 // removeEventListener——一个挂在 AbortSignal 上的监听器不摘掉就是泄漏。Go 的取消
@@ -221,7 +223,7 @@ func SettleRunResult(ctx context.Context, parts RunResultSettlement) Result {
 
 // SubprocessRunParts 是 [NewSubprocessRun] 的那几样输入。
 //
-// 源: packages/subagent/subagent/src/out-of-process.ts:213-226
+// 源: packages/subagent/subagent/src/out-of-process.ts:221-235（SubprocessRunHandleParts）
 type SubprocessRunParts struct {
 	// ID 是父作用域里的那个运行 id。
 	ID session.SessionID
@@ -248,7 +250,7 @@ type subprocessRun struct {
 
 // NewSubprocessRun 发布一个跨进程孩子的接缝运行句柄。
 //
-// 源: packages/subagent/subagent/src/out-of-process.ts:236-250
+// 源: packages/subagent/subagent/src/out-of-process.ts:237-259（subprocessRunHandle）
 //
 // Dispose 是幂等的（一次记下来的拆解）：先结清本地取消——这里**不假设**孩子会
 // 配合——再等后端那次拆解走到真正的退出。

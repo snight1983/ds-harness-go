@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // CheckpointPlugin 是每个压缩后端给自己那条替换用户消息盖的产出方名字。
@@ -23,7 +23,7 @@ const CheckpointPlugin = "compact"
 
 // CheckpointSource 是一条压缩检查点消息带的那点出处。
 //
-// 源: packages/compaction/compaction/src/checkpoint.ts:22-25
+// 源: packages/compaction/compaction/src/checkpoint.ts:21-25（CompactionCheckpointSource）
 //
 // 新增: DSH 那边是 `{kind:'plugin', plugin:'compact'} & {compactionId, sourceCommandId?}`
 // 一个交叉类型，两半摊在同一个对象上。Go 的结构体加不上字段，所以拆成两层：

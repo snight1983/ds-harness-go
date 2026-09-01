@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 func TestNewStoreFillsInTheDefaults(t *testing.T) {

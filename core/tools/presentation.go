@@ -16,7 +16,7 @@ package tools
 import (
 	"encoding/json"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // CallKind 是一次调用大致在做哪一类事，给界面挑图标用。
@@ -146,7 +146,22 @@ type ReadFileLine struct {
 
 // ResultView 是一次**已完成**的调用在界面上的样子。
 //
-// 源: packages/core/tools/src/presentation.ts:140
+// 源: packages/core/tools/src/presentation.ts:255-267（SearchResultView）
+//
+// 新增: DSH 那边这一族分了三层：ToolResultView 是六选一的顶层联合，其中
+// SearchResultView（presentation.ts:267）和 WebResultView（presentation.ts:347）
+// 各自又是两选一的子联合。Go 这边只有这一个接口，六支全部直接实现它——
+// 中间那两层在 TS 里的全部作用是类型收窄，没有任何运行期内容，Go 也没有收窄。
+//
+// 排出去的 JSON 和 DSH 一字不差：子联合的分支靠**第二层标签**分辨，
+// card 之下再带一个 shape 或 kind，两层都由 MarshalJSON 补上：
+//
+//	card=search  +  shape=matches / shape=paths
+//	card=web     +  kind=search   / kind=fetch
+//
+// 代价是签名这一层松了一格：上游一个只收 SearchResultView 的函数，Go 这边
+// 只能收 ResultView，是搜索结果这件事得由函数自己断言。本包没有这样的函数
+// （这里一行判断都没有），所以代价目前只落在下游。
 type ResultView interface {
 	// Card 是这张卡片的判别标签。
 	Card() string
@@ -213,7 +228,7 @@ func (v DiffResultView) MarshalJSON() ([]byte, error) {
 
 // SearchLineMatch 是一处命中的行。
 //
-// 源: packages/core/tools/src/presentation.ts:193-198
+// 源: packages/core/tools/src/presentation.ts:192-198（SearchLineMatch）
 type SearchLineMatch struct {
 	LineNumber int    `json:"lineNumber"`
 	Line       string `json:"line"`
@@ -221,7 +236,7 @@ type SearchLineMatch struct {
 
 // SearchFileMatches 是一个文件里的全部命中。
 //
-// 源: packages/core/tools/src/presentation.ts:201-206
+// 源: packages/core/tools/src/presentation.ts:200-206（SearchFileMatches）
 type SearchFileMatches struct {
 	Path    string            `json:"path"`
 	Matches []SearchLineMatch `json:"matches"`

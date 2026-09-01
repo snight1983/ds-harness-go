@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm/mockserver"
+	"github.com/snight1983/ds-harness-go/llm/mockserver"
 )
 
 // startServer 起一台服务器并挂上收场。

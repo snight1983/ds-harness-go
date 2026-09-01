@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // eventTime 把日志里的 Unix 纪元毫秒变成一个时刻。

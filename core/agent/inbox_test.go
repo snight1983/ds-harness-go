@@ -8,9 +8,9 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // recorder 收下收件箱报出来的那三件事，按发生次序排着。
@@ -38,7 +38,7 @@ func (r *recorder) notifications() InboxNotifications {
 }
 
 // newInbox 造一个挂在全新游离会话上的收件箱。
-func newInbox(t *testing.T, notify InboxNotifications) (*Inbox, *session.Session) {
+func newInbox(t testing.TB, notify InboxNotifications) (*Inbox, *session.Session) {
 	t.Helper()
 	live := newFreeSession(t, "inbox", nil)
 	inbox, err := NewInbox(live, notify)

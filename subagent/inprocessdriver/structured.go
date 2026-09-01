@@ -18,22 +18,22 @@ import (
 	"encoding/json"
 	"sync"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // StructuredOutputTool 是一个要结构化输出的孩子必须调来收尾的那个工具名。
 //
-// 源: packages/subagent/subagent-in-process-driver/src/structured.ts:19
+// 源: packages/subagent/subagent-in-process-driver/src/structured.ts:18-19（STRUCTURED_OUTPUT_TOOL）
 const StructuredOutputTool = "structured_output"
 
 // StructuredOutputInstruction 是登记成孩子那段收尾（order 190，也就是工具指引
 // 那一带的末尾）带作用域提示词段落的正文：这个要求跟着工具一起走，是恰好一个
 // agent 的普通提示词状态。
 //
-// 源: packages/subagent/subagent-in-process-driver/src/structured.ts:26-29
+// 源: packages/subagent/subagent-in-process-driver/src/structured.ts:21-27（STRUCTURED_OUTPUT_INSTRUCTION）
 const StructuredOutputInstruction = "When you have your final answer, you MUST report it by calling the `" +
 	StructuredOutputTool + "` tool with arguments matching its parameter schema exactly. " +
 	"Do not finish with a plain text answer: only the tool call counts as your result."
@@ -59,7 +59,7 @@ const structuredPromptSectionOrder = 190
 //
 // 新增: DSH 从孩子那个 cordis 上下文上直接取 `childCtx.tools` 和
 // `childCtx.systemPrompt`。Go 没有那个容器，所以做成一个显式的结构体（成例见
-// ds-harness-go/subagent/subagent.ChildCompositionServices）。
+// github.com/snight1983/ds-harness-go/subagent/subagent.ChildCompositionServices）。
 type StructuredServices struct {
 	// Tools 是工具运行时：捕获工具、那道守卫、结果观察者都登记在它上面。必填。
 	Tools *tools.Runtime
@@ -77,7 +77,7 @@ type stagedCapture struct {
 
 // StructuredAttachment 是一次结构化运行的活句柄：孩子结清之后从这里读那份捕获。
 //
-// 源: packages/subagent/subagent-in-process-driver/src/structured.ts:32-39
+// 源: packages/subagent/subagent-in-process-driver/src/structured.ts:31-39（StructuredAttachment）
 //
 // 新增: DSH 那三样状态（staged / pending / captured）是 attach 函数闭包里的三个
 // 局部变量，句柄只是一个读 captured 的对象。Go 里守卫和结果观察者都是要被别的
@@ -90,7 +90,7 @@ type StructuredAttachment struct {
 	// 执行永远够不到这里的条目。那条最终通知无论成败都会把自己那条 staged 删掉。
 	//
 	// 新增: DSH 是一张以执行对象为键的 WeakMap——JS 里给一个对象挂私有旁路状态的
-	// 办法。Go 的 ds-harness-go/core/tools.ExecutionToken 本身就是可比较、可当 map
+	// 办法。Go 的 github.com/snight1983/ds-harness-go/core/tools.ExecutionToken 本身就是可比较、可当 map
 	// 键的相关性标识，所以这里是一张普通的 map，删除由那条最终通知负责。
 	staged map[tools.ExecutionToken]json.RawMessage
 	// pending 是一次成功的嵌套捕获，正等它外层那次传输提交。
@@ -101,7 +101,7 @@ type StructuredAttachment struct {
 	//
 	// 新增: DSH 用 `{ value } | undefined` 那层包装区分「提交了一个值」和「什么都
 	// 没提交」。Go 里 json.RawMessage 的 nil 不是一个分得开的哨兵，所以另拿一位说
-	// 这件事（理由和 ds-harness-go/core/agent.ConsumedWork.HasEnd 逐字相同）。
+	// 这件事（理由和 github.com/snight1983/ds-harness-go/core/agent.ConsumedWork.HasEnd 逐字相同）。
 	hasCaptured bool
 }
 
@@ -198,12 +198,12 @@ func recordedOutputSchema() tools.Node {
 // 源: packages/subagent/subagent-in-process-driver/src/structured.ts:49-142
 //
 // schema 是调用方已经断言过的那个受支持子集（见
-// ds-harness-go/core/tools.AssertObjectSchema）。
+// github.com/snight1983/ds-harness-go/core/tools.AssertObjectSchema）。
 //
 // 新增: DSH 那四笔登记都是 void，撤销靠 cordis 处置孩子那个上下文。Go 这边它们
 // 各自交回一个撤销函数，而这里**有意**把它们丢掉：owner 就是孩子自己那个作用域，
 // 作用域一处置这四笔就跟着没了（成例见
-// ds-harness-go/subagent/subagent.ApplyChildComposition）。
+// github.com/snight1983/ds-harness-go/subagent/subagent.ApplyChildComposition）。
 func AttachStructuredRuntime(
 	ctx context.Context,
 	childScope *scope.Scope,
@@ -220,7 +220,7 @@ func AttachStructuredRuntime(
 
 	// 新增: DSH 这个执行体开头还自己按 schema 验一遍参数、不合法就抛 ToolArgsError。
 	// 那是因为它是用 `ctx.tools.register` 裸注册的，绕开了 `defineTool` 那层生成的
-	// 校验包装。Go 的 ds-harness-go/core/tools.Runtime 在进执行体之前统一验过
+	// 校验包装。Go 的 github.com/snight1983/ds-harness-go/core/tools.Runtime 在进执行体之前统一验过
 	// （见它的 dispatchToolBody），失败的形状也一样是 ArgsError、同样走错误结果那条
 	// 路，所以这里再验一遍是重复的。
 	if _, err := services.Tools.Register(ctx, childScope, &tools.Definition{

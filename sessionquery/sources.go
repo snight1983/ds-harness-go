@@ -5,7 +5,7 @@
 package sessionquery
 
 import (
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // AssertHeadersCompatible 拒掉同一个逻辑会话源上互相矛盾的两份观察。

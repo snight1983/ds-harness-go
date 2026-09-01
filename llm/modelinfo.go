@@ -13,7 +13,7 @@ import "context"
 
 // ProviderInfo 是一条登记过的提供方路由的显示元数据。
 //
-// 源: packages/llm/llm/src/types.ts:143-149
+// 源: packages/llm/llm/src/types.ts:181-187（LlmProviderInfo）
 type ProviderInfo struct {
 	// ID 是 [GenerateOptions].Provider 用的那个路由键。
 	ID string
@@ -23,7 +23,7 @@ type ProviderInfo struct {
 
 // ModelModality 是一种提供方模型的输入模态。
 //
-// 源: packages/llm/llm/src/types.ts:151-158
+// 源: packages/llm/llm/src/types.ts:195-196（ModelModality）
 //
 // 新增: DSH 是 ModelModalityMap 加一个取值联合，那个 map 接口存在的唯一理由是
 // 让插件用声明合并往里加模态。Go 没有声明合并，所以这里就是一个具名 string
@@ -43,7 +43,7 @@ const (
 // ConfigurableProvider 是一条适配器插件**可以**靠配置激活的提供方路由，不管它当下
 // 有没有被登记。
 //
-// 源: packages/llm/llm/src/types.ts:160-186
+// 源: packages/llm/llm/src/types.ts:198-225（LlmConfigurableProvider）
 //
 // 配置界面把这份目录和 [Runtime.ListProviders] 合起来，好把每一条可配置的提供方
 // 连同它「已激活／还没激活」的状态一起摆出来。
@@ -84,7 +84,7 @@ func (p ConfigurableProvider) Clone() ConfigurableProvider {
 
 // ModelDiscoveryRequest 是对一个配置还没存下来的提供方端点的一次问询。
 //
-// 源: packages/llm/llm/src/types.ts:188-211
+// 源: packages/llm/llm/src/types.ts:227-250（LlmModelDiscoveryRequest）
 //
 // 配置界面送来的是用户正在编、还没保存的那份草稿，所以这个请求直接带着端点和
 // 凭据，而不是点一条路由的名字：一条正在被添加的提供方还没有名字可点。
@@ -108,7 +108,7 @@ type ModelDiscoveryRequest struct {
 
 // DiscoveredModel 是一个端点自报的一个模型。
 //
-// 源: packages/llm/llm/src/types.ts:213-226
+// 源: packages/llm/llm/src/types.ts:268-282（LlmDiscoveredModel）
 //
 // 除了 id 之外每个字段都是可缺的，因为绝大多数提供方的模型清单只吐一个 id、
 // 别的什么都不说；界面采纳其中一条之后，它的适配器需要的那些容量还是欠着的。
@@ -129,7 +129,7 @@ type DiscoveredModel struct {
 
 // ModelInfo 是一个适配器发现的模型。
 //
-// 源: packages/llm/llm/src/types.ts:228-243
+// 源: packages/llm/llm/src/types.ts:284-296（LlmModelInfo）
 //
 // 目录成员资格是参考性的，不是请求校验：不在清单里的模型 id 照样发得出去。
 type ModelInfo struct {
@@ -160,7 +160,7 @@ func (m ModelInfo) Clone() ModelInfo {
 
 // ModelContext 是一条精确的提供方／模型路由上、提供方自己拥有的上下文容量。
 //
-// 源: packages/llm/llm/src/types.ts:245-249
+// 源: packages/llm/llm/src/types.ts:298-302（LlmModelContext）
 type ModelContext struct {
 	// ContextWindow 是请求加响应合计的 token 上限。
 	ContextWindow int
@@ -168,7 +168,7 @@ type ModelContext struct {
 
 // ReasoningEffortInfo 是一档适配器自己拥有的推理档位的显示元数据。
 //
-// 源: packages/llm/llm/src/types.ts:251-259
+// 源: packages/llm/llm/src/types.ts:304-312（LlmReasoningEffortInfo）
 type ReasoningEffortInfo struct {
 	// ID 是 [GenerateOptions].ReasoningEffort 认的那个不透明稳定值。
 	ID ReasoningEffortID
@@ -180,7 +180,7 @@ type ReasoningEffortInfo struct {
 
 // ModelReasoningInfo 是一条精确的提供方／模型路由上可选的那些推理档位。
 //
-// 源: packages/llm/llm/src/types.ts:261-270
+// 源: packages/llm/llm/src/types.ts:314-323（LlmModelReasoningInfo）
 type ModelReasoningInfo struct {
 	// Efforts 是支持的那些档位，按适配器自己偏好的展示次序排着。
 	Efforts []ReasoningEffortInfo
@@ -200,7 +200,7 @@ func (r ModelReasoningInfo) Clone() ModelReasoningInfo {
 
 // ResolvedModelInfo 是拥有它的那个适配器在一条精确路由上解算出来的模型元数据。
 //
-// 源: packages/llm/llm/src/types.ts:272-280
+// 源: packages/llm/llm/src/types.ts:325-333（LlmResolvedModelInfo）
 //
 // 新增: DSH 是 `extends LlmModelInfo`。Go 这边是内嵌 [ModelInfo]，行为一样：
 // 字段直接提升上来，而一个 [ResolvedModelInfo] 也交得出它内嵌的那份 ModelInfo。

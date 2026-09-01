@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // testHeader 造一份版本正确的存储头。
-func testHeader(t *testing.T, id session.SessionID) session.SessionHeader {
+func testHeader(t testing.TB, id session.SessionID) session.SessionHeader {
 	t.Helper()
 
 	return session.SessionHeader{
@@ -24,7 +24,7 @@ func testHeader(t *testing.T, id session.SessionID) session.SessionHeader {
 }
 
 // userEvent 排一条用户消息事件出来。
-func userEvent(t *testing.T, seq int, text string) session.Event {
+func userEvent(t testing.TB, seq int, text string) session.Event {
 	t.Helper()
 
 	payload, err := json.Marshal(session.UserMessageData{Message: llm.Message{
@@ -46,7 +46,7 @@ func userEvent(t *testing.T, seq int, text string) session.Event {
 }
 
 // turnStart 排一条回合开始事件出来。
-func turnStart(t *testing.T, seq, turn int) session.Event {
+func turnStart(t testing.TB, seq, turn int) session.Event {
 	t.Helper()
 
 	payload, err := json.Marshal(session.TurnStartData{Turn: turn})
@@ -57,7 +57,7 @@ func turnStart(t *testing.T, seq, turn int) session.Event {
 }
 
 // turnEnd 排一条正常完成的回合结束事件出来。
-func turnEnd(t *testing.T, seq, turn int) session.Event {
+func turnEnd(t testing.TB, seq, turn int) session.Event {
 	t.Helper()
 
 	payload, err := json.Marshal(session.TurnEndData{

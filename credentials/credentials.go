@@ -96,7 +96,7 @@ var (
 
 // Ref 是一条凭据的标称引用：一个 POSIX 风格的环境变量名。
 //
-// 源: packages/credentials/credentials/src/types.ts:12-13
+// 源: packages/credentials/credentials/src/types.ts:13-14（CredentialRef）
 //
 // 新增: DSH 那边是 Branded<'CredentialRef'>，也就是用类型技巧给 string 造一个
 // 不可互换的别名。Go 的具名类型天生就是标称类型，这件事不需要技巧。
@@ -108,7 +108,7 @@ type Ref string
 
 // Key 是一条持久凭据记录的标称地址：`<scope>/<id>`。
 //
-// 源: packages/credentials/credentials/src/types.ts:15-28
+// 源: packages/credentials/credentials/src/types.ts:16-29（CredentialKey）
 //
 // scope 是**拥有这条记录的插件**的注册名，id 是那个插件自己的寻址单位
 // （一个 LLM 适配器用它的路由键）。
@@ -120,7 +120,7 @@ type Key string
 
 // NewRef 把一个原始字符串校验成 [Ref]。
 //
-// 源: packages/credentials/credentials/src/index.ts:21-31
+// 源: packages/credentials/credentials/src/index.ts:24-34（credentialRef）
 //
 // 新增: DSH 抛 TypeError，Go 返回 error。名字从别处来（供应商库自己的环境发现、
 // 某个钩子的载荷）的调用方不该靠接住一个错误来判断，那种情况先问 [IsRefName]。
@@ -133,7 +133,7 @@ func NewRef(value string) (Ref, error) {
 
 // IsRefName 回答一个原始字符串**有没有可能**是一个引用名。
 //
-// 源: packages/credentials/credentials/src/index.ts:33-44
+// 源: packages/credentials/credentials/src/index.ts:36-47（isCredentialRefName）
 //
 // 环境变量名从别处拿到的消费方在解析之前问这一句：语法之外的名字压根没有引用可以对应，
 // 它该读成「没配置」，而不是读成一次抛出来的错误。两者的区别是后者会让一条
@@ -144,7 +144,7 @@ func IsRefName(value string) bool {
 
 // IsKeySegment 回答一个原始字符串**有没有可能**当 [NewKey] 的一段。
 //
-// 源: packages/credentials/credentials/src/index.ts:46-57
+// 源: packages/credentials/credentials/src/index.ts:49-60（isCredentialKeySegment）
 //
 // 理由同 [IsRefName]：寻址单位从别处来（一份配置字典的键、某个库自己的供应商 id）的
 // 消费方在拼键之前问这一句。语法之外的单位不可能存过记录，它该读成「什么都没存」。
@@ -154,7 +154,7 @@ func IsKeySegment(value string) bool {
 
 // NewKey 把一个 scope 和一个 id 校验并拼成 [Key]。
 //
-// 源: packages/credentials/credentials/src/index.ts:59-73
+// 源: packages/credentials/credentials/src/index.ts:62-76（credentialKey）
 //
 // scope 是拥有方插件的注册名（如 llm-pi-ai），id 是那个插件自己的寻址单位。
 func NewKey(scope, id string) (Key, error) {
@@ -168,7 +168,7 @@ func NewKey(scope, id string) (Key, error) {
 
 // ParseKey 把一个已经拼好的 `<scope>/<id>` 字符串校验成 [Key]。
 //
-// 源: packages/credentials/credentials/src/index.ts:75-89
+// 源: packages/credentials/credentials/src/index.ts:78-92（parseCredentialKey）
 //
 // 这是 [NewKey] 的读取面，给「从磁盘上把键读回来」的提供方用。
 // 分不出恰好两段就拒绝：三段的字符串取前两段会静默指向另一条记录。
@@ -182,7 +182,7 @@ func ParseKey(value string) (Key, error) {
 
 // Scope 取出这条记录的拥有方插件名。
 //
-// 源: packages/credentials/credentials/src/index.ts:91-102
+// 源: packages/credentials/credentials/src/index.ts:94-105（credentialKeyScope）
 //
 // scope 指向一个当前没有注册的插件时，这条记录就是**孤儿**。配置界面必须照孤儿去报，
 // 而不是当成一条能用的凭据——后者会让用户以为自己已经授权过了。
@@ -200,7 +200,7 @@ func (k Key) Scope() string {
 
 // ID 取出拥有方插件自己的寻址单位——键里由那个插件挑的那一半。
 //
-// 源: packages/credentials/credentials/src/index.ts:104-112
+// 源: packages/credentials/credentials/src/index.ts:107-115（credentialKeyId）
 //
 // 越界处理同 [Key.Scope]。
 func (k Key) ID() string {

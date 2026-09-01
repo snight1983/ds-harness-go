@@ -8,12 +8,12 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // InvariantPluginName 是这个不变量伴生插件的名字。
 //
-// 源: packages/sdk/server/src/invariant.ts:13
+// 源: packages/sdk/server/src/invariant.ts:12-13（name）
 const InvariantPluginName = "sdk-jsonrpc-server-invariant"
 
 // RegisterInvariants 把这个包登记进不变量注册表，返回注销函数。

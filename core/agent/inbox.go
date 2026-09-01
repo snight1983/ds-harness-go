@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"slices"
 
-	"ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // InboxNotifications 是收件箱每次改动之后往外报的那三件事。
@@ -88,7 +88,7 @@ func NewInbox(live *session.Session, notify InboxNotifications) (*Inbox, error) 
 // 源: packages/core/agent/src/inbox.ts:42-45
 //
 // 交回的切片自己是一份复制：之后的改动长不了一个调用方已经拿在手里的数组。
-// 契约和 [ds-harness-go/core/session.Session.Events] 逐字相同——**把它当只读的**，
+// 契约和 [github.com/snight1983/ds-harness-go/core/session.Session.Events] 逐字相同——**把它当只读的**，
 // 里面那些消息的内容是共享的，要一份自己拥有的就 [llm.Message.Clone]。
 func (i *Inbox) NextTurn() []llm.Message { return slices.Clone(i.nextTurn) }
 
@@ -319,7 +319,7 @@ func (i *Inbox) apply(splice SplicedData) error {
 //
 // 新增: DSH 那边这件事由 session.append 里的 structuredClone 顺手做掉——它往
 // 投影里放的是 `event.data.inserted`，也就是那份已经深复制并冻上的负载。Go 的
-// [ds-harness-go/core/session.Session.Append] 不碰调用方的值（负载的深复制发生
+// [github.com/snight1983/ds-harness-go/core/session.Session.Append] 不碰调用方的值（负载的深复制发生
 // 在排 JSON 那一步，产物是字节不是消息），所以这一份得自己复制：不然调用方
 // 手上那条消息的内容切片和投影里这条是同一块内存。
 func cloneMessages(messages []llm.Message) []llm.Message {

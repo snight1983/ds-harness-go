@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // childScope 造一个当孩子用的作用域，用完自动释放。
@@ -175,6 +175,85 @@ func TestApplyDisposesAnEscapedInstallation(t *testing.T) {
 	}
 	if released != 1 {
 		t.Fatalf("漏网那次安装该被当场处置，实际释放了 %d 次", released)
+	}
+}
+
+// 一份贡献在这一批装配跑到半路时被别人撤掉：它已经进了那份快照，但那道闸要重新
+// 读一次撤销状态，所以它不会再被装进这个孩子。
+func TestApplySkipsAContributionRevokedMidApply(t *testing.T) {
+	registry := NewActivationSetupRegistry()
+	installed := 0
+	var removeSecond func(context.Context) error
+	if _, err := registry.Register(func(ctx context.Context, _ *scope.Scope) (func(context.Context) error, error) {
+		// 同步撤掉排在自己后面的那一份：那一份已经在快照里了，只有这道闸拦得住它。
+		if err := removeSecond(ctx); err != nil {
+			t.Errorf("撤销后一份失败：%v", err)
+		}
+		return nil, nil
+	}); err != nil {
+		t.Fatalf("登记贡献失败：%v", err)
+	}
+	remove, err := registry.Register(noRelease(func() { installed++ }))
+	if err != nil {
+		t.Fatalf("登记贡献失败：%v", err)
+	}
+	removeSecond = remove
+
+	if _, err := registry.Apply(context.Background(), childScope(t, "child")); err != nil {
+		t.Fatalf("装配失败：%v", err)
+	}
+	if installed != 0 {
+		t.Fatalf("跑到半路被撤掉的贡献不该再被装，实际装了 %d 次", installed)
+	}
+}
+
+// 漏网那次安装当场处置时**自己**又放不掉：那条释放失败是这次装配的结论，不能咽掉。
+func TestApplyReportsAFailedEscapedRelease(t *testing.T) {
+	registry := NewActivationSetupRegistry()
+	broken := errors.New("放不掉")
+	var remove func(context.Context) error
+	remove, err := registry.Register(func(ctx context.Context, _ *scope.Scope) (func(context.Context) error, error) {
+		if err := remove(ctx); err != nil {
+			t.Errorf("重入撤销失败：%v", err)
+		}
+		return func(context.Context) error { return broken }, nil
+	})
+	if err != nil {
+		t.Fatalf("登记贡献失败：%v", err)
+	}
+
+	if _, err := registry.Apply(context.Background(), childScope(t, "child")); !errors.Is(err, broken) {
+		t.Fatalf("漏网那项放不掉该被抛上来，实际 %v", err)
+	}
+}
+
+// 一次已经当场放掉的漏网安装仍旧留在这一批里；后面有人装不上时那次回滚会再指到它，
+// 而它只能放一次。
+func TestRollbackDoesNotReleaseAnEscapedInstallationTwice(t *testing.T) {
+	registry := NewActivationSetupRegistry()
+	released := 0
+	var remove func(context.Context) error
+	remove, err := registry.Register(func(ctx context.Context, _ *scope.Scope) (func(context.Context) error, error) {
+		if err := remove(ctx); err != nil {
+			t.Errorf("重入撤销失败：%v", err)
+		}
+		return func(context.Context) error { released++; return nil }, nil
+	})
+	if err != nil {
+		t.Fatalf("登记贡献失败：%v", err)
+	}
+	refusal := errors.New("装不上")
+	if _, err := registry.Register(func(context.Context, *scope.Scope) (func(context.Context) error, error) {
+		return nil, refusal
+	}); err != nil {
+		t.Fatalf("登记贡献失败：%v", err)
+	}
+
+	if _, err := registry.Apply(context.Background(), childScope(t, "child")); !errors.Is(err, refusal) {
+		t.Fatalf("安装方那次失败该保持权威，实际 %v", err)
+	}
+	if released != 1 {
+		t.Fatalf("该恰好放一次，实际 %d 次", released)
 	}
 }
 

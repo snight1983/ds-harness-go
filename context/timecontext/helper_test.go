@@ -11,8 +11,8 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // mustLoad 加载一个时区，加载不出来就直接让测试失败。

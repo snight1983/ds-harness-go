@@ -11,11 +11,12 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ---- 共用的小工具 ----
@@ -681,6 +682,35 @@ func TestStartContinuableRollsBackWhenTheFactoryFails(t *testing.T) {
 	}
 }
 
+// 那条初始提示词投不进去时整次开工作废：调用方拿到的是那次投递的失败，而不是一个
+// 起来了却一句活儿都没接到的孩子。
+func TestStartContinuableRollsBackWhenThePromptIsNotAccepted(t *testing.T) {
+	fixture := newContinuation(t)
+	parent := fixture.spawnParent(t, "parent", "")
+	// 趁物化和投递之间那道缝把父摘掉：投递那一刻的血统认证于是落空。
+	fixture.factory.onPublished = func(id session.SessionID) {
+		if id == "child" {
+			fixture.retire(t, "parent")
+		}
+	}
+
+	_, err := fixture.manager.StartContinuable(t.Context(), ContinuableStartSpec{
+		Provider: "spawn",
+		Label:    "查一下",
+		ChildID:  "child",
+		Request:  StartRequest{Prompt: textContent("干活"), Parent: parent},
+	})
+	if codeOf(err) != CodeUnauthorized {
+		t.Fatalf("该报 %s，实际 %v", CodeUnauthorized, err)
+	}
+	if fixture.resident("child") {
+		t.Fatal("没接受成就不该留下一份活化")
+	}
+	if _, still := fixture.agents.Get("child"); still {
+		t.Fatal("回滚之后那个孩子不该还在注册表里")
+	}
+}
+
 // ---- 后续投递 ----
 
 func TestFollowupNeedsAParent(t *testing.T) {
@@ -757,6 +787,36 @@ func TestFollowupColdResumesAChildThatIsNotResident(t *testing.T) {
 	}
 }
 
+// 冷恢复途中调用方走了：报的是取消，而不是把这个孩子判成「用不了」。
+//
+// 这两句话对调用方是两回事：[CodeNotResumable] 说的是「别拿这个 id 重试」，而这里
+// 那份存档一个字都没坏，重试完全该继续。
+func TestFollowupReportsCancellationRatherThanBlamingTheArchive(t *testing.T) {
+	fixture := newContinuation(t)
+	parent := fixture.spawnParent(t, "parent", "")
+	fixture.persistChild(t, "child", "parent", continuableInput())
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	// 在建孩子那一步里同时取消并让它失败：物化于是带着一个已经走了的调用方回来。
+	if _, err := fixture.manager.deps.Setups.Register(
+		func(context.Context, *scope.Scope) (func(context.Context) error, error) {
+			cancel()
+			return nil, errors.New("装不上")
+		},
+	); err != nil {
+		t.Fatalf("登记贡献失败：%v", err)
+	}
+
+	_, err := fixture.manager.Followup(ctx, parent, "child", textContent("接着干"), FollowupOptions{})
+	if codeOf(err) != CodeCancelled {
+		t.Fatalf("该报 %s，实际 %v", CodeCancelled, err)
+	}
+	if fixture.resident("child") {
+		t.Fatal("失败之后不该留下活化")
+	}
+}
+
 // 存档里读不出这个孩子时报 [CodeNotResumable]，而不是含糊地失败。
 func TestFollowupRefusesAChildThatIsNotInTheArchive(t *testing.T) {
 	fixture := newContinuation(t)
@@ -797,6 +857,31 @@ func TestFollowupRefusesAColdChildOfAnotherParent(t *testing.T) {
 	)
 	if codeOf(err) != CodeUnauthorized {
 		t.Fatalf("该报 %s，实际 %v", CodeUnauthorized, err)
+	}
+}
+
+// 等那把孩子锁的当口被取消，报的是取消：这一轮连活表都没读到，所以既不投递、
+// 也不要求重来。
+//
+// 这条边和「拿到锁之后发现被取消了」分得开：那一条锁是空的，取消由锁**后面**那道
+// 检查认出来；这一条锁被别人占着，认出取消的是等锁那一下自己。
+func TestFollowupOnceReportsCancellationWhileWaitingForTheChildLock(t *testing.T) {
+	fixture := newContinuation(t)
+	parent := fixture.spawnParent(t, "parent", "")
+	release, err := fixture.manager.locks.acquire(context.Background(), "child")
+	if err != nil {
+		t.Fatalf("先占下那把孩子锁失败：%v", err)
+	}
+	t.Cleanup(release)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, retry, err := fixture.manager.followupOnce(
+		ctx, parent, "child", textContent("接着干"), FollowupOptions{},
+	)
+	if codeOf(err) != CodeCancelled || retry {
+		t.Fatalf("该报 %s 且不要求重来，实际 retry=%v err=%v", CodeCancelled, retry, err)
 	}
 }
 

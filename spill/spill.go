@@ -45,8 +45,8 @@ package spill
 import (
 	"context"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Locator 是一份外置产物面向模型的不透明句柄。

@@ -11,21 +11,21 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // SettingsNamespace 是那份带着用户所选默认预设的设置命名空间。
 //
-// 源: packages/preset/agent-presets/src/index.ts:40
+// 源: packages/preset/agent-presets/src/index.ts:54-55（SETTINGS_NAMESPACE）
 const SettingsNamespace = "agent-presets"
 
 // DefaultSource 是盖在 [Config.Default] 上的那一层用户设置。
 //
-// 源: packages/preset/agent-presets/src/index.ts:112-118
+// 源: packages/preset/agent-presets/src/index.ts:64-68（AgentPresetSettings）
 //
 // 新增: DSH 那边 AgentPresets 直接 inject 了 settings 服务，拿一个
 // `SettingsScope<AgentPresetSettings>` 和那个服务本身。Go 这边换成这个两方法的接缝，
-// 由装配方接到 [ds-harness-go/settings] 上去。理由有两条：一是本包对设置只有
+// 由装配方接到 [github.com/snight1983/ds-harness-go/settings] 上去。理由有两条：一是本包对设置只有
 // 「读当下的默认」和「把我刚删掉的那个默认清掉」这两次触碰，接缝的宽度就该正好是二；
 // 二是让名册在测试里不必先立起一台设置 Provider。
 //
@@ -56,7 +56,7 @@ type standingMount struct {
 
 // Roster 是这套部署那些 agent 预设的名册。
 //
-// 源: packages/preset/agent-presets/src/index.ts:82-535
+// 源: packages/preset/agent-presets/src/index.ts:93-796（AgentPresets）
 //
 // 发现是**不记忆的**：[Roster.List] 和 [Roster.Resolve] 每次都重扫根，于是进程跑着
 // 的时候创作出来的预设当场可见，而一份在选择器底下被删掉的预设在下一次读时消失。
@@ -99,7 +99,7 @@ type Roster struct {
 	//
 	// 源: packages/preset/agent-presets/src/index.ts:260
 	//
-	// 绑定句柄是 [ds-harness-go/core/scope] 里**唯一**的改链权力，攥在这里就让这个
+	// 绑定句柄是 [github.com/snight1983/ds-harness-go/core/scope] 里**唯一**的改链权力，攥在这里就让这个
 	// 名册成为唯一能把一个 agent 从一份组合挪到另一份的东西。
 	bindings map[*scope.Key]*scope.ParentBinding
 }
@@ -342,7 +342,7 @@ func (r *Roster) standingMountFor(agentKey *scope.Key) (joinedMount, bool) {
 
 // LiveMounts 是此刻还装着的那些预设组合，按预设 id。
 //
-// 源: packages/preset/agent-presets/src/mount.ts:153-156
+// 源: packages/preset/agent-presets/src/mount.ts:162-177（livePresetMounts）
 //
 // 新增: DSH 那边它还顺手把已经拆掉的记录剪掉（pruneDisposedMounts），因为那些记录
 // 是靠观察 fiber.uid 是不是 null 来判死的。这里一份装载只在 [Roster] 主动换代或者

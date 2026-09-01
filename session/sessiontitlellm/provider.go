@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session/sessiontitle"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session/sessiontitle"
 )
 
 const (

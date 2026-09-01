@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // marshalNoEscape 把一个值排成 JSON，**不**做 HTML 转义。
@@ -57,17 +57,17 @@ func EventTypes() []session.EventType { return []session.EventType{EventChange} 
 
 // ChangeVersion 是本包实现的那一版耐久协议。
 //
-// 源: packages/schedule/schedule/src/domain.ts:21
+// 源: packages/schedule/schedule/src/domain.ts:20-21（SCHEDULE_CHANGE_VERSION）
 const ChangeVersion = 1
 
 // MinEveryIntervalSeconds 是固定频率提醒的下限，v1 钉死在五分钟。
 //
-// 源: packages/schedule/schedule/src/domain.ts:24
+// 源: packages/schedule/schedule/src/domain.ts:23-24（MIN_EVERY_INTERVAL_SECONDS）
 const MinEveryIntervalSeconds = 300
 
 // ID 是一个提醒在它那个会话里的身份：唯一，而且**一次都不重用**。
 //
-// 源: packages/schedule/schedule/src/types.ts:10
+// 源: packages/schedule/schedule/src/types.ts:9-10（ScheduleId）
 //
 // 新增: DSH 是一个 branded string。Go 里就是一个具名字符串类型——它挡住的东西
 // 是一样的（一个裸 string 传不进来），而且不用那套品牌机制。
@@ -89,7 +89,7 @@ const (
 
 // State 是一条记录此刻的投递时序。
 //
-// 源: packages/schedule/schedule/src/types.ts:108
+// 源: packages/schedule/schedule/src/types.ts:107-108（ScheduleState）
 type State string
 
 const (
@@ -101,7 +101,7 @@ const (
 
 // DeliveryMode 是 v1 那条钉死的投递边界。
 //
-// 源: packages/schedule/schedule/src/types.ts:111
+// 源: packages/schedule/schedule/src/types.ts:110-111（ScheduleDeliveryMode）
 type DeliveryMode string
 
 // DeliverySessionLocal 表示提醒**只在**它自己那个会话活着的时候投出去。
@@ -111,11 +111,11 @@ const DeliverySessionLocal DeliveryMode = "session-local"
 
 // Record 是一条落进日志的耐久提醒。
 //
-// 源: packages/schedule/schedule/src/types.ts:13-50
+// 源: packages/schedule/schedule/src/types.ts:12-24（AfterScheduleRecord）
 //
 // 新增: DSH 是 AfterScheduleRecord | AtScheduleRecord | EveryScheduleRecord 三支
 // 判别联合，每一支在介质上都是 `additionalProperties: false` 的封闭对象。Go 这边
-// 落成**一个**带 Kind 判别的结构体，理由和 [ds-harness-go/core/tools.Result] 上
+// 落成**一个**带 Kind 判别的结构体，理由和 [github.com/snight1983/ds-harness-go/core/tools.Result] 上
 // 那一段逐字相同：折叠、排序、查找、投影全都要在一个同质的集合上做，三个各自
 // 封闭的结构体会逼出一个只为了装它们而存在的接口。
 //
@@ -199,7 +199,7 @@ func (r Record) MarshalJSON() ([]byte, error) {
 
 // View 是一条活着的提醒面向模型的完整样子。
 //
-// 源: packages/schedule/schedule/src/types.ts:114-119
+// 源: packages/schedule/schedule/src/types.ts:113-119（ScheduleView）
 //
 // 它是记录本身加上两个**推出来的**字段：一个跟着墙上时钟走，一个是钉死的承诺。
 // 两个都不落盘——落盘的东西必须能从日志重算出来，而这两个都不能。
@@ -339,7 +339,7 @@ func (c Change) MarshalJSON() ([]byte, error) {
 
 // PersistenceOperation 是那三件可能报「落盘不确定」的管理操作。
 //
-// 源: packages/schedule/schedule/src/types.ts:122
+// 源: packages/schedule/schedule/src/types.ts:121-122（SchedulePersistenceOperation）
 type PersistenceOperation string
 
 const (
@@ -411,7 +411,7 @@ const CodeScheduleNotFound = "schedule_not_found"
 
 // DeleteResult 是 schedule_delete 成功时的那个值，包括「没找到」那一支。
 //
-// 源: packages/schedule/schedule/src/types.ts:206-208
+// 源: packages/schedule/schedule/src/types.ts:205-208（ScheduleDeleteResult）
 type DeleteResult struct {
 	// ID 是被点名的那条。
 	ID ID `json:"id"`

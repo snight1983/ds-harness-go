@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"ds-harness-go/session"
-	"ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionquery"
 )
 
 // sessionSearchArgs 是 session_search 的参数。

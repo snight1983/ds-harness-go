@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // marshalPayload 把一个负载排成事件字节。
@@ -186,7 +186,7 @@ type fakeSession struct {
 	// failOn 为非空时，追加这种类型的事件会失败。
 	failOn session.EventType
 	// onAppend 在事件已经进了日志之后调用，锁外——和
-	// [ds-harness-go/core/session.Session] 通知观察者的时机一样。
+	// [github.com/snight1983/ds-harness-go/core/session.Session] 通知观察者的时机一样。
 	onAppend func(event session.Event)
 }
 

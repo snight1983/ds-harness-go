@@ -6,7 +6,7 @@ package tokenmeter
 import (
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // foldAll 把一串事件依次折进服务那份逐节点折叠，交出最后的节点表和总价。

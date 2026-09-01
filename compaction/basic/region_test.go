@@ -8,8 +8,8 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/compaction"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/compaction"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestSelectCompactableRange挑到保留预算为止(t *testing.T) {

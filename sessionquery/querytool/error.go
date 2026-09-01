@@ -2,10 +2,10 @@
 //
 // 源: packages/session-query/tool-session-query/src/service-boundary.ts:14-17,88-93,138-143
 //
-// 形状照抄 [ds-harness-go/sessionquery] 的 error.go：分类码本身就是一个
+// 形状照抄 [github.com/snight1983/ds-harness-go/sessionquery] 的 error.go：分类码本身就是一个
 // error，所以 errors.Is(err, querytool.CodeUnauthorized) 直接成立，不必先
 // errors.As 出一个结构体再比字段。理由和那边一样，见
-// [ds-harness-go/sessionquery.Code]。
+// [github.com/snight1983/ds-harness-go/sessionquery.Code]。
 //
 // 新增: DSH 这些错误是 HarnessError 的子类。本仓库没有 HarnessError（见
 // llm/doc.go 的说明），每个包自带一套码，这里也一样。

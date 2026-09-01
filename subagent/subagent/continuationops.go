@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
 )
 
 // StartContinuable 起一个可续后台孩子：占下它耐久的身份、解算提供方那份脱离的创建
@@ -424,6 +424,8 @@ func (m *ContinuationManager) deliverReport(
 ) (llm.MessageID, error) {
 	source, err := NewReportSource(reporter.childID)
 	if err != nil {
+		// 走不到：这个 id 非空（一份活化必然有），而剩下那一步是 marshalSenderExtra
+		// 里那次转不失败的编码。
 		return "", err
 	}
 	// 给模型看的载荷，所以保持英文。
@@ -463,9 +465,9 @@ func (m *ContinuationManager) sendWaking(parent agent.Agent, messageID llm.Messa
 // 源: packages/subagent/subagent/src/continuation.ts:704-719
 //
 // 新增: DSH 这里包了一层 try/catch，把 steer／inject 抛出来的东西翻译成
-// [CodeParentUnavailable]。Go 这边 [ds-harness-go/core/agent.Agent] 的
+// [CodeParentUnavailable]。Go 这边 [github.com/snight1983/ds-harness-go/core/agent.Agent] 的
 // Steer／Inject 签名上没有错误通道——循环那一层把入队失败报给它自己的错误出口，
-// 绝不抛给送信方（见 [ds-harness-go/core/agentloop.ReactLoopAgent.Send]）。
+// 绝不抛给送信方（见 [github.com/snight1983/ds-harness-go/core/agentloop.ReactLoopAgent.Send]）。
 // 所以这一路没有可翻译的失败，[CodeParentUnavailable] 只剩
 // [ContinuationManager.resolveReportParent] 一个来源。
 func (m *ContinuationManager) sendReport(parent agent.Agent, message llm.Message, delivery ReportDelivery) {

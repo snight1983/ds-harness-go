@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 func TestIdentityOfTakesOnlyTheTwoFieldsThatBindALifetime(t *testing.T) {

@@ -10,9 +10,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/compaction"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/compaction"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // intOf 交出一个指向该值的指针，给那几个「零有意义」的配置字段用。

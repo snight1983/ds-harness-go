@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // installFromCalls 拿若干次录下来的调用装一台回放运行时。

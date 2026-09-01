@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // 这几个是错误的机器可读代号。它们会跟着失败结果一起走到调用方和会话日志里，
@@ -60,7 +60,7 @@ var ErrToolNotFound = errors.New("tools: 找不到这个工具")
 
 // NotFoundError 是一次点名了看不见的工具的调用。
 //
-// 源: packages/core/tools/src/index.ts:494-511
+// 源: packages/core/tools/src/index.ts:481-503（ToolNotFoundError）
 type NotFoundError struct {
 	// ToolName 是调用方点的名字。
 	ToolName string
@@ -91,7 +91,7 @@ var ErrInvalidToolOutput = errors.New("tools: 工具交出来的值不符合它�
 
 // OutputError 是一次不合法的工具输出。
 //
-// 源: packages/core/tools/src/index.ts:513-524
+// 源: packages/core/tools/src/index.ts:505-515（ToolOutputError）
 type OutputError struct {
 	// ToolName 是这个工具的名字。
 	ToolName string
@@ -118,7 +118,7 @@ var ErrInvalidArgs = errors.New("tools: 参数不合法")
 
 // ArgsError 是一次不合法的参数。
 //
-// 源: packages/core/tools/src/schema.ts:461-475
+// 源: packages/core/tools/src/schema.ts:460-470（ToolArgsError）
 type ArgsError struct {
 	// Violations 是按校验顺序排的违规说明。
 	Violations []string
@@ -140,7 +140,7 @@ func (err *ArgsError) ErrorCode() string { return CodeInvalidArgs }
 
 // ErrorInfo 是一次失败的结构化身份，和给模型看的那句话并排放着。
 //
-// 源: packages/core/tools/src/index.ts:475-479
+// 源: packages/core/tools/src/index.ts:467-471（ToolErrorInfo）
 type ErrorInfo struct {
 	Name string `json:"name"`
 	Code string `json:"code"`
@@ -148,7 +148,7 @@ type ErrorInfo struct {
 
 // Failure 是一次失败的全部细节。
 //
-// 源: packages/core/tools/src/index.ts:481-485
+// 源: packages/core/tools/src/index.ts:473-479（ToolFailure）
 type Failure struct {
 	// Message 是给模型看的那句话。
 	Message string `json:"message"`
@@ -158,7 +158,7 @@ type Failure struct {
 
 // ExecutionToken 是一次调用在本进程内的相关性标识。
 //
-// 源: packages/core/tools/src/index.ts:305-309
+// 源: packages/core/tools/src/index.ts:299-300（ToolExecutionToken）
 //
 // 新增: DSH 用一个 `Symbol` 当这个标识，靠**对象身份**唯一。Go 里没有那种身份，
 // 所以这是一个包级计数器发出来的值，可比较、可当 map 键、复制之后仍然是它自己。
@@ -181,7 +181,7 @@ func newExecutionToken() ExecutionToken { return ExecutionToken{id: tokenCounter
 
 // ExecutionInput 是调用方交上来的那份「要调哪个工具、参数是什么」。
 //
-// 源: packages/core/tools/src/index.ts:314-342
+// 源: packages/core/tools/src/index.ts:302-331（ToolExecutionInput）
 //
 // 新增: DSH 这里还有一个 `signal: AbortSignal`。Go 的取消是 context.Context，
 // 而按 Go 的惯例它是**参数**不是字段，所以它跟着 [Runtime.Execute] 那一路传下去，
@@ -206,7 +206,7 @@ type ExecutionInput struct {
 
 // Execution 是加上了本包发的 token 之后的那次调用。
 //
-// 源: packages/core/tools/src/index.ts:379-389
+// 源: packages/core/tools/src/index.ts:365-377（ToolExecution）
 type Execution struct {
 	ExecutionInput
 	// Token 是本包发的相关性标识，调用方选不了它。
@@ -215,7 +215,7 @@ type Execution struct {
 
 // RunContext 是执行体拿到的那个活的执行对象。
 //
-// 源: packages/core/tools/src/index.ts:404-421
+// 源: packages/core/tools/src/index.ts:389-414（ToolRunContext）
 //
 // 新增: DSH 把「这次执行推迟了哪些上下文」「它宣布回合结束了没有」「调用方的信号」
 // 「快照下来的 finalizeContent」这四样分别放在四张 WeakMap 里，键是这个执行对象。
@@ -297,7 +297,7 @@ type Result struct {
 
 // clone 复制这份结果里那几段可写的东西。
 //
-// 源: packages/core/tools/src/index.ts:1846-1863（materializeFinalResult）
+// 源: packages/core/tools/src/index.ts:1837-1853（materializeFinalResult）
 //
 // 新增: DSH 那边这一步是 snapshotJsonValue 加 deepFreeze——JS 的对象按引用共享，
 // 一份发布出去的结果能被收到它的人改掉。Go 的结构体赋值就是复制，但里面的切片不是，
@@ -337,7 +337,7 @@ func cloneRaw(raw json.RawMessage) json.RawMessage {
 
 // PresentedResult 是交给 [Definition.PresentResult] 的那份已完成结果。
 //
-// 源: packages/core/tools/src/index.ts:291-303
+// 源: packages/core/tools/src/index.ts:282-295（ToolResult）
 //
 // 新增: DSH 那边这个类型就叫 `ToolResult`，和 `ToolExecutionResult` 只差一个词。
 // 这里改名叫 PresentedResult，因为它是**专门给呈现用的那一份投影**：只有能重放的
@@ -353,7 +353,7 @@ type PresentedResult struct {
 
 // OutputDefinition 是一个工具对自己**返回值**的声明。
 //
-// 源: packages/core/tools/src/index.ts:212-220
+// 源: packages/core/tools/src/index.ts:203-211（ToolOutputDefinition）
 //
 // 这是必填的：执行体交出来的每一个值都按 Schema 验一遍，再由 Render 投影成
 // 给模型看的内容。「工具直接返回内容块」这条路本包不提供——那样一来同一件事实
@@ -369,7 +369,7 @@ type OutputDefinition struct {
 
 // Definition 是一个注册进来的工具。
 //
-// 源: packages/core/tools/src/index.ts:222-289
+// 源: packages/core/tools/src/index.ts:213-280（ToolDefinition）
 type Definition struct {
 	// Name 是工具名，模型按这个名字调它。
 	Name string
@@ -418,7 +418,7 @@ type Definition struct {
 
 // ExecutionModeKind 是一次待调用的调度方式。
 //
-// 源: packages/core/tools/src/index.ts:344-348
+// 源: packages/core/tools/src/index.ts:333-339（ToolExecutionMode）
 type ExecutionModeKind string
 
 const (

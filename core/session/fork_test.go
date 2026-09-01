@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	sessionlog "ds-harness-go/session"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // forkCode 取出一次分叉拒绝的分类，不是分叉错误就当场失败。

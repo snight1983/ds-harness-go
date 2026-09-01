@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"testing"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 func TestAdvanceSweepsChainsOfDeadAgents(t *testing.T) {

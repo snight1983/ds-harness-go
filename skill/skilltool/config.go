@@ -8,10 +8,10 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/skill"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/skill"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -24,9 +24,9 @@ const PackageName = "@deepseek-ai/dsh-tool-skill"
 // 源: packages/skill/tool-skill/src/index.ts:35（`kind: 'skill-catalog'`）
 //
 // 新增: DSH 靠 declare module 把 'skill-catalog' 挂进 llm 的 MessageSourceMap，
-// 于是那条来源的 kind 就是它。Go 的 [ds-harness-go/llm.MessageSource] 封在 llm 包里，
-// 外面加不了变体，所以目录消息走 [ds-harness-go/llm.PluginSource]，产出方名字取这一个。
-// 做法和 [ds-harness-go/compaction.CheckpointPlugin] 逐字相同。
+// 于是那条来源的 kind 就是它。Go 的 [github.com/snight1983/ds-harness-go/llm.MessageSource] 封在 llm 包里，
+// 外面加不了变体，所以目录消息走 [github.com/snight1983/ds-harness-go/llm.PluginSource]，产出方名字取这一个。
+// 做法和 [github.com/snight1983/ds-harness-go/compaction.CheckpointPlugin] 逐字相同。
 //
 // 它必须是常数：认出「这是本包发布的目录」全靠这个名字，一次改名会让日志里
 // 已经发布过的那些目录再也认不出来，于是每个步骤都会重发一份。
@@ -53,7 +53,7 @@ const MinCatalogDescriptionMaxLength = 3
 // Catalog 是本包用得到的那一小块技能注册表。
 //
 // 新增: DSH 直接注入整个 skills 服务。这里只写出真正被调到的三个方法，装配方
-// 交进来的 [ds-harness-go/skill.Registry] 自然满足它。窄口子让「本包到底看得见
+// 交进来的 [github.com/snight1983/ds-harness-go/skill.Registry] 自然满足它。窄口子让「本包到底看得见
 // 什么」从签名上一眼可读，测试里也不必替身一整台注册表。
 type Catalog interface {
 	// List 列出一个视角看得见的技能摘要。
@@ -67,7 +67,7 @@ type Catalog interface {
 // ToolLookup 是本包用来问「这个 agent 解算到的 skill 工具是哪一个」的口子。
 //
 // 新增: DSH 是 `ctx.tools.get(name, agent)`。这里把它收窄成一个方法，理由和
-// [Catalog] 相同；[ds-harness-go/core/tools.Runtime] 自然满足它。
+// [Catalog] 相同；[github.com/snight1983/ds-harness-go/core/tools.Runtime] 自然满足它。
 type ToolLookup interface {
 	// Get 按名字解算一个作用域看得见的那件工具。
 	Get(name string, key *scope.Key) (*tools.Definition, bool)
@@ -82,7 +82,7 @@ type Config struct {
 	// AgentOf 从一把作用域钥匙找到那个 agent，必填。
 	//
 	// 新增: DSH 的 exec.agent 就是 agent 对象本身。Go 这边它是一把不透明的钥匙，
-	// 所以由装配方交一条查回去的路，做法和 [ds-harness-go/plan/planmode.Config.AgentOf]
+	// 所以由装配方交一条查回去的路，做法和 [github.com/snight1983/ds-harness-go/plan/planmode.Config.AgentOf]
 	// 逐字相同。
 	AgentOf func(agent *scope.Key) (agent.Agent, error)
 	// CatalogDescriptionMaxLength 是目录里一行说明的长度上限；

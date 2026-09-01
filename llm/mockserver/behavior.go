@@ -8,7 +8,7 @@ import "time"
 
 // Behavior 是剧本里的一条：一次请求要演的故障或者成功。
 //
-// 源: packages/test-support/llm-mock-server/src/index.ts:44
+// 源: packages/test-support/llm-mock-server/src/index.ts:43-44（MockLlmBehavior）
 //
 // 新增: TS 是 typeof MOCK_LLM_BEHAVIORS[number] 这种从数组反推出来的字面量联合，
 // 编译期就能拦住写错的名字。Go 没有等价的类型运算，换成具名 string 加一组常量：
@@ -135,7 +135,7 @@ func IsBehavior(name Behavior) bool {
 
 // IsConcreteBehavior 判一个名字是不是**具体**行为，也就是 random 之外的那些。
 //
-// 源: packages/test-support/llm-mock-server/src/index.ts:47,195
+// 源: packages/test-support/llm-mock-server/src/index.ts:46-47（ConcreteMockLlmBehavior）,195
 //
 // 随机权重只能挂在具体行为上：给 random 配权重是一句自指的话，挑中它之后还要
 // 再挑一次，没有终点。
@@ -173,7 +173,7 @@ func DefaultRandomWeights() map[Behavior]float64 {
 
 // MaxTimerDelay 是各项延时选项接受的上限。
 //
-// 源: packages/test-support/llm-mock-server/src/index.ts:73
+// 源: packages/test-support/llm-mock-server/src/index.ts:72-73（MAX_MOCK_LLM_TIMER_DELAY_MS）
 //
 // 新增: 在 Node 那边这是硬约束——超过 2^31-1 毫秒的延时会被 setTimeout **静默
 // 截断成 1 毫秒**，一个想挂十年的测试会立刻返回。Go 的 [time.Timer] 没有这个坑，

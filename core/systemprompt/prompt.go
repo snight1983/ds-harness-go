@@ -12,13 +12,13 @@ import (
 	"sort"
 	"strings"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // PersonaSection 是部署方那份人设占用的段落名。
 //
-// 源: packages/core/system-prompt/src/index.ts:128
+// 源: packages/core/system-prompt/src/index.ts:166-172（PERSONA_SECTION）
 //
 // 它导出出来，是因为一份组合可以**替换**这个槽位——一个 agent 预设用自己的人设
 // 盖掉部署方的那份。两边报同一个段落名，才叫替换；名字对不上就变成了并存。
@@ -31,7 +31,7 @@ const PersonaOrder = 0
 
 // ToolOrderRest 是 [Options].ToolOrder 里给「没列出来的工具」留的那个位置。
 //
-// 源: packages/core/system-prompt/src/index.ts:140
+// 源: packages/core/system-prompt/src/index.ts:180-181（TOOL_ORDER_REST）
 const ToolOrderRest = "<unlisted-tools>"
 
 // harnessIdentitySection 是宿主自己那句身份声明占用的段落名。
@@ -61,7 +61,7 @@ var groupAtPattern = regexp.MustCompile(`^\{\{([^{}]*)\}\}`)
 
 // AssembleContext 是一次装配的上下文。
 //
-// 源: packages/core/system-prompt/src/index.ts:42-50
+// 源: packages/core/system-prompt/src/index.ts:41-50（AssembleContext）
 //
 // 新增: DSH 这个类型是**可合并扩展**的（插件用 declare module 往上加字段），而且
 // 带一个 signal。Go 没有声明合并，所以它只剩 Scope 一个字段；signal 那一半是每个
@@ -111,7 +111,7 @@ type PromptSection struct {
 
 // PromptContext 是一份动态上下文贡献，最终落成一条持久的 user 角色快照。
 //
-// 源: packages/core/system-prompt/src/index.ts:78-85
+// 源: packages/core/system-prompt/src/index.ts:76-84（PromptContext）
 type PromptContext struct {
 	// Name 是这份贡献的唯一名字，同一层里重名会报错。
 	Name string
@@ -123,7 +123,7 @@ type PromptContext struct {
 
 // AssembledSection 是一段已经求过值、但还没插值的段落。
 //
-// 源: packages/core/system-prompt/src/index.ts:88-93
+// 源: packages/core/system-prompt/src/index.ts:86-92（AssembledSection）
 type AssembledSection struct {
 	// Name 是做出这段贡献的那个段落的名字。
 	Name string
@@ -133,7 +133,7 @@ type AssembledSection struct {
 
 // AssembledContext 是一份已经求过值、但还没插值的动态上下文。
 //
-// 源: packages/core/system-prompt/src/index.ts:96-101
+// 源: packages/core/system-prompt/src/index.ts:94-100（AssembledContext）
 type AssembledContext struct {
 	// Name 是做出这份贡献的那份上下文的名字。
 	Name string
@@ -143,7 +143,7 @@ type AssembledContext struct {
 
 // ToolProviderResult 是一个工具提供方对这一次装配的贡献。
 //
-// 源: packages/core/system-prompt/src/index.ts:104-109
+// 源: packages/core/system-prompt/src/index.ts:102-108（ToolProviderResult）
 type ToolProviderResult struct {
 	// Schemas 是这次真正报给模型的那些工具。
 	Schemas []llm.ToolSchema
@@ -170,7 +170,7 @@ type VariableProvider func(ctx context.Context, assemble AssembleContext) (*stri
 
 // PromptAssembly 是一次装配的产物：模型这一步的全部输入。
 //
-// 源: packages/core/system-prompt/src/index.ts:115-120
+// 源: packages/core/system-prompt/src/index.ts:110-119（PromptAssembly）
 //
 // 段落和上下文都还没插值，工具已经排成最终次序。
 //
@@ -192,7 +192,7 @@ type PromptAssembly struct {
 
 // RenderPrompt 把一次装配渲染成最终的系统提示词。
 //
-// 源: packages/core/system-prompt/src/index.ts:212-217
+// 源: packages/core/system-prompt/src/index.ts:255-268（renderPrompt）
 //
 // 它做三件事：严格插值 `{{变量}}`、丢掉空段落、剩下的用空行连起来。写坏了的引用、
 // 不认识的名字、以及这次没有值的变量，都会报错。一个后面再也没有 `}}` 的孤零零的
@@ -213,7 +213,7 @@ func RenderPrompt(assembly PromptAssembly) (string, error) {
 
 // RenderContextSnapshot 渲染出完整的那份动态上下文快照。
 //
-// 源: packages/core/system-prompt/src/index.ts:224-226
+// 源: packages/core/system-prompt/src/index.ts:270-277（renderContextSnapshot）
 func RenderContextSnapshot(assembly PromptAssembly) (string, error) {
 	sections, err := RenderContextSections(assembly)
 	if err != nil {
@@ -224,7 +224,7 @@ func RenderContextSnapshot(assembly PromptAssembly) (string, error) {
 
 // JoinContextSections 把已经渲染好的那些贡献连成模型看的快照文本。
 //
-// 源: packages/core/system-prompt/src/index.ts:236-241
+// 源: packages/core/system-prompt/src/index.ts:279-291（joinContextSections）
 //
 // 一个既要那些贡献、又要这段文本的调用方，渲染一次然后在这里连起来，就不必把每份
 // 上下文插值两遍。
@@ -242,7 +242,7 @@ func JoinContextSections(sections []llm.ContextSnapshotSection) string {
 
 // RenderContextSections 渲染那份快照，但**留着它是由谁贡献的**。
 //
-// 源: packages/core/system-prompt/src/index.ts:251-255
+// 源: packages/core/system-prompt/src/index.ts:293-306（renderContextSections）
 //
 // [RenderContextSnapshot] 把这些连给模型看；一个要把快照展示出来的消费方用这份
 // 结果把每一块归到贡献它的子系统头上，而不必回头去拆那段连好的散文。

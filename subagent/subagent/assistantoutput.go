@@ -12,8 +12,8 @@ package subagent
 import (
 	"strings"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // AssistantOutputFold 是那条选法的增量版，给那些边流边看孩子输出的后端用：
@@ -37,9 +37,9 @@ type AssistantOutputFold struct {
 // 源: packages/subagent/subagent/src/assistant-output.ts:33-40
 //
 // 新增: DSH 直接读 `event.data.message.content`，因为它那个负载是活的对象。Go 的
-// [ds-harness-go/session.Event.Data] 是原样保管的 JSON，所以先解一次；解不出来
+// [github.com/snight1983/ds-harness-go/session.Event.Data] 是原样保管的 JSON，所以先解一次；解不出来
 // （日志坏了）在这里当**没贡献**处理而不是报错——这条折叠只负责选出一份输出，
-// 判日志成不成立是 [ds-harness-go/session] 那道边界的事，在这里报错只会让一次
+// 判日志成不成立是 [github.com/snight1983/ds-harness-go/session] 那道边界的事，在这里报错只会让一次
 // 本来能收场的运行多一种收不了场的方式。
 func (f *AssistantOutputFold) Push(event session.Event) {
 	switch event.Type {
@@ -50,6 +50,8 @@ func (f *AssistantOutputFold) Push(event session.Event) {
 		}
 		message, ok := data.(session.AssistantMessageData)
 		if !ok {
+			// 走不到：DecodeData 是按 event.Type 分派的，这个分支上它要么报错、
+			// 要么就交回这个类型。断言照旧写着，因为那份对应关系在别的包里。
 			return
 		}
 		if len(message.Message.Content) > 0 {
@@ -62,6 +64,7 @@ func (f *AssistantOutputFold) Push(event session.Event) {
 		}
 		chunk, ok := data.(session.AssistantChunkData)
 		if !ok {
+			// 走不到：同上，DecodeData 在这个分支上只可能交回这个类型。
 			return
 		}
 		if delta, isDelta := chunk.Chunk.(llm.TextDeltaChunk); isDelta {

@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/llm"
-	"ds-harness-go/llm/mockserver"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm/mockserver"
 )
 
 // profilesOf 落定一份只有一条路由的配置，失败就让用例当场停下。

@@ -58,7 +58,7 @@ func (t Target) IsZero() bool { return t.Provider == "" && t.Model == "" }
 
 // PolicyConfig 是默认策略和按模型覆盖共用的那几个字段。
 //
-// 源: packages/compaction/compaction-basic/src/types.ts:10-27
+// 源: packages/compaction/compaction-basic/src/types.ts:9-27（CompactionPolicyConfig）
 //
 // 全部可选：零值（或 nil）表示「这一层不说话」，由上一层或默认值补上。
 //
@@ -99,7 +99,7 @@ type PolicyConfig struct {
 
 // ModelPolicyConfig 是盖在默认策略上的一条按模型覆盖。
 //
-// 源: packages/compaction/compaction-basic/src/types.ts:30-35
+// 源: packages/compaction/compaction-basic/src/types.ts:29-35（ModelCompactPolicyConfig）
 type ModelPolicyConfig struct {
 	// PolicyConfig 是这条覆盖要改的那些字段；没给的继承默认策略。
 	PolicyConfig
@@ -109,7 +109,7 @@ type ModelPolicyConfig struct {
 
 // Config 是这一层的完整配置。
 //
-// 源: packages/compaction/compaction-basic/src/types.ts:38-43
+// 源: packages/compaction/compaction-basic/src/types.ts:37-43（BasicCompactionConfig）
 type Config struct {
 	// PolicyConfig 是默认策略。
 	PolicyConfig
@@ -124,7 +124,7 @@ type Config struct {
 
 // Retention 是那两种保留形式里的**恰好一种**。
 //
-// 源: packages/compaction/compaction-basic/src/types.ts:46-48
+// 源: packages/compaction/compaction-basic/src/types.ts:45-48（ResolvedRetention）
 //
 // 新增: DSH 是一个「两个字段互相 never」的排他联合。Go 没有这种类型，
 // 但这里不需要额外的标志位：Ratio 的合法取值是 (0,1]，所以 Ratio 为零
@@ -141,7 +141,7 @@ func (r Retention) ByRatio() bool { return r.Ratio > 0 }
 
 // Policy 是补完默认值、验过之后那几个和路由无关的策略字段。
 //
-// 源: packages/compaction/compaction-basic/src/types.ts:51-58（ResolvedPolicyFields）
+// 源: packages/compaction/compaction-basic/src/types.ts:50-58（ResolvedPolicyFields）
 //
 // 新增: DSH 那个是模块私有的 interface，只用来给两个导出类型做交叉。Go 里
 // 匿名嵌入要求它是个具名类型，所以它跟着导出了。
@@ -160,7 +160,7 @@ type Policy struct {
 
 // ResolvedConfig 是验过的配置：默认策略已经补全，按模型的覆盖还没合并进去。
 //
-// 源: packages/compaction/compaction-basic/src/types.ts:61-64
+// 源: packages/compaction/compaction-basic/src/types.ts:60-64（ResolvedConfig）
 //
 // 新增: 构造它的唯一入口是 [Config.Resolve]，一份没验过的配置在类型上就传不进来
 // ——和 context/sessionref、context/timecontext 那两份解析后配置同一个理由。
@@ -177,7 +177,7 @@ type ResolvedConfig struct {
 
 // TargetPolicy 是某一条路由合并完覆盖之后的策略，还没按模型窗口折算。
 //
-// 源: packages/compaction/compaction-basic/src/types.ts:67-69
+// 源: packages/compaction/compaction-basic/src/types.ts:66-69（ResolvedTargetPolicy）
 type TargetPolicy struct {
 	// Policy 是合并之后的策略字段。
 	Policy
@@ -189,7 +189,7 @@ type TargetPolicy struct {
 
 // Spec 是某一条路由折算成具体 token 预算之后的压力和保留档。
 //
-// 源: packages/compaction/compaction-basic/src/types.ts:72-76
+// 源: packages/compaction/compaction-basic/src/types.ts:71-76（ResolvedCompactSpec）
 type Spec struct {
 	// Policy 是这条路由的策略字段。
 	Policy

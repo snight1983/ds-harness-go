@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // RegisterInvariants 把这个包登记进不变量注册表，返回注销函数。
@@ -16,10 +16,10 @@ import (
 // 源: packages/goal/tool-goal/src/invariant.ts:19-29
 //
 // 装进去的检查是**空的**，这是刻意的，不是没写完：本包一个字节的耐久状态都不持有，
-// 落得下去的改动全归 [ds-harness-go/goal/goal] 那台服务验；本包唯一拥有的东西是
+// 落得下去的改动全归 [github.com/snight1983/ds-harness-go/goal/goal] 那台服务验；本包唯一拥有的东西是
 // 那套授权行为，而行为归包自己的测试验，不归不变量。
 //
-// 那为什么还要登记？理由和 [ds-harness-go/subagent/controltool.RegisterInvariants]
+// 那为什么还要登记？理由和 [github.com/snight1983/ds-harness-go/subagent/controltool.RegisterInvariants]
 // 逐字相同：占住这个包名，并且让「检查过了、结论是无需检查」和「这个包被漏掉了」
 // 区分得开。
 func RegisterInvariants(ctx context.Context, registry *invariants.Registry) (func(), error) {

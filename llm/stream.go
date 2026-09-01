@@ -3,9 +3,9 @@
 //
 // 源: packages/llm/llm/src/types.ts:39-51（LlmFailure）
 // 源: packages/llm/llm/src/types.ts:111-141（FinishReason、TokenUsage）
-// 源: packages/llm/llm/src/types.ts:283-302（ReplayEnvelope）
-// 源: packages/llm/llm/src/types.ts:304-324（StreamChunk）
-// 源: packages/llm/llm/src/message.ts:243-261（isTokenDelta）
+// 源: packages/llm/llm/src/types.ts:335-354（ReplayEnvelope）
+// 源: packages/llm/llm/src/types.ts:356-376（StreamChunk）
+// 源: packages/client/ui-chat/src/client/conversation-nodes/event-projection.ts:153-168（isTokenDelta）
 
 package llm
 
@@ -64,7 +64,7 @@ type TokenUsage struct {
 
 // ReplayEnvelope 是适配器私有的、无损的 JSON 状态，用来重放一次成功的响应。
 //
-// 源: packages/llm/llm/src/types.ts:283-302
+// 源: packages/llm/llm/src/types.ts:335-354（ReplayEnvelope）
 //
 // 它由终止的 finish 分块带出来，存在装配好的那条助手消息的模型来源上
 // （[Provenance.ReplayState]）。两半对本运行时都是不透明的，共享的只有这个**切分**：
@@ -298,7 +298,7 @@ const (
 
 // StreamChunk 是适配器吐出来的原始流式协议里的一块。
 //
-// 源: packages/llm/llm/src/types.ts:304-324
+// 源: packages/llm/llm/src/types.ts:356-376（StreamChunk）
 //
 // 块下标把交错的增量对应起来，[BlockEndChunk] 带着装配好的那一块。
 // 适配器在终止的 finish 之前发出用量、之后什么都不发；工具参数始终是原始 JSON 串。
@@ -420,10 +420,15 @@ func (FinishChunk) sealedStreamChunk() {}
 
 // IsTokenDelta 判断这一块是不是真的携带了增量内容。
 //
-// 源: packages/llm/llm/src/message.ts:243-261
+// 源: packages/client/ui-chat/src/client/conversation-nodes/event-projection.ts:153-168
 //
 // 它是「首个 token」这类计时的判据：一个下标为 0 的 block-start、一条用量、
 // 一个空的文本增量都不算模型真的吐出了东西。
+//
+// 上移: 上游没有共享的这一份，而是在 session-stats、ui-chat、ui-trajectory 三处
+// 各留一份逐字相同的副本（三处都用 jscpd:ignore 圈出来，是有意接受的重复）。
+// 判据只有一条，放三份就会各自漂移，所以 Go 里它上提到 llm 包，由需要计时的那
+// 几方共用。上面引的是三份里唯一导出的那一份。
 func IsTokenDelta(chunk StreamChunk) bool {
 	switch typed := chunk.(type) {
 	case TextDeltaChunk:

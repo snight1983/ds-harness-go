@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -31,7 +31,7 @@ const PackageName = "@deepseek-ai/dsh-jobs"
 //
 // 新增: DSH 那边这个函数收一个 `fail` 回调，每撞见一条就调一次（而 `fail` 会抛，
 // 所以实际上也是第一条为准）。Go 这边返回**第一条**违例，和
-// [ds-harness-go/plan/planmode.ValidateEvent] 一致：它因此可以脱离不变量注册表
+// [github.com/snight1983/ds-harness-go/plan/planmode.ValidateEvent] 一致：它因此可以脱离不变量注册表
 // 单独用（比如一台实现在自己的测试里自查），而 [RegisterInvariants] 只是把这个
 // 错误接到 [invariants.Fail] 上。
 func ValidateSnapshot(snapshot Snapshot, owner agent.Agent) error {

@@ -25,7 +25,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // listableAPI 是这个适配器读得懂其模型清单的那套线上协议名。

@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/invariants"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ValidateStream 验一整条会话日志；守住了就交回 nil。
@@ -28,7 +28,7 @@ import (
 // 判定方式是重排一遍再逐字节比：这也是 [RenderRoundPrompt] 必须保持纯函数的原因。
 //
 // 新增: DSH 那个 install 收一个 fail 回调、就地报掉。这里交回错误，理由同
-// [ds-harness-go/goal/goal.ValidateStream]——它因此可以脱离注册表单独用，而
+// [github.com/snight1983/ds-harness-go/goal/goal.ValidateStream]——它因此可以脱离注册表单独用，而
 // [RegisterInvariants] 只是把这个错接到 [invariants.Fail] 上。
 //
 // 新增: 折叠是**增量**的，DSH 那边在检查已装载会话时对每条事件重折一遍前缀。
@@ -41,7 +41,7 @@ func ValidateStream(events []session.Event) error {
 			return err
 		}
 		if err := goal.ApplyEvent(state, event); err != nil {
-			// 这条流本身就折不动。那不归本包管——[ds-harness-go/goal/goal] 那条
+			// 这条流本身就折不动。那不归本包管——[github.com/snight1983/ds-harness-go/goal/goal] 那条
 			// 不变量会为同一条日志报出更准的话，这里放行免得同一件事响两遍。
 			return nil
 		}
@@ -114,7 +114,7 @@ func reconstructView(prior *goal.FoldState, source goal.Source) (*goal.View, err
 //
 // 源: packages/goal/goal-round-driver/src/invariant.ts:77-84
 //
-// 两条胳膊，形状和 [ds-harness-go/goal/goal.RegisterInvariants] 逐字相同：装的时候
+// 两条胳膊，形状和 [github.com/snight1983/ds-harness-go/goal/goal.RegisterInvariants] 逐字相同：装的时候
 // 把已经装载进来的每一条流走一遍，然后订阅后续。装配方同样要负责在一条待写的
 // user/message 落盘**之前**把它接在末尾交进来——少了这一步，一条伪造的续推会先进
 // 日志再在下次装载时才炸，那时候已经改不掉了。

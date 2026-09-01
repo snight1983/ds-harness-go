@@ -11,6 +11,9 @@
 //     和「你这边炸了」，折错码会让它去重试一件永远不会成立的事。
 //   - **两个 goroutine 交叉写把两帧搅在一行里**。按行分帧的协议里这等于两帧一起废掉。
 //   - **shutdown 的结果排成了 null**。协议上它写死是 `{}`。
+//   - **一行永远不来的换行符把内存吃光**。上限之外的那一行按坏行处理，连接照常。
+//   - **同时在办多少件由对面说了算**。名额满了读循环停下来等，压力还给对面。
+//   - **两支 image 只按 type 分**。分开它们的是 data 这个键在不在，不是 type。
 //   - **MaxTokens 的「没给」和「给了 0」混成一件事**。后者是坏输入，前者是常态。
 //   - **LastAssistantMessage 空切片和缺席混成一件事**。前者是「跑出来了但内容为空」。
 
@@ -26,15 +29,16 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/sourcegraph/jsonrpc2"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // ---- 手脚架 ----
@@ -217,6 +221,157 @@ func (b *syncBuffer) String() string {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 	return b.text.String()
+}
+
+// ---- 上限 ----
+
+// TestAnOverlongFrameIsSkippedAndTheNextOneStillArrives 钉住超长的一行按坏行处理。
+//
+// DSH 是 `this.buffer += chunk` 无限攒着的：一条永远不带换行符的输入能把进程的内存
+// 吃光。丢掉之后接着读、而不是把连接关掉，是为了和「坏行跳过去」保持同一条规矩——
+// 对本端来说，一行超长和一行断在半路是同一件事。
+func TestAnOverlongFrameIsSkippedAndTheNextOneStillArrives(t *testing.T) {
+	t.Parallel()
+	seen := make(chan string, 2)
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { _ = writer.Close() })
+	transport := NewLineTransportWith(t.Context(), reader, io.Discard, echoHandlers(seen),
+		TransportOptions{MaxFrameBytes: 256})
+	t.Cleanup(func() { transport.Close() })
+
+	// 一帧本身合法、只是太长；它必须被丢掉而不是被办掉。
+	overlong := fmt.Sprintf(`{"jsonrpc":"2.0","method":%q,"params":{"pad":%q}}`,
+		MethodSessionStatus, strings.Repeat("x", 4096))
+	if _, err := writer.Write([]byte(overlong + "\n")); err != nil {
+		t.Fatalf("写超长那一帧失败：%v", err)
+	}
+	if _, err := writer.Write([]byte(`{"jsonrpc":"2.0","method":"session.event"}` + "\n")); err != nil {
+		t.Fatalf("写下一帧失败：%v", err)
+	}
+	select {
+	case method := <-seen:
+		// 先到的必须是**后**发的那一帧：超长的那一帧压根没被办。
+		if method != MethodSessionEvent {
+			t.Fatalf("超长那一帧不该被办：%q", method)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("超长那一帧之后这条线该还活着")
+	}
+}
+
+// TestAFrameRightAtTheCapStillArrives 钉住上限是「超过才丢」而不是「够到就丢」。
+func TestAFrameRightAtTheCapStillArrives(t *testing.T) {
+	t.Parallel()
+	seen := make(chan string, 1)
+	frame := `{"jsonrpc":"2.0","method":"session.event"}` + "\n"
+	transport := NewLineTransportWith(t.Context(), strings.NewReader(frame), io.Discard,
+		echoHandlers(seen), TransportOptions{MaxFrameBytes: len(frame)})
+	t.Cleanup(func() { transport.Close() })
+	select {
+	case method := <-seen:
+		if method != MethodSessionEvent {
+			t.Fatalf("收到的方法名不对：%q", method)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("正好卡在上限上的那一帧该照样送到")
+	}
+}
+
+// TestConcurrentFramesStayUnderTheCeiling 钉住同时在办的帧数不超过那条上限。
+//
+// DSH 对每一行 `void this.handleLine(line)` 一发了之，同时在办多少件完全由对面说了算。
+// 这里名额满了之后读循环停下来等，于是压力顺着流还给对面，而不是在本端堆 goroutine。
+func TestConcurrentFramesStayUnderTheCeiling(t *testing.T) {
+	t.Parallel()
+	const ceiling = 2
+	const frames = 20
+	var live, peak atomic.Int64
+	release := make(chan struct{})
+	arrived := make(chan struct{}, frames)
+
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { _ = writer.Close() })
+	transport := NewLineTransportWith(t.Context(), reader, io.Discard, Handlers{
+		Notification: func(context.Context, string, json.RawMessage) {
+			now := live.Add(1)
+			for {
+				was := peak.Load()
+				if now <= was || peak.CompareAndSwap(was, now) {
+					break
+				}
+			}
+			arrived <- struct{}{}
+			<-release
+			live.Add(-1)
+		},
+	}, TransportOptions{MaxConcurrentFrames: ceiling})
+	t.Cleanup(func() { transport.Close() })
+
+	written := make(chan error, 1)
+	go func() {
+		for range frames {
+			if _, err := writer.Write([]byte(`{"jsonrpc":"2.0","method":"session.event"}` + "\n")); err != nil {
+				written <- err
+				return
+			}
+		}
+		written <- nil
+	}()
+
+	// 等名额确实被占满，再放它们过去。占满这件事本身就是「上限起作用了」的证据：
+	// 没有上限的话这一批会一次全部进来。
+	for range ceiling {
+		select {
+		case <-arrived:
+		case <-time.After(5 * time.Second):
+			t.Fatal("头几帧该被办起来")
+		}
+	}
+	close(release)
+	if err := <-written; err != nil {
+		t.Fatalf("写那一批失败：%v", err)
+	}
+	for range frames - ceiling {
+		select {
+		case <-arrived:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("这一批该全部办完，实际只办了 %d 帧", frames-int(live.Load()))
+		}
+	}
+	if peak.Load() > ceiling {
+		t.Fatalf("同时在办的帧数该不超过 %d，实际到过 %d", ceiling, peak.Load())
+	}
+}
+
+// TestZeroLimitsFallBackToTheDefaults 钉住两条上限的零值走的是默认值那条路。
+func TestZeroLimitsFallBackToTheDefaults(t *testing.T) {
+	t.Parallel()
+	seen := make(chan string, 1)
+	transport := NewLineTransportWith(t.Context(),
+		strings.NewReader(`{"jsonrpc":"2.0","method":"session.event"}`+"\n"),
+		io.Discard, echoHandlers(seen), TransportOptions{})
+	t.Cleanup(func() { transport.Close() })
+	select {
+	case <-seen:
+	case <-time.After(5 * time.Second):
+		t.Fatal("零值该退到默认上限，而不是把一切都挡下来")
+	}
+}
+
+// TestNegativeLimitsMeanNoCeiling 钉住负数表示不设限。
+func TestNegativeLimitsMeanNoCeiling(t *testing.T) {
+	t.Parallel()
+	seen := make(chan string, 1)
+	long := fmt.Sprintf(`{"jsonrpc":"2.0","method":%q,"params":{"pad":%q}}`,
+		MethodSessionEvent, strings.Repeat("x", 1<<20))
+	transport := NewLineTransportWith(t.Context(), strings.NewReader(long+"\n"), io.Discard,
+		echoHandlers(seen), TransportOptions{MaxFrameBytes: -1, MaxConcurrentFrames: -1})
+	t.Cleanup(func() { transport.Close() })
+	select {
+	case <-seen:
+	case <-time.After(5 * time.Second):
+		t.Fatal("不设限时一帧多长都该送到")
+	}
 }
 
 // ---- 分流 ----
@@ -579,7 +734,7 @@ func TestPromptRoundTripsItsContent(t *testing.T) {
 	t.Parallel()
 	sent := SessionPromptParams{
 		SessionID:     "会话",
-		ContentBlocks: llm.Content{llm.TextBlock{Text: "把测试补齐"}},
+		ContentBlocks: PromptContent{{Durable: llm.TextBlock{Text: "把测试补齐"}}},
 	}
 	encoded, err := json.Marshal(sent)
 	if err != nil {
@@ -592,8 +747,88 @@ func TestPromptRoundTripsItsContent(t *testing.T) {
 	if len(back.ContentBlocks) != 1 {
 		t.Fatalf("内容块该往返得回来，实际 %#v", back.ContentBlocks)
 	}
-	if text, ok := back.ContentBlocks[0].(llm.TextBlock); !ok || text.Text != "把测试补齐" {
+	if text, ok := back.ContentBlocks[0].Durable.(llm.TextBlock); !ok || text.Text != "把测试补齐" {
 		t.Fatalf("内容不对：%#v", back.ContentBlocks[0])
+	}
+}
+
+// TestInlineImagesAreToldApartByThePresenceOfData 钉住两支 image 是靠 data 这个**键在不在**分开的。
+//
+// DSH 那个类型守卫是 `type === 'image' && 'data' in block`：两支的 type 都是 image，
+// 分开它们的是带 data 还是带 attachment。光看 type 会把每一张耐久图都当成待准入的
+// 内联图；把 data 收进 string 则会让 `{"type":"image","data":""}`（一张空图，该被准入
+// 那一层拒掉）和「根本没有 data」长得一样。
+func TestInlineImagesAreToldApartByThePresenceOfData(t *testing.T) {
+	t.Parallel()
+	for name, one := range map[string]struct {
+		raw     string
+		encoded bool
+	}{
+		"带 data 的是内联图":   {`{"type":"image","data":"AAAA","mimeType":"image/png"}`, true},
+		"data 是空串也还是内联图": {`{"type":"image","data":"","mimeType":"image/png"}`, true},
+		"带 attachment 的是耐久引用": {
+			`{"type":"image","attachment":{"attachmentId":"a","mediaType":"image/png","bytes":1,"width":1,"height":1}}`,
+			false,
+		},
+		"文本块是耐久的": {`{"type":"text","text":"你好"}`, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var blocks PromptContent
+			if err := json.Unmarshal([]byte("["+one.raw+"]"), &blocks); err != nil {
+				t.Fatalf("解不动：%v", err)
+			}
+			if len(blocks) != 1 {
+				t.Fatalf("该是一块，实际 %d 块", len(blocks))
+			}
+			if (blocks[0].Encoded != nil) != one.encoded {
+				t.Fatalf("分错支了：%#v", blocks[0])
+			}
+			if one.encoded == (blocks[0].Durable != nil) {
+				t.Fatalf("两支该恰好有一支：%#v", blocks[0])
+			}
+		})
+	}
+}
+
+// TestPromptContentKeepsAbsentDistinctFromEmpty 钉住「没给这一串」和「给了空的一串」分得开。
+func TestPromptContentKeepsAbsentDistinctFromEmpty(t *testing.T) {
+	t.Parallel()
+	for name, one := range map[string]struct {
+		raw    string
+		isNil  bool
+		length int
+	}{
+		"没给":   {"null", true, 0},
+		"给了空的": {"[]", false, 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var blocks PromptContent
+			if err := json.Unmarshal([]byte(one.raw), &blocks); err != nil {
+				t.Fatalf("解不动：%v", err)
+			}
+			if (blocks == nil) != one.isNil {
+				t.Fatalf("nil 和空切片该分得开：%#v", blocks)
+			}
+			encoded, err := json.Marshal(blocks)
+			if err != nil {
+				t.Fatalf("排不出去：%v", err)
+			}
+			if string(encoded) != one.raw {
+				t.Fatalf("该原样排回 %s，实际 %s", one.raw, encoded)
+			}
+		})
+	}
+}
+
+// TestAPromptBlockWithNeitherArmIsRefused 钉住两支都空的一块当场说出来。
+//
+// 悄悄排成 null 会让对面读到一个说不出是什么的块，而错在本端。
+func TestAPromptBlockWithNeitherArmIsRefused(t *testing.T) {
+	t.Parallel()
+	if _, err := json.Marshal(PromptContent{{}}); err == nil {
+		t.Fatal("两支都空的一块该排不出去")
 	}
 }
 

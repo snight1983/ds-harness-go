@@ -38,7 +38,7 @@ var ErrInvalidConfig = errors.New("compaction/toolresultpruner: 配置不合法"
 
 // Config 是这一层写下来的配置。
 //
-// 源: packages/compaction/compaction-tool-result-pruner/src/types.ts:4-11
+// 源: packages/compaction/compaction-tool-result-pruner/src/types.ts:3-11（ToolResultPruneConfig）
 type Config struct {
 	// ThresholdChars 是超过多少个码点才砍，正数；零表示这一层不说话。
 	ThresholdChars int
@@ -54,7 +54,7 @@ type Config struct {
 
 // ResolvedConfig 是验过的字符预算。
 //
-// 源: packages/compaction/compaction-tool-result-pruner/src/types.ts:14-19
+// 源: packages/compaction/compaction-tool-result-pruner/src/types.ts:13-18（ResolvedConfig）
 //
 // 新增: 构造它的唯一入口是 [Config.Resolve]，一份没验过的预算在类型上就传不进来
 // ——和 compaction/basic、context/timecontext 那几份解析后配置同一个理由。

@@ -11,7 +11,7 @@ import (
 
 // Outcome 是一次被接下的请求在本服务器边界上是怎么结束的。
 //
-// 源: packages/test-support/llm-mock-server/src/index.ts:76
+// 源: packages/test-support/llm-mock-server/src/index.ts:75-76（MockLlmRequestOutcome）
 //
 // 「在本服务器这一侧」是这几个词的全部含义：OutcomeCompleted 只说明本端按剧本
 // 把该写的都写完了，不说明客户端收全了，更不说明被测的那套恢复策略做对了。
@@ -32,7 +32,7 @@ const (
 
 // Event 是一条遥测。只有 [RequestEvent] 和 [ResultEvent] 两种。
 //
-// 源: packages/test-support/llm-mock-server/src/index.ts:79-94
+// 源: packages/test-support/llm-mock-server/src/index.ts:78-94（MockLlmServerEvent）
 //
 // 新增: TS 用 type 字段做可辨识联合。Go 换成封闭接口——那个非导出的 isEvent
 // 方法让包外造不出第三种事件，于是消费方的 type switch 是穷尽的，不需要一个
@@ -124,7 +124,7 @@ func (e ResultEvent) MarshalJSON() ([]byte, error) {
 
 // RequestRecord 是一次被接下的请求的存档：线路上收到了什么，以及本端怎么收的场。
 //
-// 源: packages/test-support/llm-mock-server/src/index.ts:97-114
+// 源: packages/test-support/llm-mock-server/src/index.ts:96-114（MockLlmRequestRecord）
 //
 // 新增: TS 那份记录是活的——测试拿到数组之后，chunksSent 和 outcome 会随着请求
 // 推进在原地变。Go 这边 [Server.Requests] 交的是快照：记录会被多个处理器协程

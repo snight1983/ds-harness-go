@@ -2,7 +2,7 @@
 // 「这次提议算不算一次真的改动」的判据。
 //
 // 源: packages/llm/llm/src/call-config.ts:1-59
-// 源: packages/llm/llm/src/types.ts:326-338（ToolSchema）
+// 源: packages/llm/llm/src/types.ts:378-390（ToolSchema）
 
 package llm
 
@@ -120,7 +120,7 @@ func float64PointerEquals(a, b *float64) bool {
 
 // ToolSchema 是一个工具给模型看的 JSON Schema 描述。
 //
-// 源: packages/llm/llm/src/types.ts:326-338
+// 源: packages/llm/llm/src/types.ts:378-390（ToolSchema）
 //
 // 它声明在这里而不是在工具那一侧，因为它是一次模型请求的组成部分：
 // 工具定义和系统提示装配都从本包引它。

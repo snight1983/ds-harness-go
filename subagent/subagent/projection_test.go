@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // timedEvent 造一条带时间的事件——计时那个单元全靠 Time 说话，所以本文件不走

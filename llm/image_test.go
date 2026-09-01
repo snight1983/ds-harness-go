@@ -9,7 +9,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/attachment"
 )
 
 // intPointer 造一个指向给定上限的指针，用来表达 [RequestImageOffloadPolicy] 里

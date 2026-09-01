@@ -9,7 +9,7 @@ package subagent
 import (
 	"fmt"
 
-	"ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/agent"
 )
 
 // DelegationDepthOf 读一个 agent 的派发深度，顶层是 0。
@@ -21,8 +21,8 @@ import (
 // AgentOptions 是一个可声明合并的对象，depth.ts 自己往上贴了一个可选字段，而一个
 // 冷恢复回来的孩子拿到的是一份全新的选项，从零数起就会让它像顶层一样继续派发。
 //
-// Go 这边 [ds-harness-go/core/agent.Options] 是个闭合结构体，贴不上这个字段，
-// 而它的值本来就从 [ds-harness-go/core/agent.CreateOptions.DelegationDepth] 写进
+// Go 这边 [github.com/snight1983/ds-harness-go/core/agent.Options] 是个闭合结构体，贴不上这个字段，
+// 而它的值本来就从 [github.com/snight1983/ds-harness-go/core/agent.CreateOptions.DelegationDepth] 写进
 // 会话头。于是那个「取较大值」的动作没有第二个输入可取，头就是唯一的事实，
 // 上面那条单调性由「只有一处写得进去」直接兑现，而不是靠每次读的时候比一下。
 func DelegationDepthOf(a agent.Agent) int {

@@ -9,9 +9,9 @@ package userapproval
 import (
 	"encoding/json"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // RequestID 把一条 approval/asked 和它那条 approval/decided 配成一对。
@@ -28,15 +28,15 @@ type RequestID string
 
 // Policy 是一条会话的审批策略——**在任何答复者看到之前**，一次询问会怎么样。
 //
-// 源: packages/interaction/user-approval/src/index.ts:84-94
+// 源: packages/interaction/user-approval/src/index.ts:49-59（ApprovalPolicy）
 type Policy string
 
 const (
 	// PolicyAsk 是默认：交给接上来的那些答复者；一个都没接就落到失败关闭的
-	// [ds-harness-go/core/tools.ApprovalUnavailable]。
+	// [github.com/snight1983/ds-harness-go/core/tools.ApprovalUnavailable]。
 	PolicyAsk Policy = "ask"
 	// PolicyNever 是「谁都不问」：每一次询问都确定地结算成
-	// [ds-harness-go/core/tools.ApprovalRejected]。
+	// [github.com/snight1983/ds-harness-go/core/tools.ApprovalRejected]。
 	//
 	// 这是无人值守（CI、批跑）那个严格立场，也是唯一一个不问就知道答案的策略。
 	PolicyNever Policy = "never"
@@ -44,7 +44,7 @@ const (
 
 // Policies 是全部合法的 [Policy]，供选项广告和运行期校验用。
 //
-// 源: packages/interaction/user-approval/src/index.ts:96-97
+// 源: packages/interaction/user-approval/src/index.ts:61-62（APPROVAL_POLICIES）
 //
 // 交出一份新切片而不是暴露一个包级变量：一个调用方排个序或者改一格，
 // 就会把别人看到的词汇表也改了。
@@ -66,7 +66,7 @@ func KnownPolicy(policy Policy) bool {
 //
 // 源: packages/interaction/user-approval/src/index.ts:81-82
 //
-// 词汇表本身在 [ds-harness-go/core/tools]（见包文档），这里只是把那四个值列成
+// 词汇表本身在 [github.com/snight1983/ds-harness-go/core/tools]（见包文档），这里只是把那四个值列成
 // 一份能遍历的单子。
 func Outcomes() []tools.ApprovalOutcome {
 	return []tools.ApprovalOutcome{
@@ -79,7 +79,7 @@ func Outcomes() []tools.ApprovalOutcome {
 
 // KnownOutcome 说明这个答复在不在封闭词汇表里。
 //
-// 源: packages/interaction/user-approval/src/index.ts:325
+// 源: packages/interaction/user-approval/src/index.ts:290
 func KnownOutcome(outcome tools.ApprovalOutcome) bool {
 	for _, known := range Outcomes() {
 		if outcome == known {
@@ -113,7 +113,7 @@ const (
 
 // EventTypes 是本包往会话日志里写的那几种事件类型。
 //
-// 新增: 理由和 [ds-harness-go/compaction.EventTypes] 逐字相同——Go 没有声明合并，
+// 新增: 理由和 [github.com/snight1983/ds-harness-go/compaction.EventTypes] 逐字相同——Go 没有声明合并，
 // [session.Vocabulary] 是个闭合的值，所以由本包交出单子、装配方自己拼：
 //
 //	vocabulary := session.CoreVocabulary().With(userapproval.EventTypes()...)
@@ -204,7 +204,7 @@ func PolicyStatement(policy Policy) string {
 // EffectivePolicy 折出这条会话自己的审批策略覆盖：日志里**最后**那条
 // [EventPolicy]，一次都没切过就交出 false。
 //
-// 源: packages/interaction/user-approval/src/index.ts:104-118
+// 源: packages/interaction/user-approval/src/index.ts:69-83（effectiveApprovalPolicy）
 //
 // 这是那个纯折叠——恢复不需要任何补课机制，因为把日志回放一遍**就是**那个状态。
 //

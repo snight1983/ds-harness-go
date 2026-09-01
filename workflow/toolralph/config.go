@@ -10,21 +10,21 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // PluginName 是这个包露面时用的名字。
 //
-// 源: packages/workflow/tool-ralph/src/index.ts:19
+// 源: packages/workflow/tool-ralph/src/index.ts:17（name）
 const PluginName = "tool-ralph"
 
 // PackageName 是这个包在不变量注册表里占的名字，和 DSH 的包名保持一致。
 //
-// 源: packages/workflow/tool-ralph/src/invariant.ts:10
+// 源: packages/workflow/tool-ralph/src/invariant.ts:12-13（name）
 const PackageName = "@deepseek-ai/dsh-tool-ralph"
 
 // ToolName 是模型看到的工具名。
@@ -66,8 +66,8 @@ const DefaultMaxResultChars = 16_384
 // Subagents 是这件工具用得到的那一块子 agent 接缝。
 //
 // 新增: DSH 注入整个 `ctx.subagents`。这里只写出真正被调到的那两个方法，交进来的
-// [ds-harness-go/subagent/subagent.Runtime] 自然满足它（窄口子的理由同
-// [ds-harness-go/subagent/subagenttool.Subagents]）。
+// [github.com/snight1983/ds-harness-go/subagent/subagent.Runtime] 自然满足它（窄口子的理由同
+// [github.com/snight1983/ds-harness-go/subagent/subagenttool.Subagents]）。
 //
 // 本包**只起一次性孩子**：Ralph 那条循环的立身之本就是每一轮都从零开始，
 // 一个可续的孩子会把上一轮的会话带过来，那正是它要躲开的东西。
@@ -113,7 +113,7 @@ type Config struct {
 	//
 	// 新增: DSH 的 exec.agent 就是 agent 对象本身。Go 这边它是一把不透明的钥匙，
 	// 所以由装配方交一条查回去的路，做法和
-	// [ds-harness-go/subagent/subagenttool.Config.AgentOf] 逐字相同。
+	// [github.com/snight1983/ds-harness-go/subagent/subagenttool.Config.AgentOf] 逐字相同。
 	//
 	// 这里**查不回来就是错**：那个父 agent 是每一轮那个孩子的属主——派发深度、
 	// 血统、工作目录全从它推出来，而工作区正是 Ralph 唯一的长期记忆。DSH 那句
@@ -142,7 +142,7 @@ type Deps struct {
 // 它造出来之后就**不再变**，所以不带锁也不带那份 Deps：那条子 agent 接缝由
 // [Controller.Install] 交给它装出来的那件工具（见 [Controller.newTool] 里捕获的
 // 闭包），一路传到 [Controller.runLoop]。这跟
-// [ds-harness-go/subagent/subagenttool.Controller] 不同——那台要在提供方来来去去
+// [github.com/snight1983/ds-harness-go/subagent/subagenttool.Controller] 不同——那台要在提供方来来去去
 // 时装装摘摘，所以必须攥着 Deps；本包一次都不需要。
 type Controller struct {
 	provider        string

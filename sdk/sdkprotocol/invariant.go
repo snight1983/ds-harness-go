@@ -8,12 +8,12 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
 //
-// 源: packages/sdk/protocol/src/invariant.ts:10
+// 源: packages/sdk/protocol/src/invariant.ts:12-13（name）
 const PackageName = "@deepseek-ai/dsh-sdk-protocol"
 
 // RegisterInvariants 把这个包登记进不变量注册表，返回注销函数。

@@ -9,10 +9,10 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -33,8 +33,8 @@ const CommandName = "goal"
 // Service 是这条命令用得到的那一块目标服务。
 //
 // 新增: DSH 靠 `inject = ['commands', 'goals']` 注入整个 `ctx.goals`。这里只写出
-// 真正被调到的那六个方法（窄口子的理由同 [ds-harness-go/goal/goaltool.Service]），
-// 交进来的 [ds-harness-go/goal/goal.Service] 自然满足它。
+// 真正被调到的那六个方法（窄口子的理由同 [github.com/snight1983/ds-harness-go/goal/goaltool.Service]），
+// 交进来的 [github.com/snight1983/ds-harness-go/goal/goal.Service] 自然满足它。
 //
 // 和那一套比，这里**多**一个 [Service.Clear]、**少**掉 Complete 和 Block：清目标
 // 是人的权力不是模型的，而报完成和报阻塞是模型向人交代，人不需要向自己交代。
@@ -64,7 +64,7 @@ type Config struct {
 	//
 	// 新增: DSH 的 invocation.agent 就是 agent 对象本身。Go 这边它是一把不透明的
 	// 钥匙，所以由装配方交一条查回去的路，做法和
-	// [ds-harness-go/goal/goaltool.Config.AgentOf] 逐字相同。
+	// [github.com/snight1983/ds-harness-go/goal/goaltool.Config.AgentOf] 逐字相同。
 	//
 	// 查不回来就是错，不是一个错误结果：那不是用户能改的事（他敲的这行字本身没
 	// 毛病），是装配没接对，该一路抛给调用方。
@@ -74,7 +74,7 @@ type Config struct {
 // Deps 是装这条命令那一刻要交进来的协作者。
 //
 // 新增: DSH 从 cordis 上下文上按 inject 取。Go 没有那个容器，所以显式交进来，
-// 形状和 [ds-harness-go/goal/goaltool.Deps] 一致。
+// 形状和 [github.com/snight1983/ds-harness-go/goal/goaltool.Deps] 一致。
 type Deps struct {
 	// Commands 是命令注册表，必填。
 	Commands *commands.Runtime
@@ -110,7 +110,7 @@ func New(config Config) (*Controller, error) {
 
 // Install 把 `/goal` 装上一个作用域，返回摘掉它的函数。
 //
-// 源: packages/goal/command-goal/src/index.ts:189-196
+// 源: packages/goal/command-goal/src/index.ts:188-196（apply）
 //
 // 只有一步，所以没有反序回滚那一套：登记失败时什么都没装上，直接把错误交回去。
 func (c *Controller) Install(

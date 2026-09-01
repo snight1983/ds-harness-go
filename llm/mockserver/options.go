@@ -30,7 +30,7 @@ const (
 
 // Options 是一台服务器实例的全部配置。除 Sequence 之外都可以留零值。
 //
-// 源: packages/test-support/llm-mock-server/src/index.ts:117-154
+// 源: packages/test-support/llm-mock-server/src/index.ts:116-154（MockLlmServerOptions）
 //
 // 新增: TS 用 `field?:` 把「没配」和「配成空/零」分得清清楚楚，于是它可以既接受
 // 「没配 chunkSize」又拒绝「chunkSize 配成 0」。Go 的结构体零值表达不了这个差别，

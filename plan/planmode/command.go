@@ -10,9 +10,9 @@ import (
 	"errors"
 	"strings"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/interaction/commands"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // offArgument 是把计划模式关掉的那个参数。

@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"maps"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // Trace 是一个会话为了做关系检查而记的那点账。
 //
-// 源: packages/core/session/src/invariant.ts:22-30
+// 源: packages/core/session/src/invariant.ts:243-249（apply）
 //
 // 新增: DSH 那边这份账挂在一张以 Session 对象为键的 WeakMap 上，因为它要给一个
 // 活着的对象挂旁路状态。本包的 Trace 就是一个普通的值，谁拥有它谁自己拿着；

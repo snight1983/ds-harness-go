@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ErrPruneFailed 表示砍出来的结果自己不自洽。
@@ -21,7 +21,7 @@ var ErrPruneFailed = errors.New("compaction/toolresultpruner: 砍出来的结果
 
 // PrunedEntry 是一次落地的表面替换的出处和账目。
 //
-// 源: packages/compaction/compaction-tool-result-pruner/src/types.ts:22-33
+// 源: packages/compaction/compaction-tool-result-pruner/src/types.ts:20-32（PrunedEntry）
 type PrunedEntry struct {
 	// OriginalSeq 是被这次替换遮住的那条完整工具结果事件。
 	OriginalSeq int
@@ -37,7 +37,7 @@ type PrunedEntry struct {
 
 // PruneResult 是一趟「在一份稳定的表面快照上砍一遍」的总账。
 //
-// 源: packages/compaction/compaction-tool-result-pruner/src/types.ts:35-40
+// 源: packages/compaction/compaction-tool-result-pruner/src/types.ts:34-40（PruneResult）
 type PruneResult struct {
 	// Pruned 是这一趟的全部替换，按快照时的表面顺序。
 	Pruned []PrunedEntry

@@ -8,11 +8,11 @@ package inprocessdriver
 import (
 	"fmt"
 
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // errInvalidRequestf 造一条「调用方给的东西本身不成立」，认得出
-// [ds-harness-go/subagent/subagent.ErrInvalidRequest]。
+// [github.com/snight1983/ds-harness-go/subagent/subagent.ErrInvalidRequest]。
 //
 // 新增: DSH 那边这些是解构 cordis 上下文时自然抛出的 TypeError——服务不在场就是
 // 属性不在。Go 这一侧「在不在场」是装配方手上有没有那个值，所以由本包自己检出来，

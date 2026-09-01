@@ -3,7 +3,7 @@
 // 源: packages/session/session-title-llm/src/index.ts:1-5
 //
 // 它把一次辅助模型调用的全部策略收在一处：走哪条路由、系统提示词写什么、
-// 用户消息怎么装帧、多久算超时、输出怎么验。[ds-harness-go/session/sessiontitle]
+// 用户消息怎么装帧、多久算超时、输出怎么验。[github.com/snight1983/ds-harness-go/session/sessiontitle]
 // 那个服务只认 [sessiontitle.Provider] 这个接口，本包提供的就是它的模型实现。
 //
 // # 为什么消息要装成 JSON
@@ -42,7 +42,7 @@
 // 已经写下去的历史的读法。
 //
 // 新增: DSH 从 ctx.llm 上拿运行时。Go 这边本包收一个 [Streamer] ——只有一个
-// Stream 方法的窄接口。[ds-harness-go/llm.Runtime] 直接满足它。收窄口而不是收
+// Stream 方法的窄接口。[github.com/snight1983/ds-harness-go/llm.Runtime] 直接满足它。收窄口而不是收
 // *llm.Runtime，是因为本包只用得上流式那一件事，而窄口让测试不必架起一整个运行时。
 //
 // 新增: DSH 的 deadline(signal, timeoutMs, code) 在这里是

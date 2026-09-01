@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // newProjection 在一个新建的活会话上装一份投影，返回它和那个会话。

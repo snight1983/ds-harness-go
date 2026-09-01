@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 func TestTheTwoRepairTextsAreNotTheSameSentence(t *testing.T) {

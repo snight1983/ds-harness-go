@@ -30,21 +30,21 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/invariants"
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // ---- 假件 ----
 
-// stubAgent 是一个只为满足 [ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
+// stubAgent 是一个只为满足 [github.com/snight1983/ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
 type stubAgent struct {
 	id  session.SessionID
 	own *scope.Scope
@@ -1439,8 +1439,8 @@ func TestDelegationRejectsAnExplicitBackgroundWhenDisabled(t *testing.T) {
 // TestAnUnserializableBlockSurfaces 钉住那条边：孩子那份内容排不出去的时候要报错，
 // 不能把一份残缺的数组当成答案送上去。
 //
-// [ds-harness-go/llm.UnknownBlock] 没有原始字节时自己会拒绝编组，这里借它造出
-// 那一次失败——[ds-harness-go/llm.ContentBlock] 是封闭的，本包外造不出别的坏块。
+// [github.com/snight1983/ds-harness-go/llm.UnknownBlock] 没有原始字节时自己会拒绝编组，这里借它造出
+// 那一次失败——[github.com/snight1983/ds-harness-go/llm.ContentBlock] 是封闭的，本包外造不出别的坏块。
 func TestAnUnserializableBlockSurfaces(t *testing.T) {
 	t.Parallel()
 
@@ -1499,3 +1499,7 @@ func TestProviderRemovedReportsAFailedUnmount(t *testing.T) {
 		t.Fatalf("摘失败没落到日志上：%q", logged.String())
 	}
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

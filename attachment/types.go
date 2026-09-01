@@ -131,7 +131,7 @@ type EncodedImage struct {
 
 // ImageInput 是「校验并持久提交一张图」这个请求。
 //
-// 源: packages/attachment/attachment/src/types.ts:55-62
+// 源: packages/attachment/attachment/src/types.ts:75-82（SaveImageAttachment）
 //
 // 它和 [EncodedImage] 的区别是字节已经解码出来了：base64 那一层由
 // [AdmitEncodedImages] 在最外面剥掉，[Store] 只跟原始字节打交道。
@@ -146,7 +146,7 @@ type ImageInput struct {
 
 // StoredImage 是引用和摘要都核对过之后返回的存储字节。
 //
-// 源: packages/attachment/attachment/src/types.ts:64-68
+// 源: packages/attachment/attachment/src/types.ts:84-88（StoredImageAttachment）
 type StoredImage struct {
 	// Ref 是这些字节对应的那个持久引用。
 	Ref ImageRef
@@ -156,7 +156,7 @@ type StoredImage struct {
 
 // RequestPolicy 是某一条具体的模型路由选定的请求图策略。
 //
-// 源: packages/attachment/attachment/src/types.ts:70-76
+// 源: packages/attachment/attachment/src/types.ts:90-96（ImageRequestPolicy）
 //
 // 它是确定性的：同样的策略作用在同一张存储图上，必须得到同样的 [VariantID] 和字节。
 type RequestPolicy struct {
@@ -188,7 +188,7 @@ const SpaceSRGB Space = "srgb"
 
 // RequestImage 是从一张与提供方无关的归一化附件派生出来的、可缓存的请求版本。
 //
-// 源: packages/attachment/attachment/src/types.ts:78-96
+// 源: packages/attachment/attachment/src/types.ts:98-116（RequestImageAttachment）
 //
 // 它和 [ImageRef] 是两层东西：ImageRef 是**存下来的那一张**，与任何模型提供方无关；
 // RequestImage 是为**某一条具体路由**按它的像素和字节预算重新编码出来的那一份。

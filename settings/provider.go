@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"sync"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // Backend 是设置存储：一份按命名空间切段的原始文档，读得出来、写得进去。
@@ -56,7 +56,7 @@ type Backend interface {
 
 // Options 是登记一个命名空间时除了默认值之外的那些选项。
 //
-// 源: packages/settings/settings/src/index.ts:36-62
+// 源: packages/settings/settings/src/index.ts:48-74（SettingsRegisterOptions）
 type Options[T any] struct {
 	// Base 是组装层，压在类型默认值之上、用户段之下。
 	//
@@ -99,7 +99,7 @@ type Options[T any] struct {
 
 // Descriptor 是一个已登记命名空间在配置界面眼里的样子。
 //
-// 源: packages/settings/settings/src/index.ts:64-90
+// 源: packages/settings/settings/src/index.ts:76-102（SettingsDescriptor）
 //
 // 新增: Value / Base / User 三个都是**原始 JSON 形状**（map[string]any），
 // 不是某个 Go 类型。配置界面渲染的是 JSON，它拿不到也用不上 T；
@@ -144,7 +144,7 @@ type Descriptor struct {
 
 // DescribeOptions 是 [Provider.Describe] 的选项。
 //
-// 源: packages/settings/settings/src/index.ts:92-100
+// 源: packages/settings/settings/src/index.ts:104-112（SettingsDescribeOptions）
 type DescribeOptions struct {
 	// RedactSecrets 把 Value / Base / User 三层里的密钥字段摘掉，
 	// 并在 [Descriptor.Secrets] 里列出它们的位置。
@@ -305,7 +305,7 @@ func New(ctx context.Context, backend Backend, logger *slog.Logger) (*Provider, 
 
 // Scope 是一个已登记命名空间的**拥有者**那一面：按 T 读、观察、写。
 //
-// 源: packages/settings/settings/src/index.ts:102-129
+// 源: packages/settings/settings/src/index.ts:114-141（SettingsScope）
 type Scope[T any] struct {
 	provider     *Provider
 	registration *registration

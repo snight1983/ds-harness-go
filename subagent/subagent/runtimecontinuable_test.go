@@ -9,11 +9,11 @@ import (
 	"log/slog"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // wiredRuntime 是一台装齐了续接能力和列举服务的服务，外加它周围那几样东西。

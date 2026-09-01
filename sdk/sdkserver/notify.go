@@ -9,12 +9,12 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/sdk/sdkprotocol"
-	sessionlog "ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/sdk/sdkprotocol"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // subscribe 按 DSH 那个构造函数的次序挂上那四条订阅，逐条记进 disposers。

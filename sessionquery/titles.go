@@ -16,8 +16,8 @@ package sessionquery
 import (
 	"context"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/sessiontitle"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/sessiontitle"
 )
 
 // TitleObservation 是一个会话此刻的标题，连同折它用的那份头。

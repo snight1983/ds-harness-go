@@ -43,11 +43,11 @@ const (
 	CodeAttachRejected Code = "WORKSPACE_ATTACH_REJECTED"
 	// CodeMoveInvalid 是会话挪位时点名了一个不在账目里的会话或锚点。
 	//
-	// 源: packages/workspace/workspace/src/entity.ts:19-27（WorkspaceMoveInvalidError）
+	// 源: packages/workspace/workspace/src/entity.ts:18-27（WorkspaceMoveInvalidError）
 	CodeMoveInvalid Code = "WORKSPACE_MOVE_INVALID"
 	// CodeOrderInvalid 是工作区挪位时点名了一个不在落盘次序里的工作区。
 	//
-	// 源: packages/workspace/workspace/src/index.ts:56-64（WorkspaceOrderInvalidError）
+	// 源: packages/workspace/workspace/src/index.ts:55-64（WorkspaceOrderInvalidError）
 	CodeOrderInvalid Code = "WORKSPACE_ORDER_INVALID"
 	// CodeUnknownSession 是归档时点名了一个既不活着、也不在持久化里的会话。
 	//

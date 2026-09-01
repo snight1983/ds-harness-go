@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestCheckStoredIdentity(t *testing.T) {

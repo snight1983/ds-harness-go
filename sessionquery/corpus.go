@@ -12,13 +12,13 @@ import (
 	"strings"
 	"sync"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
 )
 
 // LogicalSession 是为某一次精确读取选出来的、已经脱离的那一份源。
 //
-// 源: packages/session-query/session-query/src/corpus.ts:11-16
+// 源: packages/session-query/session-query/src/corpus.ts:10-16（LogicalSession）
 //
 // 「脱离」的意思是拿到它的一方怎么改都碰不到活会话或者持久化层里的那一份。
 type LogicalSession struct {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
 )
 
 // fixture 是一个造好的注册表加上它的根作用域。

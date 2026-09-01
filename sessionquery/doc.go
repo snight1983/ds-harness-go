@@ -75,7 +75,7 @@
 //  9. **「有没有标题」由一个布尔说，不由零值说。**DSH 的
 //     `SessionTitleObservation.title` 是可选字段，缺席就是「这个会话还没有过标题」。
 //     Go 这边 [TitleObservation.Titled] 把这件事说出来，和
-//     [ds-harness-go/session/sessiontitle.FoldSnapshot] 的第二个返回值一致。
+//     [github.com/snight1983/ds-harness-go/session/sessiontitle.FoldSnapshot] 的第二个返回值一致。
 //     用一份零值快照表达「没有标题」会把它和「标题是空串」混成一件，
 //     而那两件事在界面上不一样。见 [Engine.ReadTitleSnapshots]。
 package sessionquery

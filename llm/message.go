@@ -27,7 +27,7 @@ const (
 
 // Provenance 是一条助手消息的提供方／模型身份，加上适配器私有的重放数据。
 //
-// 源: packages/llm/llm/src/message.ts:7-19
+// 源: packages/llm/llm/src/message.ts:9-21（AssistantProvenance）
 type Provenance struct {
 	// Provider 是产出这条消息的提供方路由。
 	Provider string
@@ -63,7 +63,7 @@ const (
 
 // MessageSource 是一条消息（或者一段注入的内容）从哪来的。
 //
-// 源: packages/llm/llm/src/message.ts:125-126
+// 源: packages/llm/llm/src/message.ts:127-128（MessageSource）
 //
 // 新增: 封闭接口加 Unknown 变体，理由和 [ContentBlock] 逐字相同，见包文档。
 type MessageSource interface {
@@ -116,7 +116,7 @@ func (PluginSource) sealedMessageSource() {}
 
 // ModelSource 是一条由被路由到的模型产出的助手消息必须带的来源。
 //
-// 源: packages/llm/llm/src/message.ts:21-24
+// 源: packages/llm/llm/src/message.ts:23-26（ModelMessageSource）
 type ModelSource struct {
 	Provenance
 }
@@ -128,7 +128,7 @@ func (ModelSource) sealedMessageSource() {}
 
 // ToolSource 是一条装着工具结果的用户角色消息必须带的来源。
 //
-// 源: packages/llm/llm/src/message.ts:26-30
+// 源: packages/llm/llm/src/message.ts:28-32（ToolMessageSource）
 type ToolSource struct {
 	// CallID 指回发起这次调用的那个 [ToolCallBlock.ID]。
 	CallID CallID
@@ -184,7 +184,7 @@ const (
 
 // Context 是注入方声明的形态，连同那个形态**要求**的字段。
 //
-// 源: packages/llm/llm/src/message.ts:70-94
+// 源: packages/llm/llm/src/message.ts:72-96（ContextFormed）
 //
 // 它是个联合而不是一个「带 Form 字段、各形态的载荷都摆上去」的结构体，
 // 因为要守住的正是那句话：**选了一个形态就必须给出它需要的字段**。
@@ -217,7 +217,7 @@ func (CatalogContext) sealedContext() {}
 
 // ContextSnapshotSection 是一份 snapshot 形态上下文里的一个具名贡献，按装配顺序排列。
 //
-// 源: packages/llm/llm/src/message.ts:62-68
+// 源: packages/llm/llm/src/message.ts:64-70（ContextSnapshotSection）
 type ContextSnapshotSection struct {
 	// Name 是做出这份贡献的子系统的名字。
 	Name string `json:"name"`
@@ -286,7 +286,7 @@ func (UnknownContext) sealedContext() {}
 
 // ContextSummaryMaxChars 是一行 notice 陈述的上限。
 //
-// 源: packages/llm/llm/src/message.ts:107-112
+// 源: packages/llm/llm/src/message.ts:109-114（CONTEXT_SUMMARY_MAX_CHARS）
 //
 // 这行陈述跟着一条折叠的对话行走，而且会进持久日志；它的输入——任务标签、
 // 目标描述、工具参数——都是调用方的文本，本身没有长度约束，所以得在这里收住。
@@ -294,7 +294,7 @@ const ContextSummaryMaxChars = 120
 
 // BoundContextSummary 把一行 notice 陈述收进 [ContextSummaryMaxChars]。
 //
-// 源: packages/llm/llm/src/message.ts:114-123
+// 源: packages/llm/llm/src/message.ts:116-125（boundContextSummary）
 //
 // 新增: DSH 按 summary.length 算，那是 UTF-16 码元数。这里按**字符**（rune）算。
 // 不是照抄字节数：一行中文陈述在 Go 里一个字三个字节，按字节收会在第四十个字
@@ -335,7 +335,7 @@ type Message struct {
 
 // Clone 深复制这条消息。
 //
-// 源: packages/llm/llm/src/message.ts:164-171（freezeMessage）
+// 源: packages/llm/llm/src/message.ts:166-173（freezeMessage）
 //
 // 新增: DSH 那边是 structuredClone 加 deepFreeze，因为 JS 的对象按引用共享，
 // 一条发布出去的消息会被收到它的人改掉。Go 的结构体赋值就是复制，
@@ -391,7 +391,7 @@ func (m Message) ToolResult() (ToolResultBlock, bool) {
 
 // NewMessage 造一条带全新身份的消息。
 //
-// 源: packages/llm/llm/src/message.ts:173-185
+// 源: packages/llm/llm/src/message.ts:175-187（createMessage）
 //
 // 内容会被复制一份：调用方留着的那个切片之后怎么改，都改不动这条消息。
 func NewMessage(role Role, content Content, source MessageSource) Message {
@@ -405,21 +405,21 @@ func NewMessage(role Role, content Content, source MessageSource) Message {
 
 // NewUserMessage 造一条带全新身份的用户角色消息。
 //
-// 源: packages/llm/llm/src/message.ts:187-199
+// 源: packages/llm/llm/src/message.ts:189-201（createUserMessage）
 func NewUserMessage(content Content, source MessageSource) Message {
 	return NewMessage(RoleUser, content, source)
 }
 
 // NewAssistantMessage 造一条带全新身份的、模型产出的助手消息。
 //
-// 源: packages/llm/llm/src/message.ts:201-217
+// 源: packages/llm/llm/src/message.ts:203-219（createAssistantMessage）
 func NewAssistantMessage(content Content, provenance Provenance) Message {
 	return NewMessage(RoleAssistant, content, ModelSource{Provenance: provenance})
 }
 
 // NewToolResultMessage 造一条带全新身份的工具结果消息。
 //
-// 源: packages/llm/llm/src/message.ts:219-241
+// 源: packages/llm/llm/src/message.ts:228-243（createToolResultMessage）
 //
 // 角色是 user 而不是另立一个 tool 角色：工具结果是回送给模型的输入，
 // 提供方那一侧看到的就是一条用户消息。调用相关性靠 [ToolSource.CallID] 和

@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"math"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // 提供方按 token 大小往外流增量，所以一段日志里会有好几百行几乎一样的事件，
@@ -250,7 +250,7 @@ func buildRow(run []deltaEvent) (json.RawMessage, error) {
 
 // PackChunkRuns 把一批事件编码成待写的存储记录，一条一行。
 //
-// 源: packages/core/session/src/chunk-rows.ts:192-221
+// 源: packages/core/session/src/chunk-rows.ts:204-243（packChunkRuns）
 //
 // 每一串至少 [minRun] 条、连续、同类、同一块的白名单增量分块压成一行；
 // 别的事件按顺序原样透传。纯函数、无状态——对任何一个切片都安全，
@@ -312,7 +312,7 @@ func PackChunkRuns(events []Event) ([]json.RawMessage, error) {
 
 // DecodeStorageRecord 把一行解出来的 JSON 值还原成它存着的那一条或那一串事件。
 //
-// 源: packages/core/session/src/chunk-rows.ts:339-346
+// 源: packages/core/session/src/chunk-rows.ts:354-370（decodeStorageRecord）
 //
 // 带行标签的值先验后展开——一行坏掉的记录当场报错，因为那是坏掉的存储，
 // 把它当成一条事件收下会默默丢掉一整串。别的值按一条事件读回来。

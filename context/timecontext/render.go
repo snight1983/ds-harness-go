@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // 「上一次」是相对谁算的。这两个字符串进提示词，所以是英文，而且一个字不能改：

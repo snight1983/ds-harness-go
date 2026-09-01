@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // newAgent 造一个有身份的作用域，失败就让测试挂掉。

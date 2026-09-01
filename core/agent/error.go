@@ -29,7 +29,7 @@ var (
 	//
 	// 该做的事：装配漏了——把循环那一层接上去。
 	//
-	// 源: packages/core/agent/src/index.ts:217（NO_FACTORY_MESSAGE）
+	// 源: packages/core/agent/src/index.ts:207-208（NO_FACTORY_MESSAGE）
 	ErrNoFactory = errors.New("agent: 还没有登记过 agent 造法")
 
 	// ErrFactoryAlreadySet 表示已经有一个造法在位了。
@@ -43,7 +43,7 @@ var (
 	//
 	// 该做的事：这条路契约上就在某个驱动之下，走到这里说明它被从别处直接调了。
 	//
-	// 源: packages/core/agent/src/index.ts:218（NO_INITIATOR_MESSAGE）
+	// 源: packages/core/agent/src/index.ts:209（NO_INITIATOR_MESSAGE）
 	ErrNoInitiator = errors.New("agent: 当下没有发起的 agent")
 
 	// ErrAgentAlreadyExists 表示这个身份上已经有一个活 agent 了。

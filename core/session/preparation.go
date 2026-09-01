@@ -9,7 +9,7 @@ import "sync"
 
 // PreparationOptions 是一段准备期里提供方那一侧的行为。
 //
-// 源: packages/core/session/src/preparation.ts:9-12
+// 源: packages/core/session/src/preparation.ts:8-12（SessionPreparationOptions）
 type PreparationOptions struct {
 	// Release 在这个会话**没有**被公布时放掉提供方自己攥着的状态，可以为 nil。
 	//

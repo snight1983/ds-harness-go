@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // TestEventTypes 确认本包只往会话日志里写那一种事件。

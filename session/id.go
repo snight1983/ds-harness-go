@@ -15,7 +15,7 @@ type SessionID string
 // FormatVersion 是会话日志的落盘格式版本，写进每一份新建的 [SessionHeader]，
 // 由每个持久化后端在装载时校验。
 //
-// 源: packages/core/session/src/types.ts:33-56
+// 源: packages/core/session/src/types.ts:28-51（SESSION_FORMAT_VERSION）
 //
 // 未发布期间钉在 0：不承诺任何兼容性，不匹配的日志直接拒收，不提供迁移。
 //

@@ -10,11 +10,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"ds-harness-go/core/agent"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	"ds-harness-go/sdk/sdkprotocol"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/sdk/sdkprotocol"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -32,18 +33,22 @@ const PluginName = "sdk-jsonrpc-server"
 // 源: packages/sdk/server/src/server.ts:124
 const ServerVersion = "0.0.1"
 
-// ProviderLister 是这台服务器用得到的那一小块 LLM 服务：只问「这个提供方有没有
-// 适配器认领」。
+// LLMService 是这台服务器用得到的那一小块 LLM 服务：问「这个提供方有没有适配器
+// 认领」，以及握手时把那条路由真解算一遍。
 //
-// 源: packages/sdk/server/src/server.ts:237-239
+// 源: packages/sdk/server/src/server.ts:294-296（listProviders）,
+// packages/sdk/server/src/server.ts:155-161（resolveCallConfig）
 //
-// 新增: DSH 是 `ctx.get('llm')?.listProviders()`——整个服务注入进来，用到的只有
-// 这一个方法。这里写成一个单方法接口（窄口子的成例见
-// [ds-harness-go/goal/goalcommand.Service]），交进来的 [llm.Runtime] 自然满足它。
-// 它可以为 nil，对应 DSH 那个 `?.`：这条线上根本没挂 LLM 服务。
-type ProviderLister interface {
+// 新增: DSH 两处都是 `ctx.get('llm')`——整个服务注入进来，用到的只有这两个方法。
+// 这里写成一个两方法的窄口子（窄口子的成例见
+// [github.com/snight1983/ds-harness-go/goal/goalcommand.Service]），交进来的
+// [llm.Runtime] 自然满足它。它可以为 nil，对应 DSH 那个 `?.`：这条线上根本没挂
+// LLM 服务——那时 [Server.Initialize] 走不完，理由见那边。
+type LLMService interface {
 	// ListProviders 列出所有登记过的提供方路由。
 	ListProviders() []llm.ProviderInfo
+	// ResolveCallConfig 拿一份调用配置去对确切模型的能力，把适配器的默认落实进去。
+	ResolveCallConfig(ctx context.Context, config llm.CallConfig) (llm.CallConfig, error)
 }
 
 // MountAdapter 在点名的提供方**还没有**适配器认领时补上一个，交回撤销这次挂载的
@@ -61,7 +66,7 @@ type MountAdapter func(ctx context.Context, provider string) (func(context.Conte
 
 // Config 是这台服务器的装配面。
 //
-// 源: packages/sdk/server/src/index.ts:25-38（JsonRpcConfig）,
+// 源: packages/sdk/server/src/index.ts:24-34（JsonRpcConfig）,
 // packages/sdk/server/src/server.ts:38-41（HarnessSdkJsonRpcServerOptions）
 //
 // 新增: DSH 把它分成两半——插件配置（JsonRpcConfig，走 schemastery 校验）和服务器
@@ -70,7 +75,7 @@ type MountAdapter func(ctx context.Context, provider string) (func(context.Conte
 // 「运行期测试口子」得单开一层绕过它。Go 的结构体没有这个限制。
 //
 // DSH 那三个测试口子（input / output / exit）在这里一个都没有：流是
-// [ds-harness-go/sdk/sdkprotocol.NewLineTransport] 的入参，由装配方交给那条通道；
+// [github.com/snight1983/ds-harness-go/sdk/sdkprotocol.NewLineTransport] 的入参，由装配方交给那条通道；
 // 退出这个进程是装配方的事，不是这台服务器的事（理由见包文档）。
 type Config struct {
 	// Peer 是往对面发通知的那一面，必填。
@@ -94,8 +99,14 @@ type Config struct {
 	// 源: packages/sdk/server/src/server.ts:87
 	Subagents *subagent.Runtime
 
-	// Providers 是那一小块 LLM 服务，可以为 nil，见 [ProviderLister]。
-	Providers ProviderLister
+	// LLM 是那一小块 LLM 服务，可以为 nil，见 [LLMService]。
+	LLM LLMService
+
+	// Attachments 是附件库，可以为 nil：那时一轮带内联图片的输入被拒，对应 DSH
+	// 那句 `SDK image prompt requires an attachment store`。
+	//
+	// 源: packages/sdk/server/src/server.ts:42-43
+	Attachments attachment.Store
 
 	// MountAdapter 是那条可选的兜底路，可以为 nil，见 [MountAdapter]。
 	MountAdapter MountAdapter

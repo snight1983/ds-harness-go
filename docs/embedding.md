@@ -42,12 +42,16 @@
 7. 创建 System Prompt、Tools、Session、Agent Registry
 8. 注册事件词汇、状态计算单元和运行时扩展
 9. 装配 Skill、Persona、业务工具、Guard 和人工介入
-10. 创建 Agent Loop，并把 Factory 注册到 Agent Registry
+10. 创建 Agent Loop，Factory 随之注册进 Agent Registry
 11. 挂载 SDK、ACP 或宿主自己的入口
 12. 开始接收请求
 ```
 
+第 10 步的注册由 `agentloop.New` 自己完成，撤销也折在它返回的拆除函数里；宿主不要再调一次 `agent.Registry.SetFactory`，那会被「已经登记过一个 agent 造法」拒掉。
+
 依赖应显式传入，不要通过全局变量隐藏。构造函数返回的注销、Dispose 或 Close 句柄要由创建方保存。
+
+前 10 步中不需要外部介质的那部分，有一份可编译、可运行的版本在 `example/minimalhost`。它不是生产模板（没有存储后端、持久化和协议入口），但它保证这份装配顺序不会和代码各走各的。
 
 ## 事件词汇
 
@@ -150,7 +154,8 @@
 
 ## 当前限制
 
-- 没有顶层 Builder，宿主需要显式连接组件。
+- 模块路径是 `ds-harness-go`，不是一个可被 `go get` 解析的地址。外部宿主接入时要在自己的 `go.mod` 里写一条 `replace ds-harness-go => <本仓库路径>`（或者把本仓库作为 workspace 成员）。这是有意的：模块名不跟着某个托管地址走。
+- 没有顶层 Builder，宿主需要显式连接组件。参照实现见 `example/minimalhost`。
 - 没有内置生产会话持久化 Backend；`Coordinator` 只负责编排，不决定介质。
 - 没有任意代码执行、Shell、本地终端或本地文件工具。
 - PostgreSQL 集成测试需要真实数据库连接。

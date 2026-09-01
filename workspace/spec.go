@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"time"
 
-	"ds-harness-go/fs"
-	"ds-harness-go/session"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // 域的身份：名字、格式版本、那张唯一的表。
@@ -31,7 +31,7 @@ const (
 
 // Record 是一条工作区记录落盘时的样子。
 //
-// 源: packages/workspace/workspace/src/spec.ts:21-27
+// 源: packages/workspace/workspace/src/spec.ts:30-31（WorkspaceRecord）
 //
 // 新增: DSH 那边只有一个 `path` 字段，同时充当身份和展示，因为它的范式是
 // realpath 出来的那条本机绝对路径。本包把两者拆成 [Record.TargetKey] 和
@@ -85,7 +85,7 @@ type PendingMutation struct {
 
 // DomainState 是登记册落盘的全局状态。
 //
-// 源: packages/workspace/workspace/src/spec.ts:51-56
+// 源: packages/workspace/workspace/src/spec.ts:59-60（WorkspaceDomainState）
 type DomainState struct {
 	// Initialized 区分「一个合法的空登记册」和「还没做过那一次历史 bootstrap」。
 	//
@@ -158,7 +158,7 @@ func (r Record) Validate() error {
 
 // Validate 校验一条待恢复标记。
 //
-// 源: packages/workspace/workspace/src/spec.ts:37-40
+// 源: packages/workspace/workspace/src/spec.ts:43-57（workspaceDomainState）
 func (p PendingMutation) Validate() error {
 	if p.Operation != OperationCreate && p.Operation != OperationDelete {
 		return fmt.Errorf("待恢复标记的操作 %q 不在 create/delete 里", p.Operation)

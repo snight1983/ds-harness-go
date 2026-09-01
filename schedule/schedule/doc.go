@@ -52,7 +52,7 @@
 //   - 把刚刚造出来的值排成字节失败（appendChange、appendDispatch 里的
 //     MarshalJSON，以及三件工具里的 encodeValue / NewView）。上游给的永远是本包
 //     自己拼的纯字符串结构。
-//   - 往日志里追加失败。[ds-harness-go/core/session.Session.Append] 只会在序号或
+//   - 往日志里追加失败。[github.com/snight1983/ds-harness-go/core/session.Session.Append] 只会在序号或
 //     时间戳非零、数据不是合法 JSON、或者违反表层计划时报错；一条平铺的
 //     `schedule/change` 事件这四条一条都碰不到。
 package schedule

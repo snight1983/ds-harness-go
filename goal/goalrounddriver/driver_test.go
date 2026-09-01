@@ -25,10 +25,10 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // errDownstream 是那些「下游抛了」的用例摆出来的失败。

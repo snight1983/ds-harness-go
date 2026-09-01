@@ -27,18 +27,18 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/invariants"
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ---- 假件 ----
 
-// stubAgent 是一个只为满足 [ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
+// stubAgent 是一个只为满足 [github.com/snight1983/ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
 //
 // 本包只读它的 ID 和 Scope，别的方法全是哑的。
 type stubAgent struct {
@@ -58,7 +58,7 @@ func (a *stubAgent) Send(llm.Message, agent.InboxTarget, bool)              {}
 func (a *stubAgent) Followup(llm.Message)                                   {}
 func (a *stubAgent) Steer(llm.Message)                                      {}
 func (a *stubAgent) Inject(llm.Message)                                     {}
-func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget) {}
+func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget)                 {}
 
 func (a *stubAgent) RunMaintenance(ctx context.Context, task func(context.Context) error) error {
 	return task(ctx)
@@ -1245,3 +1245,7 @@ func TestRegisterInvariantsReservesThePackageNameAndChecksNothing(t *testing.T) 
 	}
 	undo()
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // quietLogger 是一个不往测试输出里灌警告的日志器；本包的警告是**行为**，

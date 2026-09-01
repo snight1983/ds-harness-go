@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage"
 )
 
 // SchemaVersion 是**物理布局**的版本号，落在 storage_meta 那一行里。
@@ -40,7 +40,7 @@ const layoutLockKey int64 = 0x64736800_73746f72 // "dsh\0stor"
 
 // recordTableName 拼出一个单元表的物理表名。
 //
-// 源: packages/storage/storage-sqlite/src/schema.ts:110-120
+// 源: packages/storage/storage-sqlite/src/schema.ts:109-119
 //
 // 两段名字都已经被 [storage.KVUnitDescriptor.Validate] 卡成
 // `^[a-z][a-z0-9_]*$`，所以结果不用转义就能进 DDL 和语句文本。

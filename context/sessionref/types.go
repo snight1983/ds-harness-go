@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Name 是这一层的产出方名字，落在消息来源里。
@@ -128,7 +128,7 @@ func (r *Reference) UnmarshalJSON(data []byte) error {
 
 // Source 是一条注入上下文的持久事实：它引用了哪些会话、各自被缩成了什么样。
 //
-// 源: packages/context/session-reference/src/types.ts:13-30
+// 源: packages/context/session-reference/src/types.ts:12-30（SessionReferenceSource）
 //
 // 新增: 和 [instructions.Source] 同一条路子——DSH 用 TypeScript 的声明合并把
 // `'session-reference'` 挂进 `MessageSourceMap`，Go 的 [llm.MessageSource]
@@ -220,7 +220,7 @@ func ParseSource(source llm.MessageSource) (Source, bool) {
 
 // Input 是主机选中的一个来源会话。
 //
-// 源: packages/context/session-reference/src/types.ts:39-45
+// 源: packages/context/session-reference/src/types.ts:38-44（SessionReferenceInput）
 type Input struct {
 	// SessionID 是那个来源会话的不透明身份。
 	SessionID session.SessionID
@@ -244,7 +244,7 @@ type Candidate struct {
 
 // MentionCandidate 是一条候选，外加主机要插进输入框的那段规范提及。
 //
-// 源: packages/context/session-reference/src/types.ts:59-63
+// 源: packages/context/session-reference/src/types.ts:64-68（SessionReferenceMentionCandidate）
 type MentionCandidate struct {
 	Candidate
 	// Mention 是 `@[label](dsh-session:…)` 这段规范提及。
@@ -253,7 +253,7 @@ type MentionCandidate struct {
 
 // PreparedMessage 是准备完之后的产物：正文，加上可选的那条引用上下文。
 //
-// 源: packages/context/session-reference/src/types.ts:65-71
+// 源: packages/context/session-reference/src/types.ts:70-76（PreparedReferencedMessage）
 type PreparedMessage struct {
 	// Content 是去掉主机提及记号之后、可读的那份正文。
 	Content llm.Content
@@ -269,7 +269,7 @@ type PreparedMessage struct {
 
 // ConversationItem 是投影出来的一条纯文本对话行。
 //
-// 源: packages/context/session-reference/src/types.ts:73-78
+// 源: packages/context/session-reference/src/types.ts:78-84（ReferencedConversationItem）
 type ConversationItem struct {
 	// Role 是原消息的角色，只有 user 和 assistant 两种。
 	Role llm.Role `json:"role"`

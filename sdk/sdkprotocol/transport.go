@@ -20,7 +20,7 @@ import (
 
 // ResponseError 是对面回过来的一个错误帧，线上的 code 和可选的 data 原样保留。
 //
-// 源: packages/sdk/protocol/src/transport.ts:18-28
+// 源: packages/sdk/protocol/src/transport.ts:17-28（JsonRpcResponseError）
 //
 // 新增: DSH 那边是一个自己写的 Error 子类。Go 这边直接用那个库的
 // [jsonrpc2.Error]——字段一一对上（code / message / data），而且它已经是调用方从
@@ -71,6 +71,42 @@ type Handlers struct {
 // 源: packages/sdk/protocol/src/transport.ts:59（Missing request handlers return -32601）
 var ErrMethodNotFound = errors.New("jsonrpc: 认不出的方法名")
 
+// DefaultMaxFrameBytes 是一帧最多多少字节的默认上限。
+//
+// 新增: DSH 没有这个上限——它那个读循环是 `this.buffer += chunk` 无限攒着的
+// （transport.ts:174-177），一条永远不带换行符的输入能把整个进程的内存吃光。
+// 16 MiB 是照这条协议上最大的那种负载定的：一轮输入可以内联好几张栅格图，base64
+// 之后单帧到几 MiB 是正常的，再往上就不像一个真的客户端了。
+const DefaultMaxFrameBytes = 16 << 20
+
+// DefaultMaxConcurrentFrames 是同时在办的进来的帧数的默认上限。
+//
+// 新增: DSH 没有这个上限——它对每一行都 `void this.handleLine(line)` 一发了之
+// （transport.ts:186），一个洪泛的客户端能让任意多次 `session/prompt` 同时在建
+// agent。64 是一个够宽的数：真的 SDK 会话数远在它之下，而它挡得住洪泛。
+const DefaultMaxConcurrentFrames = 64
+
+// TransportOptions 是这条通道那两条**部署口径**的上限。
+//
+// 新增: DSH 一条都没有，理由见两个默认值各自的说明。两者都是纯粹的加固，协议这一层
+// 不表态，所以做成可调的而不是写死的。
+type TransportOptions struct {
+	// MaxFrameBytes 是一帧最多多少字节；0 用 [DefaultMaxFrameBytes]，负数表示不设限。
+	//
+	// 超过上限的那一行整条被丢掉，连接照常——这和坏行跳过去是同一条规矩：一行超长
+	// 和一行断在半路，对本端是同一件事（对面写坏了），都不该让整条会话死掉。
+	MaxFrameBytes int
+	// MaxConcurrentFrames 是同时在办的进来的帧数；0 用 [DefaultMaxConcurrentFrames]，
+	// 负数表示不设限。
+	//
+	// 满了之后读循环停下来等，于是压力顺着流回给对面，而不是在本端堆 goroutine。
+	//
+	// 代价是这条约束：一个处理器**不能**一边占着名额一边等这条**同一条**连接上回来的
+	// 响应——响应是读循环送进来的，而读循环正卡在这里。这条协议上不会发生（请求只从
+	// SDK 流向服务端，服务端的处理器一次外发都没有），别的用法要自己看着办。
+	MaxConcurrentFrames int
+}
+
 // LineTransport 是架在调用方自己的那对流上的一条按行分帧的通道。
 //
 // 源: packages/sdk/protocol/src/transport.ts:62-269
@@ -86,15 +122,38 @@ type LineTransport struct {
 	conn *jsonrpc2.Conn
 }
 
-// NewLineTransport 在 input 和 output 上架起一条通道并且当场开始读。
+// NewLineTransport 在 input 和 output 上架起一条通道并且当场开始读，两条上限都用默认值。
 //
 // 源: packages/sdk/protocol/src/transport.ts:70-82
 //
 // ctx 管着那个读循环的寿命：它结束时连接跟着关掉。
 func NewLineTransport(ctx context.Context, input io.Reader, output io.Writer, handlers Handlers) *LineTransport {
-	stream := &lineStream{reader: bufio.NewReader(input), writer: output}
+	return NewLineTransportWith(ctx, input, output, handlers, TransportOptions{})
+}
+
+// NewLineTransportWith 同 [NewLineTransport]，但那两条上限由调用方定。
+func NewLineTransportWith(
+	ctx context.Context,
+	input io.Reader,
+	output io.Writer,
+	handlers Handlers,
+	options TransportOptions,
+) *LineTransport {
+	maxFrame := options.MaxFrameBytes
+	if maxFrame == 0 {
+		maxFrame = DefaultMaxFrameBytes
+	}
+	slots := options.MaxConcurrentFrames
+	if slots == 0 {
+		slots = DefaultMaxConcurrentFrames
+	}
+	stream := &lineStream{reader: bufio.NewReader(input), writer: output, maxFrame: maxFrame}
+	handler := &dispatcher{handlers: handlers}
+	if slots > 0 {
+		handler.slots = make(chan struct{}, slots)
+	}
 	transport := &LineTransport{}
-	transport.conn = jsonrpc2.NewConn(ctx, stream, jsonrpc2.AsyncHandler(&dispatcher{handlers: handlers}))
+	transport.conn = jsonrpc2.NewConn(ctx, stream, handler)
 	return transport
 }
 
@@ -132,12 +191,38 @@ func (t *LineTransport) Done() <-chan struct{} { return t.conn.DisconnectNotify(
 // dispatcher 把库交上来的那一帧分给 [Handlers] 里对应的那一个。
 //
 // 源: packages/sdk/protocol/src/transport.ts:226-238
-type dispatcher struct{ handlers Handlers }
+type dispatcher struct {
+	handlers Handlers
+	// slots 是同时在办的帧数上限；nil 表示不设限。
+	slots chan struct{}
+}
 
-// Handle 实现 [jsonrpc2.Handler]。
+// Handle 实现 [jsonrpc2.Handler]：占一个名额，然后把这一帧交给自己的 goroutine 去办。
+//
+// 新增: 这里不用 [jsonrpc2.AsyncHandler]——它对每一帧无条件 `go` 一发了之，堆多少
+// goroutine 完全由对面说了算。这个版本在**读循环里**取名额（那个库是从读循环上同步
+// 调 Handle 的），所以名额满了之后压力顺着流回给对面，见 [TransportOptions.MaxConcurrentFrames]。
+func (d *dispatcher) Handle(ctx context.Context, conn *jsonrpc2.Conn, request *jsonrpc2.Request) {
+	if d.slots == nil {
+		go d.serve(ctx, conn, request)
+		return
+	}
+	select {
+	case d.slots <- struct{}{}:
+	case <-ctx.Done():
+		// 这条连接正在走，这一帧没有第二个地方可去。
+		return
+	}
+	go func() {
+		defer func() { <-d.slots }()
+		d.serve(ctx, conn, request)
+	}()
+}
+
+// serve 办一帧。
 //
 // 通知那一支不回话；请求那一支必须回，包括没人处理的时候——那是一个 -32601。
-func (d *dispatcher) Handle(ctx context.Context, conn *jsonrpc2.Conn, request *jsonrpc2.Request) {
+func (d *dispatcher) serve(ctx context.Context, conn *jsonrpc2.Conn, request *jsonrpc2.Request) {
 	params := json.RawMessage("{}")
 	if request.Params != nil {
 		params = objectParams(*request.Params)
@@ -200,6 +285,9 @@ func objectParams(params json.RawMessage) json.RawMessage {
 type lineStream struct {
 	reader *bufio.Reader
 	writer io.Writer
+	// maxFrame 是一行最多攒多少字节，见 [TransportOptions.MaxFrameBytes]；
+	// 非正数表示不设限。
+	maxFrame int
 	// write 串行化写：一帧必须整条写出去，两个 goroutine 交叉写会把两帧搅在一行里。
 	write sync.Mutex
 }
@@ -207,21 +295,51 @@ type lineStream struct {
 // ReadObject 读到下一个**认得出**的帧为止。
 //
 // 认不出的行（空行、不是合法 JSON、不是一个对象、以及是对象但既不像请求也不像响应）
-// 一律跳过接着读，这一点和 DSH 的 handleLine 逐条对得上。
+// 一律跳过接着读，这一点和 DSH 的 handleLine 逐条对得上；超长的那一行同样跳过，
+// 见 [TransportOptions.MaxFrameBytes]。
 func (s *lineStream) ReadObject(value any) error {
 	for {
-		line, err := s.reader.ReadBytes('\n')
-		line = bytes.TrimSpace(line)
-		if len(line) > 0 && json.Valid(line) && line[0] == '{' {
-			if unmarshalErr := json.Unmarshal(line, value); unmarshalErr == nil {
-				return nil
+		line, oversize, err := s.readLine()
+		if !oversize {
+			line = bytes.TrimSpace(line)
+			if len(line) > 0 && json.Valid(line) && line[0] == '{' {
+				if unmarshalErr := json.Unmarshal(line, value); unmarshalErr == nil {
+					return nil
+				}
 			}
 		}
 		if err != nil {
-			// 最后一行没有换行符时 ReadBytes 会连着数据一起交回 io.EOF，所以这个
-			// 判断必须在解完那一行之后——反过来会把对面最后一帧吃掉。
+			// 最后一行没有换行符时读到的是数据连着 io.EOF，所以这个判断必须在解完
+			// 那一行之后——反过来会把对面最后一帧吃掉。
 			return err
 		}
+	}
+}
+
+// readLine 读一行；攒到超过上限就把这一行剩下的部分边读边丢，并交回 oversize。
+//
+// 新增: DSH 是 `this.buffer += chunk` 无限攒着的。这里不能那样：另一端是别人写的
+// SDK，一条永远不带换行符的输入会一直攒到进程被杀。丢掉之后接着读而不是把连接关掉，
+// 是为了和「坏行跳过去」保持同一条规矩。
+func (s *lineStream) readLine() (line []byte, oversize bool, err error) {
+	var buffer []byte
+	for {
+		chunk, readErr := s.reader.ReadSlice('\n')
+		if !oversize {
+			if s.maxFrame > 0 && len(buffer)+len(chunk) > s.maxFrame {
+				// 已经攒下的那些立刻还回去：这一行反正是要丢的。
+				oversize, buffer = true, nil
+			} else {
+				// ReadSlice 交回的是那个 bufio 缓冲的内部切片，下一次读就作废，
+				// 所以这里必须拷一份走。
+				buffer = append(buffer, chunk...)
+			}
+		}
+		if readErr == bufio.ErrBufferFull {
+			// 这一行比 bufio 的缓冲长，接着读它剩下的部分。
+			continue
+		}
+		return buffer, oversize, readErr
 	}
 }
 

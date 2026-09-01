@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ---- 活血统 ----
@@ -272,6 +272,110 @@ func TestDrainReportsEveryBranchFailure(t *testing.T) {
 		if fixture.resident(id) {
 			t.Fatalf("拆失败之后 %q 也不该还驻留着", id)
 		}
+	}
+}
+
+// 一个停了却没真正静下来的孩子：那次刷盘**不做**，因为一个还在跑的回合会接着追加
+// 这次刷盘覆盖不到的事件；而这条失败照旧汇总上去，句柄也照旧摘掉。
+func TestDrainReportsAChildThatNeverComesToRest(t *testing.T) {
+	fixture := newContinuation(t)
+	broken := errors.New("停不干净")
+	fixture.factory.idleErr = broken
+	parent := fixture.spawnParent(t, "parent", "")
+	fixture.startChild(t, parent, "child", "干活")
+
+	err := fixture.manager.Drain(t.Context())
+	if codeOf(err) != CodeActivationTeardownFailed {
+		t.Fatalf("该报 %s，实际 %v", CodeActivationTeardownFailed, err)
+	}
+	if !errors.Is(err, broken) {
+		t.Fatalf("那个原因该还认得出来，实际 %v", err)
+	}
+	// 只有这一处边界出事，所以报的是那条失败本身，不是那句「在几处边界上失败了」。
+	if saysAnywhere(err, "处边界") {
+		t.Fatalf("只有一处出事不该汇总成多处，实际 %v", err)
+	}
+	if fixture.resident("child") {
+		t.Fatal("停不干净也不该还驻留着")
+	}
+}
+
+// 一个孩子拆不掉时，那次失败要挂到它父亲这一层上，并且和这个父亲**自己**那次
+// 句柄处置失败一起汇总——两处边界都出事时报的是那句「在几处边界上失败了」。
+func TestDrainSummarisesANestedTeardownFailure(t *testing.T) {
+	fixture := newContinuation(t)
+	broken := errors.New("拆不干净")
+	fixture.factory.disposeErr = broken
+	root := fixture.spawnParent(t, "root", "")
+	fixture.startChild(t, root, "middle", "带一层")
+	fixture.startChild(t, fixture.factory.child("middle"), "leaf", "干活")
+
+	err := fixture.manager.Drain(t.Context())
+	if codeOf(err) != CodeActivationTeardownFailed {
+		t.Fatalf("该报 %s，实际 %v", CodeActivationTeardownFailed, err)
+	}
+	if !saysAnywhere(err, "2 处边界") {
+		t.Fatalf("孩子和句柄两处都该数进去，实际 %q", err.Error())
+	}
+	if !errors.Is(err, broken) {
+		t.Fatalf("那个原因该还认得出来，实际 %v", err)
+	}
+	// 失败也要把两层都摘掉：留着会把整条祖先链永远钉在 waiting 上。
+	for _, id := range []session.SessionID{"middle", "leaf"} {
+		if fixture.resident(id) {
+			t.Fatalf("拆失败之后 %q 也不该还驻留着", id)
+		}
+	}
+}
+
+// 整台管理器排干同样停在物化那道栅栏上：那些拆解还没开出去，所以这一路必须报错，
+// 而不是对着一片还没稳定下来的森林拍快照。
+func TestDrainSurfacesACancelledMaterializationBarrier(t *testing.T) {
+	fixture := newContinuation(t)
+	root := fixture.spawnParent(t, "root", "")
+
+	// 一次**永远不落定**的在途物化，加一个已经取消的调用方。收尾必须把它摘掉，
+	// 否则拥有它的作用域一处置就会永远等在这儿。
+	tracked := &materialization{lineage: []agent.Agent{root}, settled: make(chan struct{})}
+	fixture.manager.mutex.Lock()
+	fixture.manager.materializations[tracked] = struct{}{}
+	fixture.manager.mutex.Unlock()
+	t.Cleanup(func() {
+		fixture.manager.mutex.Lock()
+		delete(fixture.manager.materializations, tracked)
+		fixture.manager.mutex.Unlock()
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if code := codeOf(fixture.manager.Drain(ctx)); code != CodeCancelled {
+		t.Fatalf("该报 %s，实际 %s", CodeCancelled, code)
+	}
+}
+
+// 一次**和这个根无关**的在途物化不进这个根的闸，也不必等它落定：带范围的排干
+// 只管自己那棵树。
+func TestDrainDescendantsIgnoresAnUnrelatedInFlightMaterialization(t *testing.T) {
+	fixture := newContinuation(t)
+	root := fixture.spawnParent(t, "root", "")
+	stranger := fixture.spawnParent(t, "stranger", "")
+
+	// 血统里只有那个陌生人，而且**永远不落定**：这次排干要是等了它就会挂死。
+	tracked := &materialization{lineage: []agent.Agent{stranger}, settled: make(chan struct{})}
+	fixture.manager.mutex.Lock()
+	fixture.manager.materializations[tracked] = struct{}{}
+	fixture.manager.mutex.Unlock()
+	t.Cleanup(func() {
+		fixture.manager.mutex.Lock()
+		delete(fixture.manager.materializations, tracked)
+		fixture.manager.mutex.Unlock()
+	})
+
+	if err := fixture.manager.DrainDescendants(t.Context(), []agent.Agent{root}); err != nil {
+		t.Fatalf("按根排干失败：%v", err)
+	}
+	if err := fixture.manager.assertAdmitting(stranger); err != nil {
+		t.Fatalf("不相干那条血统不该进闸，实际 %v", err)
 	}
 }
 

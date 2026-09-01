@@ -4,11 +4,11 @@
 
 package tokenmeter
 
-import "ds-harness-go/llm"
+import "github.com/snight1983/ds-harness-go/llm"
 
 // Config 是这个计量器的配置。
 //
-// 源: packages/llm/token-meter/src/types.ts:12
+// 源: packages/llm/token-meter/src/types.ts:11-12（TokenMeterConfig）
 //
 // 它是空的：这套启发式的三个常数是写死的，没有任何一处能配。DSH 那边写成
 // `Record<string, never>`（一个不许有任何键的对象），意思一样——**存在一份配置**
@@ -31,7 +31,7 @@ const (
 
 // MeasurementBaseline 是一次计量的基准：那个「从这里开始往后算增量」的锚点。
 //
-// 源: packages/llm/token-meter/src/types.ts:19-22
+// 源: packages/llm/token-meter/src/types.ts:14-18（TokenMeasurementBaseline）
 //
 // 新增: DSH 那边是一个三支的可辨识联合。这里没有按本仓库处理 TS 联合的一贯做法
 // （封闭接口加变体，成例是 [llm.ContentBlock]）来写，而是收成一个带判别字段的
@@ -60,7 +60,7 @@ type SurfaceNode struct {
 
 // Measurement 是一次计量的全部结果。
 //
-// 源: packages/llm/token-meter/src/types.ts:29-41
+// 源: packages/llm/token-meter/src/types.ts:20-34（TokenMeasurement）
 //
 // 读它的时候要记住这个包的根本立场：TotalTokens **不是**一次测量，而是
 // 「一次真实用量」加上「那之后这套启发式量出来的净变化」。基准越新，

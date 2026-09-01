@@ -10,8 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // roundInstruction 是续推提示词里那段不随轮次变化的正文。
@@ -33,7 +33,7 @@ const roundInstruction = "Continue working toward the objective in this same ses
 // 新增: DSH 那句 objective 是 JSON.stringify 排的，它不把 < > & 转成 < 这类
 // 写法；[encoding/json.Marshal] 默认转。目标描述是人写的自由文本，而这份字节直接
 // 摆进模型上下文里给它读——多出来的转义只会让它看见一句和原文长得不一样的话。
-// 理由同 [ds-harness-go/goal/goal] 与 [ds-harness-go/goal/goaltool] 里那两个同名的
+// 理由同 [github.com/snight1983/ds-harness-go/goal/goal] 与 [github.com/snight1983/ds-harness-go/goal/goaltool] 里那两个同名的
 // 辅助函数。
 func marshalNoEscape(value any) ([]byte, error) {
 	var buffer bytes.Buffer

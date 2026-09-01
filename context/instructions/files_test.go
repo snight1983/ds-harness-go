@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 func TestRelativeDisplay(t *testing.T) {

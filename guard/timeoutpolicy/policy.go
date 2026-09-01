@@ -10,15 +10,15 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/util/timeout"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/util/timeout"
 )
 
 // Code 是本包拥有的超时代号，一个身份两处用。
 //
-// 源: packages/guard/timeout-policy/src/index.ts:26
+// 源: packages/guard/timeout-policy/src/index.ts:18-25（TOOL_TIMEOUT）
 //
 // 一处是**对内**：[timeout.Deadline] 拿它给这条期限打标，[timeout.OfContext] 再拿它
 // 问回来。挂上这个代号是嵌套期限能被分辨开的唯一手段——外层某个 `AroundDispatch`

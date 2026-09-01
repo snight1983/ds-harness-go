@@ -8,9 +8,9 @@
 //
 // # 谁在消费它
 //
-// [Service.Request] 的签名就是 [ds-harness-go/core/tools.Approval]，所以一个装好的
+// [Service.Request] 的签名就是 [github.com/snight1983/ds-harness-go/core/tools.Approval]，所以一个装好的
 // 服务可以直接交给工具运行时当审批接缝，中间不需要任何胶水。答复的词汇表
-// （[ds-harness-go/core/tools.ApprovalOutcome]）也只有那一份：DSH 把它放在本包一个
+// （[github.com/snight1983/ds-harness-go/core/tools.ApprovalOutcome]）也只有那一份：DSH 把它放在本包一个
 // 不依赖 cordis 的 types.ts 里，好让浏览器侧的类型链吃得下；Go 里没有那个模块图问题，
 // 而消费方 core/tools 是更底下的一层，所以词汇表留在那里，本包引它。
 //
@@ -23,7 +23,7 @@
 //     一条答复者：任何一条后登记的答复者都可能排在闸前面，那样「never 必然拒绝」
 //     这句承诺就取决于登记顺序了。
 //  3. **答复者链**。没人应答、应答的报错、应答的还回来一个词汇表外的值——三种都
-//     收敛成 [ds-harness-go/core/tools.ApprovalUnavailable]。失败一律向「不放行」
+//     收敛成 [github.com/snight1983/ds-harness-go/core/tools.ApprovalUnavailable]。失败一律向「不放行」
 //     那一侧倒。
 //
 // # 和 DSH 不一样的地方

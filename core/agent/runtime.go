@@ -8,33 +8,41 @@ package agent
 import (
 	"context"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // Options 是建一个 agent 时给的那几样。
 //
 // 源: packages/core/agent/src/runtime-types.ts:24-31
 //
-// 人设不在这里：那是系统提示词的段落，见 [ds-harness-go/core/systemprompt]。
+// 人设不在这里：那是系统提示词的段落，见 [github.com/snight1983/ds-harness-go/core/systemprompt]。
 //
 // 新增: DSH 这个接口是**可合并扩展**的（插件用 declare module 往上加字段）。
-// Go 没有声明合并，所以它就是这三个字段；别的包要带自己的 agent 级配置，
+// Go 没有声明合并，所以它就是这四个字段；别的包要带自己的 agent 级配置，
 // 走它自己那份作用域登记，而不是往这个结构体上挤。
 type Options struct {
 	// Provider 是提供方路由，调用那一刻必须有一个登记过的适配器认领它。
 	Provider string
 	// Model 是模型标识，由选中的那个提供方适配器解释。
 	Model string
+	// ReasoningEffort 是这条 provider/model 路由上适配器自己拥有的推理档位；
+	// 空串表示没选，那时档位交回给持久化历史或者适配器自己的默认行为。
+	//
+	// 源: packages/core/agent/src/runtime-types.ts:31
+	//
+	// 「空串即缺失」这条约定是 [llm.CallConfig].ReasoningEffort 定下的，这里照用，
+	// 于是它和 [ModelSelection].ReasoningEffort 在同一套口径上。
+	ReasoningEffort llm.ReasoningEffortID
 	// MaxTokens 是每次对话模型请求的输出上限；0 表示不设，由适配器决定。
 	MaxTokens int
 }
 
 // CancelOptions 是 [Agent.Cancel] 的选项。
 //
-// 源: packages/core/agent/src/runtime-types.ts:33-41
+// 源: packages/core/agent/src/runtime-types.ts:36-44（CancelOptions）
 type CancelOptions struct {
 	// KeepInbox 为真表示留下排队的和引导的收件箱条目，别丢。
 	//
@@ -45,7 +53,7 @@ type CancelOptions struct {
 
 // Status 是一个 agent 的生命周期状态，每次跃迁都会报一次。
 //
-// 源: packages/core/agent/src/runtime-types.ts:43-50
+// 源: packages/core/agent/src/runtime-types.ts:46-53（AgentStatus）
 //
 // 处置（disposal）会把 agent 从注册表里摘掉，它**不是**第三个可观察状态。
 type Status string
@@ -60,7 +68,7 @@ const (
 
 // PreStepDecision 是「这个提议的步骤进不进、带着哪些消息进」。
 //
-// 源: packages/core/agent/src/runtime-types.ts:52-55
+// 源: packages/core/agent/src/runtime-types.ts:55-63（PreStepDecision）
 //
 // 新增: DSH 是 `{kind:'reject'} | {kind:'enter'; messages}` 两支联合。Go 里做成
 // 一个结构体，用 [RejectStep] 和 [EnterStep] 两个构造器产出——两个字段的组合里
@@ -87,7 +95,7 @@ func EnterStep(messages []llm.Message) PreStepDecision {
 
 // RequestErrorAction 是一个认领了模型请求恢复的观察者交出来的动作。
 //
-// 源: packages/core/agent/src/runtime-types.ts:57-58
+// 源: packages/core/agent/src/runtime-types.ts:65-66（RequestErrorAction）
 //
 // 新增: DSH 是 `{kind:'retry'} | undefined`。Go 里零值就是那个 undefined——
 // 「不认领，这次失败是终局」。
@@ -98,7 +106,7 @@ type RequestErrorAction struct {
 
 // SessionStartSource 是一段会话生命周期为什么开始的。
 //
-// 源: packages/core/agent/src/runtime-types.ts:60-61
+// 源: packages/core/agent/src/runtime-types.ts:68-69（SessionStartSource）
 type SessionStartSource string
 
 const (
@@ -114,7 +122,7 @@ const (
 
 // Agent 是一个活 agent 对外的样子。
 //
-// 源: packages/core/agent/src/runtime-types.ts:63-144
+// 源: packages/core/agent/src/runtime-types.ts:72-150（Agent）
 //
 // 本包不实现它——实现在循环那一层，见包文档。这里定的是那份契约，好让消费方
 // 不必依赖具体的循环包。
@@ -208,4 +216,21 @@ type Agent interface {
 	// 改动都必须走这个 agent 自己那把锁。[Inbox] 那一族改动方法因此只当只读投影
 	// 用，见 [Agent.Inbox] 的注释。
 	Prepend(message llm.Message, target InboxTarget)
+
+	// Remove 从收件箱里拿掉一条还没跑的消息，并耐久地记下这次取消。
+	//
+	// 找不到这个身份是空操作。这是给「一份已经排队的上下文过期了」这件事用的：
+	// 重算出来的那一份要顶掉它，而不是和它并排排在队里。
+	//
+	// 新增: 理由和 [Agent.Prepend] 逐字相同——[Inbox] 那一族改动方法只当只读投影
+	// 用，任何一次改动都必须走这个 agent 自己那把锁。
+	Remove(messageID llm.MessageID)
+
+	// Replace 原地换掉一条还没跑的消息，身份可以跟着变。
+	//
+	// 找不到这个身份是空操作。原地换比「拿掉再插一条」多守一件事：这条消息在队里
+	// 的位置不变，而位置决定了模型读到它的先后。
+	//
+	// 新增: 理由同 [Agent.Prepend]。
+	Replace(messageID llm.MessageID, newMessage llm.Message)
 }

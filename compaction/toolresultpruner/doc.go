@@ -6,12 +6,12 @@
 // # 这一层管什么
 //
 // [Config.Resolve] 验一份字符预算，[New] 用它造一个 [Pruner]，
-// [Pruner.MeasureContent] 数码点，[Pruner.PruneContent] 砍。
+// [Pruner.MeasureContent] 数码点，[Pruner.PruneContent] 砍一段内容，
+// [Pruner.PruneSession] 在一份稳定的表面快照上把整段会话砍一遍。
 // [PrunedEntry] 和 [PruneResult] 是一趟砍下来的账目。
 //
-// 不管的：**在会话上真的砍一遍**。那要一个能追加事件的活会话和一个计量器
-// （每条被遮的节点要配一条 compaction/prune 记下它的估价），两样都归
-// docs/DESIGN.md 第八节第 6 块，裁决仍然是 PENDING。
+// 不管的：**什么时候去叫它**。压力怎么算、超窗之后要不要先砍一遍再去总结，
+// 那是 compaction/basic 那个引擎和装配层的事。
 //
 // # 为什么要有这一层
 //
@@ -53,19 +53,35 @@
 //
 //  6. **`extends Service` 变成一个普通的值。**DSH 构造时把自己注册进 cordis 上下文，
 //     还声明 `static inject = ['tokenMeter']`。Go 里没有那个注册表，装配方自己拿着
-//     这个值；计量器是 `pruneSession` 才用得上的（每条被遮节点要记一条估价），
-//     跟着那一半一起留到第 6 块。
-//
-//  7. **`pruneSession` 那一半不在本包。**它要 `session.append` 分配 seq、
-//     要 `ctx.tokenMeter.estimateMessage` 定价，两样都归第 6 块，
-//     裁决仍然是 PENDING——和 compaction 包里 `CompactionEngine` 的处理一样。
+//     这个值；那个计量器收窄成 [Estimator]，而且是 [Pruner.PruneSession] 的参数、
+//     不是 [Pruner] 的字段——剩下三个方法一个都用不上它。
 //     不变量那一侧 DSH 装的是一个**空**安装器，照本仓库的成例整条 SKIP。
+//
+//  7. **[Pruner.PruneSession] 出错时仍然交出真实账目。**DSH 那边一抛异常，
+//     调用方就拿不到「已经砍成了多少」这个数了（文档里只用一句 `@throws` 说明
+//     早先的替换是持久的）。Go 这边把它摆进第一个返回值：到出错那一刻为止落地的
+//     那些替换是**真的**，调用方要按它决定还要不要重试。
 //
 // # 覆盖率为什么到不了 99%
 //
 // docs/DESIGN.md 第九节给纯逻辑包定的线是 99%，低于这个数要在源码里写明为什么。
-// 没覆盖到的是 [Pruner.PruneContent] 末尾那两条自检——给一份验过的预算它们报不出来，
-// 而 [New] 是造 [Pruner] 的唯一入口，所以构造不出走到那里的输入。
-// 留着而不是断言掉的理由写在那两行上面：它们守的正是上面那段下标算术，
-// 而那段算错的后果是**静默**的。
+// 本包的用例覆盖到 94.1%，没覆盖到的是七条构造不出来的语句：
+//
+//   - **[Pruner.PruneContent] 末尾那两条自检。**给一份验过的预算它们报不出来，
+//     而 [New] 是造 [Pruner] 的唯一入口，所以构造不出走到那里的输入。留着而不是
+//     断言掉的理由写在那两行上面：它们守的正是上面那段下标算术，而那段算错的后果
+//     是**静默**的。连带的还有 [Pruner.PruneSession] 里那句「砍这一段砍出错了」——
+//     它转的就是上面这两条。
+//   - **[Pruner.PruneSession] 里那句「表面上的 seq 在日志里找不到」。**表面 seq 是
+//     验过的、连续的日志引用。留着的理由同上：真对不上的话下面会拿错一条事件去当
+//     被砍的目标。
+//   - **那句「负载解出来不是这个类型」。**[session.DecodeData] 按 Type 分发，
+//     一条 tool/result 只会得到 [session.ToolResultData]。
+//   - **那条替换件写不进日志。**它排在计价事件后面，而这两条中间不许有任何东西：
+//     唯一能让追加被拒的成因是「在一次事件通告里重入」，那时候更前面的计价事件
+//     已经先失败了。计价事件那一处的重入用例是有的（见 session_test.go 里那个在
+//     事件通告里砍一遍的用例）。
+//   - **负载排不出去。**排的是 [compaction.PruneData] 和一份刚从日志里解回来的
+//     [session.ToolResultData]——后者能解回来就说明它排得出去，而这一趟只换掉了
+//     里面那条工具结果块的正文，换上去的正文本身也是从同一份内容里切出来的。
 package toolresultpruner

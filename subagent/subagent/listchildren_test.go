@@ -6,6 +6,7 @@ package subagent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,15 +14,15 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
-	"ds-harness-go/session/projection"
-	"ds-harness-go/session/projectioncache"
-	"ds-harness-go/storage"
-	"ds-harness-go/storage/domain"
-	"ds-harness-go/storage/storagetest"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session/projectioncache"
+	"github.com/snight1983/ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )
 
 // ---- 装配 ----
@@ -565,16 +566,17 @@ func TestListChildrenReportsACorruptChildWhenTheProbePointsAtAnotherLifecycle(t 
 	}
 }
 
-// Origin 和 AgentPreset 有意不算见证：它们是同一段生命里可以另有说法的展示性
-// 元数据，拿它们当见证会把一次无害的差异误报成 corrupt。
-func TestListChildrenIgnoresOriginAndPresetWhenCheckingTheLifecycle(t *testing.T) {
+// Origin 和 AgentPreset 也算生命见证：上游的 LIFECYCLE_WITNESS_KEYS 把这两项一并
+// 收进去了，而那一组就是「同一个 id 底下区分两次生命」的全部判据。探视回来的头
+// 在这两项上对不上，说明它不是当初列出来的那一段，该报 corrupt。
+func TestListChildrenTreatsOriginAndPresetAsLifecycleWitnesses(t *testing.T) {
 	listed := coldHeader("child", "parent", 10, session.OriginSubagent)
 	listed.AgentPreset = "列出来时是这个"
 	stored := listed
 	stored.Origin = ""
 	stored.AgentPreset = "存档里是另一个"
 	store := newPersistence()
-	store.putStored(listed, stored, descriptorLog(t, 0, "照样算数")...)
+	store.putStored(listed, stored, descriptorLog(t, 0, "对不上的那一段")...)
 	services := newListing(t)
 	services.Persistence = store
 
@@ -582,8 +584,9 @@ func TestListChildrenIgnoresOriginAndPresetWhenCheckingTheLifecycle(t *testing.T
 	if err != nil {
 		t.Fatalf("列举失败：%v", err)
 	}
-	if entry := onlyEntry(t, entries); entry.Kind != EntryChild || entry.Label != "照样算数" {
-		t.Fatalf("这两项不该被当成见证，实际 %#v", entry)
+	entry := onlyEntry(t, entries)
+	if entry.Kind != EntryDiagnostic || entry.Reason != DiagnosticCorrupt {
+		t.Fatalf("该是一条 corrupt 诊断，实际 %#v", entry)
 	}
 }
 
@@ -615,6 +618,35 @@ func TestListChildrenReportsACorruptChildWhenNoIdentityFolds(t *testing.T) {
 		if entry.Kind != EntryDiagnostic || entry.Reason != DiagnosticCorrupt {
 			t.Fatalf("%q 该是一条 corrupt 诊断，实际 %#v", entry.ID, entry)
 		}
+	}
+}
+
+// 宿主自己登的某个投影单元把这次重折搞崩了：这个孩子降级成一条 corrupt 诊断，
+// 而整次列举照旧成功——逐孩子隔离对「读不动」和「折不出来」一视同仁。
+func TestListChildrenReportsACorruptChildWhenTheRefoldFails(t *testing.T) {
+	services := newListing(t)
+	// 一份**排不出 JSON** 的状态：折是折得完，写回检查点那一行时崩掉。
+	dispose, err := projection.Register(services.Projections, projection.Definition[chan int]{
+		Key:         "排不出去的",
+		Init:        func() chan int { return make(chan int) },
+		Apply:       func(state chan int, _ session.Event) (chan int, bool) { return state, false },
+		DecodeState: func(json.RawMessage) (chan int, error) { return nil, errors.New("读不回来") },
+	})
+	if err != nil {
+		t.Fatalf("登记投影失败：%v", err)
+	}
+	t.Cleanup(dispose)
+
+	store := newPersistence()
+	store.put(coldHeader("child", "parent", 10, session.OriginSubagent), descriptorLog(t, 0, "冷的")...)
+	services.Persistence = store
+
+	entries, err := ListChildren(t.Context(), services, "parent")
+	if err != nil {
+		t.Fatalf("列举失败：%v", err)
+	}
+	if entry := onlyEntry(t, entries); entry.Kind != EntryDiagnostic || entry.Reason != DiagnosticCorrupt {
+		t.Fatalf("该降级成一条 corrupt 诊断，实际 %#v", entry)
 	}
 }
 
@@ -710,6 +742,29 @@ func TestListChildrenReportsCancellationFromAColdProbe(t *testing.T) {
 				t.Fatalf("该报 %s，实际 %v", CodeCancelled, err)
 			}
 		})
+	}
+}
+
+// 一次候选全是活孩子的解算根本不起冷读，那道并发栅栏于是整个跳过；收尾那一下
+// 才是这条路上唯一认得出调用方已经走了的地方。
+func TestResolveCandidateRowsHonoursCancellationWithoutAnyColdRead(t *testing.T) {
+	services := newListing(t)
+	live := liveChild(t, services, rootScope(t), "child", "parent", 10, descriptorLog(t, 0, "活的"))
+	prepared, err := prepareListing(t.Context(), services)
+	if err != nil {
+		t.Fatalf("备列举失败：%v", err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	rows, err := prepared.resolveCandidateRows(ctx, []corpusRecord{
+		{header: live.Header(), live: live},
+	})
+	if codeOf(err) != CodeCancelled {
+		t.Fatalf("该报 %s，实际 %v", CodeCancelled, err)
+	}
+	if rows != nil {
+		t.Fatalf("取消了就不该交回半张表，实际 %#v", rows)
 	}
 }
 

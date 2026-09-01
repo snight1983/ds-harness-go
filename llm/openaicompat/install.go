@@ -14,11 +14,11 @@ import (
 	"slices"
 	"sync"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/credentials"
-	"ds-harness-go/llm"
-	"ds-harness-go/settings"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/credentials"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/settings"
 )
 
 // SettingsNamespace 是本包那个设置小节的命名空间。
@@ -404,7 +404,7 @@ func (i *installation) adapter() llm.Adapter { return i.instance }
 
 // Install 把这个适配器装进一次组装，返回拆除函数。
 //
-// 源: packages/llm/llm-pi-ai/src/index.ts:141-320
+// 源: packages/llm/llm-pi-ai/src/index.ts:142-332（apply）
 //
 // 装配那一份配置先解算、先登记（DSH 的 index.ts:164、234、284），然后设置小节才
 // 登记上去——那一次登记会把用户段叠上来，所以紧接着要再对齐一次（DSH 的

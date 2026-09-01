@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 func Test第一步的读数写着模型可见消息那个基线(t *testing.T) {

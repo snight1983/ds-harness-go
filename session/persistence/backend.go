@@ -9,7 +9,7 @@ import (
 	"context"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // 编排层的两个默认策略值。
@@ -36,7 +36,7 @@ const (
 // 持久化原语。后端把这些实现在文件、行、对象存储……上；别的一切
 // （攒批、串行化、游标、认领活会话、崩溃修复的次序、销毁时的静默）都由编排层提供。
 //
-// 源: packages/session/session-persistence/src/coordinator.ts:112-214
+// 源: packages/session/session-persistence/src/coordinator.ts:118-219（PersistenceBackend）
 //
 // 一个第三方后端也可以绕过这道缝，直接实现 [Store]。
 //

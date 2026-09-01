@@ -9,7 +9,7 @@ import (
 	"context"
 	"sync"
 
-	"ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/agent"
 )
 
 // transactions 是「一个 agent 一把闸」。

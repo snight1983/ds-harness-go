@@ -14,11 +14,11 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // plannedCall 是一次解析完参数、可以排期的工具调用。
@@ -85,7 +85,7 @@ type toolBatch struct {
 //
 // 新增: DSH 那边还有一整套 schedulerFailure 机制——派发的 promise 会 reject，
 // 于是要留住第一条失败、停止续杯、把已经起步的排空、最后把它抛出去。Go 这边
-// [ds-harness-go/core/tools.Runtime] 的 Prepare／Dispatch／Finalize／Finish
+// [github.com/snight1983/ds-harness-go/core/tools.Runtime] 的 Prepare／Dispatch／Finalize／Finish
 // **一个都不返回 error**（那个包的立场是「一切失败都是结果，不是错误」），
 // 所以那套机制在这里唯一还剩的触发源是**往日志上追加失败**。它仍然按同样的
 // 办法处理：停止续杯、排空在飞的、把错误交出去、不伪造任何结果。

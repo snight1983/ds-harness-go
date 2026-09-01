@@ -14,7 +14,7 @@ package agent
 import (
 	"encoding/json"
 
-	sessionlog "ds-harness-go/session"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // ConsumedWork 是一段 agent 日志对它消耗掉的活儿的交代。

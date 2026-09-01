@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"regexp"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // headingPattern 匹配一行 markdown 标题（一到六级），捕获去掉首尾空白之后的标题正文。
@@ -60,7 +60,7 @@ func FoldModeUntil(events []session.Event, end int) bool {
 //
 // 认不出来时保持前一个状态而不是让整次折叠失败：折叠在系统提示词装配这类热路径上
 // 被反复调用，没有地方接得住这个错误；而两种降级里，「状态没变」比「状态莫名变了」
-// 更接近日志真正说的话。理由和 [ds-harness-go/todo] 那个投影折叠逐字相同。
+// 更接近日志真正说的话。理由和 [github.com/snight1983/ds-harness-go/todo] 那个投影折叠逐字相同。
 func decodeMode(event session.Event) (bool, bool) {
 	var payload struct {
 		Active *bool `json:"active"`

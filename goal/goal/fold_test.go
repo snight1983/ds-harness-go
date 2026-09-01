@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ---- 字节模板 ----

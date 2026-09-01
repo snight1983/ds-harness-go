@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage"
 )
 
 // MemoryMedium 是一份介质，对应磁盘上的那棵文件树或那个数据库文件。

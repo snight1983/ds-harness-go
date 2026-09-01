@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // namePattern 是技能名的公开文法：小写字母数字，用单个短横连起来。
@@ -279,7 +279,7 @@ func IsUserInvocable(summary Summary) bool {
 //
 // 新增: DSH 靠 declare module 把 'skill-invocation' 挂进 llm 的 MessageSourceMap。
 // Go 的接口封在 llm 包里，外面加不了变体，所以这个类型只是一份**约定的形状**：
-// 注入方把它排成 [ds-harness-go/llm.PluginSource].Extra 那份不透明 JSON。
+// 注入方把它排成 [github.com/snight1983/ds-harness-go/llm.PluginSource].Extra 那份不透明 JSON。
 type InvocationSource struct {
 	// Name 是被调起来的技能名，注入的那一侧已经验过它允许被人调。
 	Name string

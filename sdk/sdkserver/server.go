@@ -15,16 +15,17 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
-	"ds-harness-go/sdk/sdkprotocol"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/sdk/sdkprotocol"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // Server 是架在一套跑着的运行时和一条通道之间的那台 SDK 服务端。
 //
-// 源: packages/sdk/server/src/server.ts:53-64
+// 源: packages/sdk/server/src/server.ts:70-297（HarnessSdkJsonRpcServer）
 //
 // [Install] 之后它开始收运行时那四条边并且往对面转发；`shutdown` 之后它把自己
 // 建出来的 agent、兜底挂上的适配器、以及那四条订阅全部拆掉，**一次**——之后再来的
@@ -42,18 +43,34 @@ type Server struct {
 	owner *scope.Scope
 	// notifyCtx 是发通知用的上下文，见 [Server.Install] 上那条说明。
 	notifyCtx context.Context
-	// initialized 记的是那次握手办过了没有。
+	// initialized 记的是那次握手**办成**了没有。
+	//
+	// 它只在握手全部走完之后才置起来，见 [Server.Initialize]。
 	initialized bool
-	// cwd / provider / model / maxTokens 是握手记下来的那份路由，这条线上每一个
-	// 会话都照它建。
-	cwd       string
-	provider  string
-	model     string
-	maxTokens int
+	// initializing 记的是此刻有没有一次握手在半路上。
+	//
+	// 新增: DSH 那边不需要它——一个 JS 的事件循环里 initialize 从头到尾没有别人插进
+	// 来的机会。Go 这边那条通道的处理器是并发的（[sdkprotocol.NewLineTransport] 用
+	// 的是 jsonrpc2.AsyncHandler），两次 `initialize` 真的会同时进来；只靠
+	// initialized 挡不住它们——它要到最后才置起来，于是两边都会去挂一次兜底适配器，
+	// 后挂上的那个把前一个的撤销函数覆盖掉，从此拆不掉。
+	initializing bool
+	// cwd / provider / model / reasoningEffort / maxTokens 是握手记下来的那份路由，
+	// 这条线上每一个会话都照它建。
+	cwd             string
+	provider        string
+	model           string
+	reasoningEffort llm.ReasoningEffortID
+	maxTokens       int
 	// sessions 是这台服务器自己建出来的那些 agent，按 SDK 那侧的会话标识。
 	sessions map[string]agent.Handle
-	// unmount 撤销 [MountAdapter] 那次兜底挂载，没挂过时为 nil。
-	unmount func(context.Context) error
+	// unmounts 撤销 [MountAdapter] 那些兜底挂载，按挂上的次序排。
+	//
+	// 新增: DSH 是单独一个 `llmFiber`，因为它那条路只走得到一次。这里是一串：
+	// 一次握手可以在挂完适配器之后才失败（那条路由解不开），而失败之后客户端换一份
+	// 参数重来是允许的，于是同一条线上先后挂过两个适配器这件事是可能的。用单个槽位
+	// 存的话，后挂上的会把前一个的撤销函数盖掉，那个适配器从此拆不掉。
+	unmounts []func(context.Context) error
 	// disposers 是那四条订阅的撤销函数，按装上的次序排。
 	disposers []func(context.Context) error
 	// shuttingDown 一置起来就不再接新会话；pending 是还在半路上的那些创建。
@@ -118,17 +135,27 @@ func (s *Server) Install(ctx context.Context, owner *scope.Scope) (func(context.
 	return s.Shutdown, nil
 }
 
-// Initialize 记下这条线上共用的那份路由，并交回线上稳定的服务端身份。
+// Initialize 校验并记下这条线上共用的那份路由，并交回线上稳定的服务端身份。
 //
-// 源: packages/sdk/server/src/server.ts:111-125
+// 源: packages/sdk/server/src/server.ts:130-169
+//
+// 次序是这个方法的**全部内容**，DSH 那边一模一样：先把入参验完，再挂或者确认适配器，
+// 再把那条路由真解算一遍，**最后**才公布。任何一步失败，这台服务器都还停在握手之前——
+// 于是客户端换一份参数重来就是了。反过来（先公布再挂适配器）会留下一台自称办好了、
+// 而路由其实还没落地的服务器：那期间进来的 `session/prompt` 会拿一条空路由把
+// agent 建出来，一步都跑不动。
 //
 // 新增: DSH 那句 `Number.isSafeInteger` 在 Go 里由类型系统承担——[int] 本来就是
 // 整数，所以只剩「给了就必须为正」这一条。
 //
 // 新增: 重来一次是错误。DSH 只在文档里写了"reinitialization is unsupported"
-// （server.ts:50-51）却没拦，于是第二次握手会再挂一次兜底适配器、把第一次那个纤程
+// （server.ts:73）却没拦，于是第二次握手会再挂一次兜底适配器、把第一次那个纤程
 // 的引用覆盖掉，从此再也拆不掉。这里把那句文档变成一次当场的拒绝。
 func (s *Server) Initialize(ctx context.Context, params sdkprotocol.InitializeParams) (sdkprotocol.InitializeResult, error) {
+	// 入参校验先做完，一次锁都不用碰：坏参数根本不该占住那扇门。
+	if params.ReasoningEffort != nil && *params.ReasoningEffort == "" {
+		return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: initialize 的 reasoningEffort 给了就不能是空串")
+	}
 	if params.MaxTokens != nil && *params.MaxTokens <= 0 {
 		return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: initialize 的 maxTokens 必须是正整数，给的是 %d", *params.MaxTokens)
 	}
@@ -136,50 +163,126 @@ func (s *Server) Initialize(ctx context.Context, params sdkprotocol.InitializePa
 	if err != nil {
 		return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: 解不出 cwd 的绝对路径：%w", err)
 	}
-
-	s.mutex.Lock()
-	if s.owner == nil {
-		s.mutex.Unlock()
-		return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: 这台 SDK 服务器还没装上")
+	var effort llm.ReasoningEffortID
+	if params.ReasoningEffort != nil {
+		effort = *params.ReasoningEffort
 	}
-	if s.initialized {
-		s.mutex.Unlock()
-		return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: 这条线已经握过手了，重来一次不支持")
-	}
-	s.initialized = true
-	s.cwd = cwd
-	s.provider = params.Provider
-	s.model = params.Model
+	maxTokens := 0
 	if params.MaxTokens != nil {
-		s.maxTokens = *params.MaxTokens
+		maxTokens = *params.MaxTokens
 	}
-	s.mutex.Unlock()
 
-	if !s.hasAdapterFor(params.Provider) {
-		if s.config.MountAdapter == nil {
-			return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: 没有适配器认领提供方 %q", params.Provider)
-		}
-		unmount, err := s.config.MountAdapter(ctx, params.Provider)
-		if err != nil {
-			return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: 给提供方 %q 兜底挂适配器失败：%w", params.Provider, err)
-		}
-		s.mutex.Lock()
-		s.unmount = unmount
-		s.mutex.Unlock()
+	if err := s.beginInitialize(); err != nil {
+		return sdkprotocol.InitializeResult{}, err
 	}
+	// 失败就把那扇门还回去，让客户端换一份参数重来。办成了由 publishRoute 关上它。
+	settled := false
+	defer func() {
+		if !settled {
+			s.mutex.Lock()
+			s.initializing = false
+			s.mutex.Unlock()
+		}
+	}()
+
+	if err := s.ensureAdapterFor(ctx, params.Provider); err != nil {
+		return sdkprotocol.InitializeResult{}, err
+	}
+	// 这条路由必须真解算得开——上面那次适配器确认只说明「这个提供方有人认领」，
+	// 说不出这个确切模型收不收这个推理档位。不在这里解，第一次 `session/prompt`
+	// 才会撞上它，而那时错误已经落在一个会话的历史里了。
+	//
+	// 源: packages/sdk/server/src/server.ts:154-161
+	if s.config.LLM == nil {
+		return sdkprotocol.InitializeResult{}, fmt.Errorf(
+			"sdkserver: 这条线上没挂 LLM 服务，解不出提供方 %q 的调用配置", params.Provider)
+	}
+	if _, err := s.config.LLM.ResolveCallConfig(ctx, llm.CallConfig{
+		Provider:        params.Provider,
+		Model:           params.Model,
+		ReasoningEffort: effort,
+		MaxTokens:       maxTokens,
+	}); err != nil {
+		return sdkprotocol.InitializeResult{}, fmt.Errorf(
+			"sdkserver: 解不开提供方 %q 模型 %q 的调用配置：%w", params.Provider, params.Model, err)
+	}
+
+	s.publishRoute(cwd, params.Provider, params.Model, effort, maxTokens)
+	settled = true
 	return sdkprotocol.InitializeResult{
 		ServerInfo: sdkprotocol.ServerInfo{Name: sdkprotocol.ServerName, Version: ServerVersion},
 	}, nil
 }
 
+// beginInitialize 认领那扇只进得去一次的门。
+//
+// 已经握过手、或者有一次握手正在半路上，都当场拒；两者的说法分开，因为客户端
+// 该做的事不一样——前者是它自己重复发了，后者是它发早了。
+func (s *Server) beginInitialize() error {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	switch {
+	case s.owner == nil:
+		return fmt.Errorf("sdkserver: 这台 SDK 服务器还没装上")
+	case s.shuttingDown:
+		return fmt.Errorf("sdkserver: 这台 SDK 服务器正在收摊")
+	case s.initialized:
+		return fmt.Errorf("sdkserver: 这条线已经握过手了，重来一次不支持")
+	case s.initializing:
+		return fmt.Errorf("sdkserver: 这条线上已经有一次 initialize 在跑了")
+	}
+	s.initializing = true
+	return nil
+}
+
+// publishRoute 把那份路由公布出去，这台服务器从这一刻起才算办好了。
+func (s *Server) publishRoute(cwd, provider, model string, effort llm.ReasoningEffortID, maxTokens int) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.cwd = cwd
+	s.provider = provider
+	s.model = model
+	s.reasoningEffort = effort
+	s.maxTokens = maxTokens
+	s.initializing = false
+	// 这一句必须是最后一句：它是别的请求看得见的那个开关。
+	s.initialized = true
+}
+
+// ensureAdapterFor 确认这个提供方有适配器认领，没有就走那条兜底路。
+//
+// 源: packages/sdk/server/src/server.ts:150-153
+func (s *Server) ensureAdapterFor(ctx context.Context, provider string) error {
+	if s.hasAdapterFor(provider) {
+		return nil
+	}
+	if s.config.MountAdapter == nil {
+		return fmt.Errorf("sdkserver: 没有适配器认领提供方 %q", provider)
+	}
+	unmount, err := s.config.MountAdapter(ctx, provider)
+	if err != nil {
+		return fmt.Errorf("sdkserver: 给提供方 %q 兜底挂适配器失败：%w", provider, err)
+	}
+	if unmount == nil {
+		// [MountAdapter] 允许交回 nil，那表示没什么要撤的。
+		return nil
+	}
+	s.mutex.Lock()
+	// 兜底适配器一挂上就记下来，哪怕这次握手后面还会失败：它已经装进运行时了，
+	// 撤销函数丢掉就等于漏掉一次拆解。收摊照样卸得掉它。
+	s.unmounts = append(s.unmounts, unmount)
+	s.mutex.Unlock()
+	return nil
+}
+
 // hasAdapterFor 问「这个提供方有没有适配器认领」；没挂 LLM 服务时一律当作没有。
 //
-// 源: packages/sdk/server/src/server.ts:237-239
+// 源: packages/sdk/server/src/server.ts:294-296
 func (s *Server) hasAdapterFor(provider string) bool {
-	if s.config.Providers == nil {
+	if s.config.LLM == nil {
 		return false
 	}
-	for _, entry := range s.config.Providers.ListProviders() {
+	for _, entry := range s.config.LLM.ListProviders() {
 		if entry.ID == provider {
 			return true
 		}
@@ -189,11 +292,22 @@ func (s *Server) hasAdapterFor(provider string) bool {
 
 // Prompt 把一轮用户输入排进一个会话，交回那条消息的身份。
 //
-// 源: packages/sdk/server/src/server.ts:132-143
+// 源: packages/sdk/server/src/server.ts:171-193
 //
 // 它**只**说明这条消息进了队列，不说明这一轮跑出了什么——之后的动静从
 // `session.event` 那条通知流里看。
 func (s *Server) Prompt(ctx context.Context, params sdkprotocol.SessionPromptParams) (sdkprotocol.SessionPromptResult, error) {
+	// 握手之前一轮输入都不收：这条线上的路由还没定下来，此刻建出来的会话会带着
+	// 一条空路由，一步都跑不动。
+	//
+	// 源: packages/sdk/server/src/server.ts:177
+	s.mutex.Lock()
+	ready := s.initialized
+	s.mutex.Unlock()
+	if !ready {
+		return sdkprotocol.SessionPromptResult{}, fmt.Errorf("sdkserver: 这台 SDK 服务器还没握手")
+	}
+
 	handle, err := s.getOrCreateSession(ctx, params.SessionID)
 	if err != nil {
 		return sdkprotocol.SessionPromptResult{}, err
@@ -201,12 +315,89 @@ func (s *Server) Prompt(ctx context.Context, params sdkprotocol.SessionPromptPar
 	// 只重载 agent 循环的那种重启会把循环里的 agent 拆掉，而这条会话记录活了下来；
 	// 一个已经被拆掉的 agent 收下 Followup 之后什么都不会发生，所以投递之前先拿
 	// 注册表验一遍这条记录指的还是不是活着的那一个。
-	if live, ok := s.config.Agents.Get(handle.Agent.ID()); !ok || live != handle.Agent {
-		return sdkprotocol.SessionPromptResult{}, fmt.Errorf("sdkserver: 这个会话的 agent 在服务器之外被拆掉了：%s", params.SessionID)
+	if err := s.assertLiveAgent(handle, params.SessionID); err != nil {
+		return sdkprotocol.SessionPromptResult{}, err
 	}
-	message := llm.NewUserMessage(params.ContentBlocks, llm.UserSource{})
+	content, err := s.durablePromptContent(ctx, params.ContentBlocks)
+	if err != nil {
+		return sdkprotocol.SessionPromptResult{}, err
+	}
+	// 附件准入是一道会等 I/O 的边：这期间收摊、或者一次只重载循环的重启，都可能把
+	// 上面攥住的那个 handle 摘掉。所以过了这道边要再验一遍。
+	//
+	// 源: packages/sdk/server/src/server.ts:184-186
+	if err := s.assertLiveAgent(handle, params.SessionID); err != nil {
+		return sdkprotocol.SessionPromptResult{}, err
+	}
+	message := llm.NewUserMessage(content, llm.UserSource{})
 	handle.Agent.Followup(message)
 	return sdkprotocol.SessionPromptResult{MessageID: message.ID}, nil
+}
+
+// assertLiveAgent 验这条会话记录指着的 agent 还是注册表里活着的那一个。
+//
+// 源: packages/sdk/server/src/server.ts:195-199
+func (s *Server) assertLiveAgent(handle agent.Handle, sessionID string) error {
+	if live, ok := s.config.Agents.Get(handle.Agent.ID()); !ok || live != handle.Agent {
+		return fmt.Errorf("sdkserver: 这个会话的 agent 在服务器之外被拆掉了：%s", sessionID)
+	}
+	return nil
+}
+
+// durablePromptContent 把一轮输入里的内联图片准入成耐久引用，其余原样交回。
+//
+// 源: packages/sdk/server/src/server.ts:39-52（durablePromptContent）
+//
+// 一张图都没有时一次存储都不碰，这一点和 DSH 那句提前返回一样：绝大多数轮次是
+// 纯文本的，不该为它们要求一个附件库。
+//
+// 整批一次准入而不是逐张——[attachment.AdmitEncodedImages] 走的是批次规则（张数、
+// 字节总和、媒体类型），逐张送进去就绕开了「一条消息最多带几张图」那几条。
+func (s *Server) durablePromptContent(
+	ctx context.Context, blocks sdkprotocol.PromptContent,
+) (llm.Content, error) {
+	if blocks == nil {
+		// nil 和长度为零分得开：往下这条消息的内容是原样落进会话日志的，
+		// 一个空切片和「根本没给内容」在那份日志的往返上不是同一件事。
+		return nil, nil
+	}
+
+	encoded := make([]attachment.EncodedImage, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Encoded != nil {
+			encoded = append(encoded, attachment.EncodedImage{
+				MediaType: block.Encoded.MimeType,
+				Data:      block.Encoded.Data,
+			})
+		}
+	}
+
+	content := make(llm.Content, 0, len(blocks))
+	if len(encoded) == 0 {
+		for _, block := range blocks {
+			content = append(content, block.Durable)
+		}
+		return content, nil
+	}
+
+	if s.config.Attachments == nil {
+		return nil, fmt.Errorf("sdkserver: 一轮带内联图片的输入需要一个附件库")
+	}
+	refs, err := attachment.AdmitEncodedImages(ctx, s.config.Attachments, encoded)
+	if err != nil {
+		return nil, fmt.Errorf("sdkserver: 内联图片准入失败：%w", err)
+	}
+
+	next := 0
+	for _, block := range blocks {
+		if block.Encoded == nil {
+			content = append(content, block.Durable)
+			continue
+		}
+		content = append(content, llm.ImageBlock{Attachment: refs[next]})
+		next++
+	}
+	return content, nil
 }
 
 // getOrCreateSession 交出一个会话标识对应的那个 agent，没有就建一个。
@@ -250,7 +441,12 @@ func (s *Server) getOrCreateSession(ctx context.Context, sessionID string) (agen
 // "Composing a child agent" 那一节）。
 func (s *Server) createSession(ctx context.Context, sessionID string) (agent.Handle, error) {
 	s.mutex.Lock()
-	owner, options := s.owner, agent.Options{Provider: s.provider, Model: s.model, MaxTokens: s.maxTokens}
+	owner, options := s.owner, agent.Options{
+		Provider:        s.provider,
+		Model:           s.model,
+		ReasoningEffort: s.reasoningEffort,
+		MaxTokens:       s.maxTokens,
+	}
 	cwd := s.cwd
 	s.mutex.Unlock()
 
@@ -315,8 +511,8 @@ func (s *Server) performShutdown(ctx context.Context) error {
 		handles = append(handles, handle)
 	}
 	clear(s.sessions)
-	unmount := s.unmount
-	s.unmount = nil
+	unmounts := s.unmounts
+	s.unmounts = nil
 	s.mutex.Unlock()
 
 	for _, handle := range handles {
@@ -324,8 +520,9 @@ func (s *Server) performShutdown(ctx context.Context) error {
 			failures = append(failures, fmt.Errorf("sdkserver: 拆会话 %s 失败：%w", handle.Agent.ID(), err))
 		}
 	}
-	if unmount != nil {
-		if err := unmount(ctx); err != nil {
+	// 反序卸：后挂上的那个可能压在先挂上的那个之上。
+	for index := len(unmounts) - 1; index >= 0; index-- {
+		if err := unmounts[index](ctx); err != nil {
 			failures = append(failures, fmt.Errorf("sdkserver: 卸兜底适配器失败：%w", err))
 		}
 	}

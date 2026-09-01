@@ -1,4 +1,4 @@
-// 本文件的作用：往裁决表上填一条结论，且只填一条。
+// Command rule 往裁决表上填一条结论，且只填一条。
 //
 // 为什么要有它：裁决表是九列 TSV，制表符和空列在编辑器里看不见。手工改一行，
 // 改错列、吃掉一个制表符、把 CRLF 带进来——这些都不会当场报错，只会在门禁那边
@@ -26,7 +26,7 @@ import (
 	"os"
 	"strings"
 
-	"ds-harness-go/tools/internal/rulingtable"
+	"github.com/snight1983/ds-harness-go/tools/internal/rulingtable"
 )
 
 func main() {

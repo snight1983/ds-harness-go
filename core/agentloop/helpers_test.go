@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // fixedClock 是一个走得可预测的时钟：每读一次加一毫秒。

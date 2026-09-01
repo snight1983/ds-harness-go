@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // changeEvent 造一条 schedule/change 事件；负载原样放进去，不做任何检查。

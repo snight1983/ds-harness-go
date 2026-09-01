@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // SessionView 是这个协调器从一个活会话身上要看的全部东西。

@@ -8,10 +8,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/compaction"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/compaction"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionquery"
 )
 
 // fakeSessions 是一份可以按会话定制失败的会话查询来源替身。

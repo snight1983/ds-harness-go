@@ -14,9 +14,9 @@ import (
 	"sync"
 	"weak"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // pluginName 是这一层给自己的消息盖的那个来源标签。

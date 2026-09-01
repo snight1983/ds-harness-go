@@ -1,5 +1,5 @@
 // Package askuser 是 ask_user_question 那件面向模型的工具：它把模型写出来的一批
-// 问题交给 [ds-harness-go/interaction/userquestions] 那道接缝，等人回答，再把答案
+// 问题交给 [github.com/snight1983/ds-harness-go/interaction/userquestions] 那道接缝，等人回答，再把答案
 // 当成一次普通的工具结果送回循环里。
 //
 // 对应 DSH 的 @deepseek-ai/dsh-tool-ask-user（packages/interaction/tool-ask-user）。
@@ -13,7 +13,7 @@
 // ——把模型那份 snake_case 的参数翻成接缝的形状，再把答案翻回模型看得懂的形状。
 //
 // 拒绝的话术因此也只有一份：接缝报的错原样成为这次工具调用的失败，而
-// [userquestions.Error] 带着的 ErrorName/ErrorCode 会被 [ds-harness-go/core/tools]
+// [userquestions.Error] 带着的 ErrorName/ErrorCode 会被 [github.com/snight1983/ds-harness-go/core/tools]
 // 那道结果收敛抄进 Failure.Info，模型和上层都不必解析错误文本。
 //
 // # 和 DSH 不一样的地方

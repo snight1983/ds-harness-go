@@ -16,12 +16,12 @@ import (
 
 	wire "github.com/coder/acp-go-sdk"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // errPromptCancelled 与 errBridgeDisposed 是中止一次准入的两个原因。
@@ -33,6 +33,7 @@ import (
 var (
 	errPromptCancelled = errors.New("acp: 这次 ACP 提示词被取消了")
 	errBridgeDisposed  = errors.New("acp: 这座 ACP 桥正在收摊")
+	errSessionClosing  = errors.New("acp: 这条 ACP 会话正在关掉")
 )
 
 // invalidParams 造一个「客户端给错了东西」的线上错误。
@@ -117,6 +118,23 @@ type sessionRecord struct {
 	// dispose 拆掉它，一次性。
 	dispose func(context.Context) error
 
+	// control 是这条会话那份模型选择，为 nil 表示这条线没挂 LLM 目录。
+	//
+	// 源: packages/acp/acp/src/session.ts:101
+	control *ModelControl
+
+	// pendingSelections 记的是已经排进收件箱、还没被认领走的那几条消息各自钉的路由。
+	//
+	// 源: packages/acp/acp/src/session.ts:105
+	//
+	// 它在认领那一刻被取走并清掉：从那时起这份选择由 [ModelControl] 按回合钉着。
+	pendingSelections map[llm.MessageID]agent.ModelSelection
+
+	// closing 一置起来这条会话就不再接新提示词、也不再改配置。
+	//
+	// 源: packages/acp/acp/src/session.ts:104, 473-475
+	closing bool
+
 	// outputTail 是助手输出那条有序投递链的**当下**这一节：它在这一节送完之后关掉。
 	//
 	// 新增: DSH 用 `outputTail: Promise<void>`，每来一条消息就 `.then` 接一节上去。
@@ -157,6 +175,14 @@ type Bridge struct {
 	imagePromptEnabled bool
 	// sessions 是这座桥自己建出来的那些会话。
 	sessions map[sessionlog.SessionID]*sessionRecord
+	// activating 是那几条正在续跑半路上、还没进 sessions 的会话标识。
+	//
+	// 源: packages/acp/acp/src/index.ts:107（activating）
+	//
+	// 一次续跑要先翻存档、再建 agent，那两步之间这条会话在两张表里都查不到。这张表
+	// 补上那段空当：不然两次同时到的 session/resume 会在同一段存档上各建一个 agent，
+	// 而 `session/list` 也会把一条马上就要活过来的会话报成可续的。
+	activating map[sessionlog.SessionID]struct{}
 	// disposers 是那几条订阅的撤销函数，按装上的次序排。
 	disposers []func(context.Context) error
 
@@ -216,7 +242,8 @@ func (b *Bridge) Install(ctx context.Context, owner *scope.Scope, peer Peer) (fu
 //
 // 源: packages/acp/acp/src/index.ts:222, 254, 260, 271
 //
-// 审批那一条只在挂了审批服务时才装：没挂就是这条线上没人拍板，这座桥也就不参与。
+// 后两条各自跟着一样可选的协作者走：没挂 LLM 目录就没有配置项可推，没挂审批服务就是
+// 这条线上没人拍板，这座桥也就不参与。
 func (b *Bridge) subscribe(ctx context.Context, owner *scope.Scope) error {
 	steps := []func() (func(context.Context) error, error){
 		func() (func(context.Context) error, error) {
@@ -228,6 +255,11 @@ func (b *Bridge) subscribe(ctx context.Context, owner *scope.Scope) error {
 		func() (func(context.Context) error, error) {
 			return b.config.Agents.OnError(ctx, owner, b.onAgentError)
 		},
+	}
+	if b.config.Models != nil {
+		steps = append(steps, func() (func(context.Context) error, error) {
+			return b.config.Models.OnAdaptersUpdated(ctx, owner, b.onAdaptersUpdated)
+		})
 	}
 	if b.config.Approvals != nil {
 		steps = append(steps, func() (func(context.Context) error, error) {
@@ -294,24 +326,24 @@ func (b *Bridge) notify(ctx context.Context, notification wire.SessionNotificati
 	}
 }
 
-// onSessionEvent 只往线上发**已提交**的助手文本和图，顺便记下相关回合的结束理由。
+// onSessionEvent 把**已提交**的助手消息、推理、工具调用与结果翻上线，顺便记下相关
+// 回合的结束理由并放掉那个回合上的模型钉住。
 //
-// 源: packages/acp/acp/src/index.ts:222-252
+// 源: packages/acp/acp/src/session.ts:229-268（onSessionEvent）
 //
-// 原始流片段、推理、工具、计划、标题、重试标记一条都不发：那些是呈现和轨迹数据，不
-// 属于这条自动化线。每条会话一条投递链，好让块与消息的先后次序扛得住中途那些异步的
-// 附件读取。
+// 原始流片段、计划、标题、重试标记仍然一条都不发：那些是呈现数据，不属于这条自动化
+// 线。发出去的这四样都是**已提交**的耐久事实，DSH 上游发的也正是这四样。每条会话一
+// 条投递链，好让块与消息的先后次序扛得住中途那些异步的附件读取。
 //
-// 新增: DSH 那个 `finally` 是为了「助手那一支抛了也照样记结束理由」。Go 这边两种事件
+// 新增: DSH 那个 `finally` 是为了「助手那一支抛了也照样记结束理由」。Go 这边几种事件
 // 类型互斥，一条事件不可能既是 assistant/message 又是 turn/end，所以那层 finally 收敛
-// 成了并列的两个分支。
+// 成了并列的分支。
 //
-// 新增: 下面那两处类型断言测不到，这是本包唯一两条没被覆盖的语句（其余 99.6% 全覆盖）。
-// [sessionlog.DecodeData] 按事件类型派发，`assistant/message` 解出来的**只可能**是
-// [sessionlog.AssistantMessageData]，`turn/end` 同理——要走到那两个 `return` 上，得先把
-// 事件类型和负载类型的对应关系改错。那正是留着它们的理由：DSH 那边是 TS 的判别联合，
-// 编译器替它挡住了这件事；Go 这边 `any` 挡不住，而一次静默的错配会让这条线**无声地**
-// 少发一条助手消息、或者少记一次回合结束。宁可多这两行。
+// 新增: 下面那几处类型断言测不到。[sessionlog.DecodeData] 按事件类型派发，
+// `assistant/message` 解出来的**只可能**是 [sessionlog.AssistantMessageData]，另外三种
+// 同理——要走到那几个 `return` 上，得先把事件类型和负载类型的对应关系改错。那正是留着
+// 它们的理由：DSH 那边是 TS 的判别联合，编译器替它挡住了这件事；Go 这边 `any` 挡不住，
+// 而一次静默的错配会让这条线**无声地**少发一条更新、或者少记一次回合结束。
 func (b *Bridge) onSessionEvent(sess *coresession.Session, event sessionlog.Event) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
@@ -320,24 +352,41 @@ func (b *Bridge) onSessionEvent(sess *coresession.Session, event sessionlog.Even
 	if !ok || record.agent.Session() != sess {
 		return
 	}
+	data, err := sessionlog.DecodeData(event)
+	if err != nil {
+		b.config.warn(fmt.Sprintf("acp: %s 解不开：%v", event.Type, err))
+		return
+	}
 	switch event.Type {
 	case sessionlog.EventAssistantMessage:
-		data, err := sessionlog.DecodeData(event)
-		if err != nil {
-			b.config.warn(fmt.Sprintf("acp: assistant/message 解不开：%v", err))
-			return
-		}
 		message, typed := data.(sessionlog.AssistantMessageData)
 		if !typed {
 			return
 		}
-		b.scheduleDeliveryLocked(record, message)
-	case sessionlog.EventTurnEnd:
-		data, err := sessionlog.DecodeData(event)
-		if err != nil {
-			b.config.warn(fmt.Sprintf("acp: turn/end 解不开：%v", err))
+		b.scheduleLocked(record, turnOwner(record, message.Turn), func(ctx context.Context) ([]wire.SessionUpdate, error) {
+			return AssistantUpdates(ctx, b.config.Attachments, b.config.Meter, sess, message)
+		})
+	case sessionlog.EventToolCall:
+		call, typed := data.(sessionlog.ToolCallData)
+		if !typed {
 			return
 		}
+		b.scheduleLocked(record, turnOwner(record, call.Turn), func(context.Context) ([]wire.SessionUpdate, error) {
+			return []wire.SessionUpdate{ToolCallUpdate(call)}, nil
+		})
+	case sessionlog.EventToolResult:
+		result, typed := data.(sessionlog.ToolResultData)
+		if !typed {
+			return
+		}
+		b.scheduleLocked(record, turnOwner(record, result.Turn), func(ctx context.Context) ([]wire.SessionUpdate, error) {
+			update, onWire, err := ToolResultUpdate(ctx, b.config.Attachments, result)
+			if err != nil || !onWire {
+				return nil, err
+			}
+			return []wire.SessionUpdate{update}, nil
+		})
+	case sessionlog.EventTurnEnd:
 		end, typed := data.(sessionlog.TurnEndData)
 		if !typed {
 			return
@@ -346,86 +395,169 @@ func (b *Bridge) onSessionEvent(sess *coresession.Session, event sessionlog.Even
 		if inflight != nil && inflight.hasTurn && inflight.turn == end.Turn {
 			inflight.endReason = end.Reason
 		}
+		// 这个回合的每一步都跑完了，钉住的那份路由到此为止——之后装配用的是这条会话
+		// 当下**配置成**的那一份。ReleaseTurn 只认这个确切的回合号，所以一次迟到的
+		// turn/end 放不掉后面那个回合的钉住。
+		if record.control != nil {
+			record.control.ReleaseTurn(end.Turn)
+		}
 	}
 }
 
-// scheduleDeliveryLocked 把一条已提交的助手消息接到这条会话那条投递链的尾巴上。
+// scheduleLocked 把一节待发的更新接到这条会话那条投递链的尾巴上。
 //
-// 源: packages/acp/acp/src/index.ts:227-244
+// 源: packages/acp/acp/src/session.ts:232-266
 //
-// 调用方必须攥着 [Bridge.mutex]。接上去这一步在锁里做完，所以两条同时到的消息拿到的
+// build 在这条链轮到自己的时候才跑：附件读取是异步的，先转完再排队会让两条消息的
+// 块次序跟着读取快慢乱掉。owner 为 nil 表示这一节转不动时不算在任何一次提示词头上。
+//
+// 调用方必须攥着 [Bridge.mutex]。接上去这一步在锁里做完，所以两条同时到的事件拿到的
 // 是两个前后相接的位置，谁也插不到谁前面去。
-func (b *Bridge) scheduleDeliveryLocked(record *sessionRecord, data sessionlog.AssistantMessageData) {
-	// 只有当下这次提示词**那个**回合名下的输出，转不动时才算它的失败。
-	var owner *inflightPrompt
-	if inflight := record.inflight; inflight != nil && inflight.hasTurn && inflight.turn == data.Turn {
-		owner = inflight
-	}
+func (b *Bridge) scheduleLocked(
+	record *sessionRecord,
+	owner *inflightPrompt,
+	build func(context.Context) ([]wire.SessionUpdate, error),
+) {
 	previous := record.outputTail
 	next := make(chan struct{})
 	record.outputTail = next
 
 	sessionID := record.agent.ID()
-	content := data.Message.Content
 	go func() {
 		defer close(next)
 		<-previous
-		b.deliver(sessionID, content, owner)
+		b.deliver(sessionID, build, owner)
 	}()
 }
 
-// deliver 把一条助手消息的每一个块翻成线上内容并按序发出去。
+// deliver 转出这一节的那几条更新并按序发出去。
 //
-// 源: packages/acp/acp/src/index.ts:230-244
+// 源: packages/acp/acp/src/session.ts:236-243
 //
-// 一个块转不动就整条消息到此为止（DSH 那个 promise 一 reject，for 循环就出来了），失败
-// 记在那次提示词名下并写一行日志——它改变不了已经发出去的那几块。
-func (b *Bridge) deliver(sessionID sessionlog.SessionID, content llm.Content, owner *inflightPrompt) {
+// 转换整节一起做：DSH 的 `assistantUpdates` 是一个交回整个数组的异步函数，一个块转
+// 不动就整条消息一条都不发。失败记在那次提示词名下并写一行日志。
+func (b *Bridge) deliver(
+	sessionID sessionlog.SessionID,
+	build func(context.Context) ([]wire.SessionUpdate, error),
+	owner *inflightPrompt,
+) {
 	b.mutex.Lock()
 	ctx := b.notifyCtx
 	b.mutex.Unlock()
 	if ctx == nil {
 		return
 	}
-	for _, block := range content {
-		converted, onWire, err := AssistantBlockToACP(ctx, b.config.Attachments, block)
-		if err != nil {
-			b.mutex.Lock()
-			if owner != nil && owner.outputError == nil {
-				owner.outputError = err
-			}
-			b.mutex.Unlock()
-			b.config.warn(fmt.Sprintf("acp: 助手输出转不动：%v", err))
-			return
+	updates, err := build(ctx)
+	if err != nil {
+		b.mutex.Lock()
+		if owner != nil && owner.outputError == nil {
+			owner.outputError = err
 		}
-		if !onWire {
-			continue
-		}
-		b.notify(ctx, wire.SessionNotification{
-			SessionId: wire.SessionId(sessionID),
-			Update: wire.SessionUpdate{
-				AgentMessageChunk: &wire.SessionUpdateAgentMessageChunk{Content: converted},
-			},
-		})
+		b.mutex.Unlock()
+		b.config.warn(fmt.Sprintf("acp: 助手输出转不动：%v", err))
+		return
+	}
+	for _, update := range updates {
+		b.notify(ctx, wire.SessionNotification{SessionId: wire.SessionId(sessionID), Update: update})
 	}
 }
 
-// onInboxClaimed 把这次提示词那条消息落到的那个回合号记下来。
+// onAdaptersUpdated 在 LLM 拓扑变了之后，把每条会话那份配置项状态重新推给对面。
 //
-// 源: packages/acp/acp/src/index.ts:254-258
+// 源: packages/acp/acp/src/session.ts:270-284（topologyChanged）
+//
+// 选项在链**外**算：翻目录要问适配器，那一步可能很慢，不该把这条会话的助手输出堵住。
+// 算完之后那条通知才排上链，于是它和已经排在前面的输出之间仍然是有序的。
+// 两处失败都只记一行：一份推不出去的配置改变不了运行时里已经变了的拓扑。
+func (b *Bridge) onAdaptersUpdated() {
+	b.mutex.Lock()
+	ctx := b.notifyCtx
+	records := make([]*sessionRecord, 0, len(b.sessions))
+	for _, record := range b.sessions {
+		if record.control != nil {
+			records = append(records, record)
+		}
+	}
+	b.mutex.Unlock()
+	if ctx == nil {
+		return
+	}
+	for _, record := range records {
+		go b.pushConfigOptions(ctx, record)
+	}
+}
+
+// pushConfigOptions 算一条会话当下那份配置项状态，然后把它排上那条投递链。
+//
+// 源: packages/acp/acp/src/session.ts:271-283
+func (b *Bridge) pushConfigOptions(ctx context.Context, record *sessionRecord) {
+	options, err := record.control.Options(ctx)
+	if err != nil {
+		b.config.warn(fmt.Sprintf("acp: 会话 %s 的配置项算不出来：%v", record.agent.ID(), err))
+		return
+	}
+	b.mutex.Lock()
+	if b.sessions[record.agent.ID()] != record {
+		// 这条会话在算选项的这段时间里被关掉了。
+		b.mutex.Unlock()
+		return
+	}
+	b.scheduleLocked(record, nil, func(context.Context) ([]wire.SessionUpdate, error) {
+		return []wire.SessionUpdate{{
+			ConfigOptionUpdate: &wire.SessionConfigOptionUpdate{ConfigOptions: options},
+		}}, nil
+	})
+	b.mutex.Unlock()
+}
+
+// turnOwner 交出这个回合名下那次半路上的提示词，没有就是 nil。
+//
+// 源: packages/acp/acp/src/index.ts:233
+//
+// 只有当下这次提示词**那个**回合名下的输出，转不动时才算它的失败：别的回合是这个
+// agent 上自主活动的事，和对面正在等的那次答复无关。
+//
+// 调用方必须攥着 [Bridge.mutex]。
+func turnOwner(record *sessionRecord, turn int) *inflightPrompt {
+	inflight := record.inflight
+	if inflight != nil && inflight.hasTurn && inflight.turn == turn {
+		return inflight
+	}
+	return nil
+}
+
+// onInboxClaimed 把这次提示词那条消息落到的那个回合号记下来，并把这条消息排队时钉的
+// 那份路由按到这个回合上。
+//
+// 源: packages/acp/acp/src/session.ts:286-296（onInboxClaimed）
 //
 // 之后的结束理由、输出失败归属、以及"区间内还是区间外的错误"三件事，全靠这个回合号
 // 认人。
+//
+// 钉住那一半管的是另一件事：一条消息排队和它被认领之间，对面可以改模型。钉住让这个
+// 回合的每一步走的都是排队那一刻那条路由——对面看到的和下一次装配抓的仍然是改完之后
+// 那一份，所以回合中途改模型不会把正在跑的这一步换掉。
 func (b *Bridge) onInboxClaimed(live agent.Agent, message llm.Message, turn int) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
 	record := b.ownedRecordLocked(live)
-	if record == nil || record.inflight == nil || record.inflight.messageID != message.ID {
+	if record == nil {
 		return
 	}
-	record.inflight.turn = turn
-	record.inflight.hasTurn = true
+	if inflight := record.inflight; inflight != nil && inflight.messageID == message.ID {
+		inflight.turn = turn
+		inflight.hasTurn = true
+	}
+	if record.control == nil {
+		return
+	}
+	selection, pinned := record.pendingSelections[message.ID]
+	if !pinned {
+		return
+	}
+	delete(record.pendingSelections, message.ID)
+	record.control.PinTurn(turn, selection)
 }
 
 // onAgentError 认领一次落在**相关回合之外**的区间失败，并当场开始结算。
@@ -462,7 +594,7 @@ func (b *Bridge) onAgentError(failure agent.TurnError) {
 // 授权：不是 allow-once 就是拒。
 //
 // 新增: DSH 用 `request.agent` 直接查那张会话表——它那边 agent 就是键。Go 里
-// [ds-harness-go/core/tools.ApprovalRequest.Agent] 是一把 [scope.Key]，所以这里按那把钥匙
+// [github.com/snight1983/ds-harness-go/core/tools.ApprovalRequest.Agent] 是一把 [scope.Key]，所以这里按那把钥匙
 // 扫一遍自己名下的会话。这张表就是这条连接开出来的那些会话，量级是个位数。
 func (b *Bridge) answerApproval(
 	ctx context.Context,
@@ -604,22 +736,40 @@ func (b *Bridge) clearAndFinish(record *sessionRecord, inflight *inflightPrompt,
 
 // Initialize 握手：算出这条线能不能**如实**声明支持内联图，并交回这一端的身份。
 //
-// 源: packages/acp/acp/src/index.ts:290-302
+// 源: packages/acp/acp/src/index.ts:176-190
 //
 // 单版本服务端：规范说的"支持就回同一个版本，否则回自己支持的最新版本"，在这里是同
 // 一个答案。
+//
+// 新增: DSH 那份能力表是写死的常量——它的 `inject` 声明了 llm 和 sessionPersistence
+// 两个必需服务，所以那几项在它那边永远都在。Go 这边它们是可以为 nil 的装配项（见
+// [Config]），所以这里逐项按**真的挂了没有**来声明：一条声明了自己办不到的能力，比
+// 一条不声明要糟得多——对面会照着它去发请求，然后收到 -32601。
 func (b *Bridge) Initialize(ctx context.Context, _ wire.InitializeRequest) (wire.InitializeResponse, error) {
 	enabled := SupportsImagePrompts(ctx, b.config.Attachments, b.config.Models, b.config.Provider, b.config.Model)
 	b.mutex.Lock()
 	b.imagePromptEnabled = enabled
 	b.mutex.Unlock()
-	return wire.InitializeResponse{
-		ProtocolVersion: wire.ProtocolVersionNumber,
-		AgentInfo:       &wire.Implementation{Name: AgentName, Version: AgentVersion},
-		AgentCapabilities: wire.AgentCapabilities{
-			PromptCapabilities: wire.PromptCapabilities{Image: enabled, Audio: false, EmbeddedContext: false},
+
+	// close 不挂条件：它拆的是这座桥自己攥着的那条记录，不靠任何一样可选的协作者。
+	capabilities := wire.AgentCapabilities{
+		PromptCapabilities: wire.PromptCapabilities{Image: enabled, Audio: false, EmbeddedContext: false},
+		SessionCapabilities: wire.SessionCapabilities{
+			Close: &wire.SessionCloseCapabilities{},
 		},
-		AuthMethods: []wire.AuthMethod{},
+	}
+	if b.config.MCPServers != nil {
+		capabilities.McpCapabilities = wire.McpCapabilities{Http: true}
+	}
+	if b.config.Persistence != nil {
+		capabilities.SessionCapabilities.List = &wire.SessionListCapabilities{}
+		capabilities.SessionCapabilities.Resume = &wire.SessionResumeCapabilities{}
+	}
+	return wire.InitializeResponse{
+		ProtocolVersion:   wire.ProtocolVersionNumber,
+		AgentInfo:         &wire.Implementation{Name: AgentName, Version: AgentVersion},
+		AgentCapabilities: capabilities,
+		AuthMethods:       []wire.AuthMethod{},
 	}, nil
 }
 
@@ -640,31 +790,124 @@ func (b *Bridge) Authenticate(context.Context, wire.AuthenticateRequest) (wire.A
 // 要配名册的部署得先在这里接上一份（DSH agent-presets 的 README "Composing a child
 // agent" 那一节）。
 func (b *Bridge) NewSession(ctx context.Context, params wire.NewSessionRequest) (wire.NewSessionResponse, error) {
-	b.mutex.Lock()
-	closed, owner := b.closed, b.owner
-	provider, model := b.config.Provider, b.config.Model
-	b.mutex.Unlock()
-
-	if closed {
-		return wire.NewSessionResponse{}, internalError("the ACP bridge has been disposed")
+	owner, err := b.activationOwner()
+	if err != nil {
+		return wire.NewSessionResponse{}, err
 	}
-	if owner == nil {
-		return wire.NewSessionResponse{}, internalError("the ACP bridge has not been installed")
-	}
-	if err := validateSessionParams(params); err != nil {
+	if err := validateWorkspaceParams(params.Cwd, params.AdditionalDirectories); err != nil {
 		return wire.NewSessionResponse{}, err
 	}
 
+	fallback := b.fallbackSelection()
 	sessionID := sessionlog.SessionID(uuid.NewString())
+	control := b.newModelControl(fallback)
 	handle, err := b.config.Agents.Create(ctx, owner, agent.CreateOptions{
 		SessionID:    sessionID,
 		Cwd:          params.Cwd,
-		AgentOptions: agent.Options{Provider: provider, Model: model},
+		AgentOptions: agent.Options{Provider: fallback.Provider, Model: fallback.Model},
+		Setup:        b.sessionSetup(control, params.McpServers),
 	})
 	if err != nil {
-		return wire.NewSessionResponse{}, internalError(fmt.Sprintf("session/new failed: %v", err))
+		return wire.NewSessionResponse{}, mapActivationError("session/new", err)
 	}
 
+	record, err := b.adopt(ctx, sessionID, handle, control)
+	if err != nil {
+		return wire.NewSessionResponse{}, err
+	}
+	options, err := b.configOptions(ctx, record)
+	if err != nil {
+		b.abandon(ctx, sessionID, record)
+		return wire.NewSessionResponse{}, err
+	}
+	return wire.NewSessionResponse{SessionId: wire.SessionId(sessionID), ConfigOptions: options}, nil
+}
+
+// activationOwner 查一遍「这座桥现在开得出会话吗」，交出挂新 agent 的那个作用域。
+//
+// 源: packages/acp/acp/src/index.ts:136-141（assertOpen）
+func (b *Bridge) activationOwner() (*scope.Scope, error) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	if b.closed {
+		return nil, internalError("the ACP bridge has been disposed")
+	}
+	if b.owner == nil {
+		return nil, internalError("the ACP bridge has not been installed")
+	}
+	return b.owner, nil
+}
+
+// fallbackSelection 是这条线上每一个会话开局用的那份路由。
+//
+// 源: packages/acp/acp/src/index.ts:72-75, packages/acp/acp/src/session.ts:120
+func (b *Bridge) fallbackSelection() agent.ModelSelection {
+	return agent.ModelSelection{Provider: b.config.Provider, Model: b.config.Model}
+}
+
+// newModelControl 造这条会话那份模型控制，没挂 LLM 目录时交回 nil。
+//
+// 源: packages/acp/acp/src/session.ts:118-121
+func (b *Bridge) newModelControl(initial agent.ModelSelection) *ModelControl {
+	if b.config.Models == nil {
+		return nil
+	}
+	return NewModelControl(b.config.Models, initial, true)
+}
+
+// sessionSetup 造那份创建期的世界组装：装上模型选择，挂上这条会话自带的 MCP 服务器。
+//
+// 源: packages/acp/acp/src/session.ts:122-127, 176-181
+//
+// 两件事都必须在这里做，而不是在 agent 公布之后：它们决定第一次提示词装配看得见什么。
+// 交回的 commit 什么都不做——这两样的拆除都挂在 agentScope 上，而 [agent.Setup] 的约定
+// 保证 setup 报错时那个作用域整个被处置，所以这里不必自己回滚。
+func (b *Bridge) sessionSetup(control *ModelControl, servers []wire.McpServer) agent.Setup {
+	if control == nil && len(servers) == 0 {
+		return nil
+	}
+	return func(ctx context.Context, agentScope *scope.Scope) (func() error, error) {
+		if control != nil {
+			if _, err := control.Install(ctx, agentScope, b.config.Agents, b.config.Prompts); err != nil {
+				return nil, err
+			}
+		}
+		if err := MountMCPServers(ctx, b.config.MCPServers, agentScope, servers); err != nil {
+			return nil, err
+		}
+		return func() error { return nil }, nil
+	}
+}
+
+// mapActivationError 把一次开会话的失败折成线上那两个错误码里的一个。
+//
+// 源: packages/acp/acp/src/index.ts:216-220（catch AcpMcpConfigError）
+func mapActivationError(method string, err error) error {
+	var config *MCPConfigError
+	if errors.As(err, &config) {
+		return invalidParams(config.Message)
+	}
+	return internalError(fmt.Sprintf("%s failed: %v", method, err))
+}
+
+// adopt 把一个刚活过来的 agent 记进这座桥名下。
+//
+// 源: packages/acp/acp/src/index.ts:206-214
+func (b *Bridge) adopt(
+	ctx context.Context,
+	sessionID sessionlog.SessionID,
+	handle agent.Handle,
+	control *ModelControl,
+) (*sessionRecord, error) {
+	tail := make(chan struct{})
+	close(tail)
+	record := &sessionRecord{
+		agent:             handle.Agent,
+		dispose:           handle.Dispose,
+		control:           control,
+		pendingSelections: map[llm.MessageID]agent.ModelSelection{},
+		outputTail:        tail,
+	}
 	b.mutex.Lock()
 	if b.closed {
 		// 一次真的连接关闭挤在了创建的半路上：这一个再记进表里就没人拆得掉它。
@@ -672,30 +915,54 @@ func (b *Bridge) NewSession(ctx context.Context, params wire.NewSessionRequest) 
 		if disposeErr := handle.Dispose(ctx); disposeErr != nil {
 			b.config.warn(fmt.Sprintf("acp: 收摊途中建出来的会话 %s 拆不掉：%v", sessionID, disposeErr))
 		}
-		return wire.NewSessionResponse{}, internalError("connection closed during session/new")
+		return nil, internalError("connection closed during session activation")
 	}
-	tail := make(chan struct{})
-	close(tail)
-	b.sessions[sessionID] = &sessionRecord{
-		agent:      handle.Agent,
-		dispose:    handle.Dispose,
-		outputTail: tail,
-	}
+	b.sessions[sessionID] = record
 	b.mutex.Unlock()
-	return wire.NewSessionResponse{SessionId: wire.SessionId(sessionID)}, nil
+	return record, nil
 }
 
-// validateSessionParams 拒掉这条自动化契约之外的那几样会话特性。
+// configOptions 算这条会话开局摆出去的那份配置项，没挂 LLM 目录时一项都不摆。
 //
-// 源: packages/acp/acp/src/index.ts:538-545
-func validateSessionParams(params wire.NewSessionRequest) error {
+// 源: packages/acp/acp/src/index.ts:224-226
+func (b *Bridge) configOptions(ctx context.Context, record *sessionRecord) ([]wire.SessionConfigOption, error) {
+	if record.control == nil {
+		return nil, nil
+	}
+	options, err := record.control.Options(ctx)
+	if err != nil {
+		return nil, internalError(fmt.Sprintf("session config options failed: %v", err))
+	}
+	return options, nil
+}
+
+// abandon 撤掉一次开到半路上失败了的会话。
+//
+// 源: packages/acp/acp/src/index.ts:238-241
+func (b *Bridge) abandon(ctx context.Context, sessionID sessionlog.SessionID, record *sessionRecord) {
+	b.mutex.Lock()
+	if b.sessions[sessionID] == record {
+		delete(b.sessions, sessionID)
+	}
+	b.mutex.Unlock()
+	if err := b.closeRecord(ctx, record); err != nil {
+		b.config.warn(fmt.Sprintf("acp: 开到半路的会话 %s 收不干净：%v", sessionID, err))
+	}
+}
+
+// validateWorkspaceParams 拒掉这条自动化契约之外的那几样工作区特性。
+//
+// 源: packages/acp/acp/src/index.ts:514-524（validateWorkspaceParams）
+//
+// `session/new` 和 `session/resume` 共用这一条：两边收的是同一对字段，判据也该是同一个。
+// mcpServers 不在这里拒——那一支由 [MountMCPServers] 判，因为它认不认得出来取决于这条线
+// 上挂没挂 MCP 宿主。
+func validateWorkspaceParams(cwd string, additionalDirectories []string) error {
 	switch {
-	case !filepath.IsAbs(params.Cwd):
-		return invalidParams(fmt.Sprintf("cwd must be an absolute path: %s", params.Cwd))
-	case len(params.AdditionalDirectories) > 0:
+	case !filepath.IsAbs(cwd):
+		return invalidParams(fmt.Sprintf("cwd must be an absolute path: %s", cwd))
+	case len(additionalDirectories) > 0:
 		return invalidParams("additionalDirectories is not supported")
-	case len(params.McpServers) > 0:
-		return invalidParams("mcpServers is not supported")
 	}
 	return nil
 }
@@ -717,6 +984,10 @@ func (b *Bridge) Prompt(ctx context.Context, params wire.PromptRequest) (wire.Pr
 		b.mutex.Unlock()
 		return wire.PromptResponse{}, invalidParams(fmt.Sprintf("unknown session: %s", params.SessionId))
 	}
+	if record.closing {
+		b.mutex.Unlock()
+		return wire.PromptResponse{}, invalidParams(fmt.Sprintf("session is closing: %s", params.SessionId))
+	}
 	if record.inflight != nil {
 		b.mutex.Unlock()
 		return wire.PromptResponse{}, invalidParams("a prompt is already in flight for this session")
@@ -731,9 +1002,16 @@ func (b *Bridge) Prompt(ctx context.Context, params wire.PromptRequest) (wire.Pr
 	}
 	record.inflight = inflight
 	target, imageEnabled := record.agent, b.imagePromptEnabled
+	// 这份抓拍取在准入**之前**：它是这条提示词自己那份路由。准入这一段可能跑很久（富
+	// 内容要落成耐久附件），那期间对面的一次改模型该算下一条提示词的。
+	var selection agent.ModelSelection
+	hasSelection := false
+	if record.control != nil {
+		selection, hasSelection = record.control.Snapshot()
+	}
 	b.mutex.Unlock()
 
-	admissionFailure := b.admit(admissionCtx, target, params.Prompt, imageEnabled, inflight)
+	admissionFailure := b.admit(admissionCtx, record, target, params.Prompt, imageEnabled, inflight, selection, hasSelection)
 	inflight.finishAdmission()
 	abortAdmission(nil)
 
@@ -765,10 +1043,13 @@ func (b *Bridge) Prompt(ctx context.Context, params wire.PromptRequest) (wire.Pr
 // 重载可能和存储写入赛跑。
 func (b *Bridge) admit(
 	ctx context.Context,
+	record *sessionRecord,
 	target agent.Agent,
 	prompt []wire.ContentBlock,
 	imageEnabled bool,
 	inflight *inflightPrompt,
+	selection agent.ModelSelection,
+	hasSelection bool,
 ) error {
 	if !b.isLive(target) {
 		return internalError("prompt was not queued: the agent was disposed outside the bridge")
@@ -788,6 +1069,11 @@ func (b *Bridge) admit(
 	b.mutex.Lock()
 	inflight.messageID = message.ID
 	inflight.messageQueued = true
+	// 这条消息的路由记在会话上而不是这次提示词上：认领它的是收件箱，而收件箱认领哪
+	// 一条不归这次请求管——它可能在这次请求早就返回之后才被取走。
+	if hasSelection && record.control != nil {
+		record.pendingSelections[message.ID] = selection
+	}
 	b.mutex.Unlock()
 
 	// 新增: DSH 那句注释说「这最后一次中止检查和 followup 之间不许夹任何 await」——它
@@ -860,39 +1146,397 @@ func (b *Bridge) Cancel(_ context.Context, params wire.CancelNotification) error
 	return nil
 }
 
-// 下面这六个方法这一端不办。
+// ResumeSession 在一段落了档的会话上重新活出一个 agent。
 //
-// 新增: DSH 那个 agent 对象只实现五个方法，TS 的 SDK 对没装的方法自己回 -32601。Go 的
-// [github.com/coder/acp-go-sdk.Agent] 是一个 11 方法的接口，一个都不能少，所以这六个在
-// 这里显式交回 [github.com/coder/acp-go-sdk.NewMethodNotFound]——线上仍然是 -32601，和
-// DSH 逐字相同。
+// 源: packages/acp/acp/src/index.ts:335-386（resumeSession）
 //
-// 它们每一个都由一项这座桥**从不声明**的能力把着（session 的 close / list / resume、
-// 会话配置项、会话模式、以及登出），所以一个守规矩的客户端根本不会来问。
+// 它不回放历史：ACP 的 resume 按定义就是「接着往下跑」，要读回全部消息那是 `session/load`，
+// 而这条线不办那个。
+//
+// 能续的只有顶层会话：子 agent 的会话和分叉出来的会话都由开出它们的那个父亲拥有，一个
+// 外部客户端把它们单独拉起来会造出两个都以为自己是那条日志的主人的 agent。
+func (b *Bridge) ResumeSession(ctx context.Context, params wire.ResumeSessionRequest) (wire.ResumeSessionResponse, error) {
+	if b.config.Persistence == nil {
+		return wire.ResumeSessionResponse{}, wire.NewMethodNotFound("session/resume")
+	}
+	owner, err := b.activationOwner()
+	if err != nil {
+		return wire.ResumeSessionResponse{}, err
+	}
+	if err := validateWorkspaceParams(params.Cwd, params.AdditionalDirectories); err != nil {
+		return wire.ResumeSessionResponse{}, err
+	}
+
+	sessionID := sessionlog.SessionID(params.SessionId)
+	release, err := b.beginActivation(sessionID)
+	if err != nil {
+		return wire.ResumeSessionResponse{}, err
+	}
+	defer release()
+
+	persisted, err := b.resumableHeader(ctx, sessionID, params.Cwd)
+	if err != nil {
+		return wire.ResumeSessionResponse{}, err
+	}
+
+	fallback := b.fallbackSelection()
+	control := b.newModelControl(fallback)
+	handle, err := b.config.Agents.Resume(ctx, owner, agent.ResumeOptions{
+		ResumeSessionID: persisted.ID,
+		AgentOptions:    agent.Options{Provider: fallback.Provider, Model: fallback.Model},
+		Setup:           b.sessionSetup(control, params.McpServers),
+	})
+	if err != nil {
+		return wire.ResumeSessionResponse{}, mapActivationError("session/resume", err)
+	}
+	adoptLoggedSelection(handle.Agent, control)
+
+	record, err := b.adopt(ctx, sessionID, handle, control)
+	if err != nil {
+		return wire.ResumeSessionResponse{}, err
+	}
+	options, err := b.configOptions(ctx, record)
+	if err != nil {
+		b.abandon(ctx, sessionID, record)
+		return wire.ResumeSessionResponse{}, err
+	}
+	return wire.ResumeSessionResponse{ConfigOptions: options}, nil
+}
+
+// beginActivation 占下一条会话标识的续跑位子，交回让出它的那个函数。
+//
+// 源: packages/acp/acp/src/index.ts:341-349
+//
+// 三处都要查：这座桥自己开着的、正在续跑半路上的、以及整套运行时里已经活着的（另一个
+// 前端可能就攥着它）。同一条日志上活两个 agent 会把那条日志写坏。
+func (b *Bridge) beginActivation(sessionID sessionlog.SessionID) (func(), error) {
+	_, live := b.config.Sessions.Get(sessionID)
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	_, active := b.sessions[sessionID]
+	_, activating := b.activating[sessionID]
+	if live || active || activating {
+		return nil, invalidParams(fmt.Sprintf("session is already active: %s", sessionID))
+	}
+	b.activating[sessionID] = struct{}{}
+	return func() {
+		b.mutex.Lock()
+		delete(b.activating, sessionID)
+		b.mutex.Unlock()
+	}, nil
+}
+
+// resumableHeader 从存档里找出这条会话，并判它续不续得动。
+//
+// 源: packages/acp/acp/src/index.ts:351-366
+func (b *Bridge) resumableHeader(
+	ctx context.Context,
+	sessionID sessionlog.SessionID,
+	cwd string,
+) (sessionlog.SessionHeader, error) {
+	headers, err := b.config.Persistence.List(ctx)
+	if err != nil {
+		return sessionlog.SessionHeader{}, internalError(fmt.Sprintf("session/resume failed: %v", err))
+	}
+	for _, header := range headers {
+		if header.ID != sessionID {
+			continue
+		}
+		if header.Origin == sessionlog.OriginSubagent || header.ParentSession != "" {
+			break
+		}
+		if !sameDirectory(header.Cwd, cwd) {
+			return sessionlog.SessionHeader{}, invalidParams(
+				fmt.Sprintf("session cwd does not match: %s", sessionID))
+		}
+		return header, nil
+	}
+	return sessionlog.SessionHeader{}, invalidParams(fmt.Sprintf("session is not resumable: %s", sessionID))
+}
+
+// adoptLoggedSelection 把续跑出来那条会话记着的那份路由，按回这条会话的模型控制上。
+//
+// 源: packages/acp/acp/src/session.ts:166-175（AcpSession.resume 里的 selectionFor）
+//
+// 新增: DSH 在 setup **里面**造这份控制，因为它那个 setup 收得到 agentCtx.agent。Go 的
+// [agent.Setup] 只收一个作用域（见 core/agentloop/loop.go 里 `setup(prepared.life,
+// prepared.agent.Scope())` 那一行），而那一刻重建出来的会话还没公布，从存储里也取不到。
+// 所以这里挪后一步：先按部署那份路由把控制装上，Resume 交回句柄之后、这条记录被记进
+// 表**之前**，再从日志里那份请求头把真正记着的路由按回去。
+//
+// 那段空当里可能发生的唯一一件事，是这个 agent 自己接着跑一个被打断的回合——那一步会
+// 走部署那份路由而不是日志里那份。这是这条移植上剩下的一处可观察差异，逐项记在
+// docs/portmap/decisions.md 里。
+//
+// 读不出请求头（这条日志还没有过一次请求）时什么都不改：那时装上去的那份就是对的。
+func adoptLoggedSelection(live agent.Agent, control *ModelControl) {
+	if control == nil {
+		return
+	}
+	header, ok, err := live.Session().RequestHeader()
+	if err != nil || !ok {
+		return
+	}
+	control.commit(selectionFor(header))
+}
+
+// selectionFor 从一份请求头里读出那条会话真正用着的路由。
+//
+// 源: packages/acp/acp/src/session.ts:60-72（selectionFor）
+//
+// 推理档位只在它**不是**适配器补出来的默认值时才留下：一个补出来的档位不是这条会话选
+// 的，把它按成一次显式选择会让对面在选择器上看到一个自己从来没点过的值。
+func selectionFor(header sessionlog.EpochHeader) agent.ModelSelection {
+	selection := agent.ModelSelection{Provider: header.Config.Provider, Model: header.Config.Model}
+	if header.Config.ReasoningEffort != "" && !header.AdapterDefaults.ReasoningEffort {
+		selection.ReasoningEffort = header.Config.ReasoningEffort
+	}
+	return selection
+}
+
+// ListSessions 翻一页存档里**续得动**的那些会话，最新的排前面。
+//
+// 源: packages/acp/acp/src/index.ts:388-425（listSessions）
+//
+// 活着的一条都不报：它们要么已经在这条连接上开着（对面自己知道），要么被别人攥着，
+// 两种都不该出现在一张「可以续跑」的名单里。
+func (b *Bridge) ListSessions(ctx context.Context, params wire.ListSessionsRequest) (wire.ListSessionsResponse, error) {
+	if b.config.Persistence == nil {
+		return wire.ListSessionsResponse{}, wire.NewMethodNotFound("session/list")
+	}
+	if params.Cwd != nil && !filepath.IsAbs(*params.Cwd) {
+		return wire.ListSessionsResponse{}, invalidParams(
+			fmt.Sprintf("cwd must be an absolute path: %s", *params.Cwd))
+	}
+	cursor, hasCursor, err := decodeSessionListCursor(params.Cursor)
+	if err != nil {
+		return wire.ListSessionsResponse{}, invalidParams(err.Error())
+	}
+	headers, err := b.config.Persistence.List(ctx)
+	if err != nil {
+		return wire.ListSessionsResponse{}, internalError(fmt.Sprintf("session/list failed: %v", err))
+	}
+
+	b.mutex.Lock()
+	busy := make(map[sessionlog.SessionID]struct{}, len(b.sessions)+len(b.activating))
+	for id := range b.sessions {
+		busy[id] = struct{}{}
+	}
+	for id := range b.activating {
+		busy[id] = struct{}{}
+	}
+	b.mutex.Unlock()
+
+	entries := make([]sessionListEntry, 0, len(headers))
+	for _, header := range headers {
+		if _, taken := busy[header.ID]; taken {
+			continue
+		}
+		if _, live := b.config.Sessions.Get(header.ID); live {
+			continue
+		}
+		if header.Origin == sessionlog.OriginSubagent || header.ParentSession != "" {
+			continue
+		}
+		// 没有工作目录、或者存的是一条相对路径的会话续不动：`session/resume` 那一步要
+		// 拿它和请求里的 cwd 比，而那两条判据都要求它是绝对的。
+		if header.Cwd == "" || !filepath.IsAbs(header.Cwd) {
+			continue
+		}
+		if params.Cwd != nil && !sameDirectory(header.Cwd, *params.Cwd) {
+			continue
+		}
+		entries = append(entries, sessionListEntry{
+			sessionID: header.ID,
+			cwd:       header.Cwd,
+			createdAt: header.CreatedAt,
+		})
+	}
+	sortSessionList(entries)
+
+	remaining := entries
+	if hasCursor {
+		filtered := make([]sessionListEntry, 0, len(entries))
+		for _, entry := range entries {
+			if isAfterSessionListCursor(entry, cursor) {
+				filtered = append(filtered, entry)
+			}
+		}
+		remaining = filtered
+	}
+	page := remaining
+	if size := b.config.sessionListPageSize(); len(page) > size {
+		page = page[:size]
+	}
+
+	response := wire.ListSessionsResponse{Sessions: make([]wire.SessionInfo, 0, len(page))}
+	for _, entry := range page {
+		response.Sessions = append(response.Sessions, wire.SessionInfo{
+			SessionId: wire.SessionId(entry.sessionID),
+			Cwd:       entry.cwd,
+		})
+	}
+	if len(remaining) > len(page) {
+		last := page[len(page)-1]
+		next := encodeSessionListCursor(sessionListCursor{
+			createdAt: last.createdAt,
+			sessionID: string(last.sessionID),
+		})
+		response.NextCursor = &next
+	}
+	return response, nil
+}
+
+// CloseSession 停掉一条会话上的活儿、把它排干、然后拆掉它。
+//
+// 源: packages/acp/acp/src/index.ts:427-441（closeSession）
+//
+// 不管收干净没收干净，这条记录都从表里摘掉：一条报了失败还留在表里的会话，对面既
+// 用不了也关不掉。
+func (b *Bridge) CloseSession(ctx context.Context, params wire.CloseSessionRequest) (wire.CloseSessionResponse, error) {
+	sessionID := sessionlog.SessionID(params.SessionId)
+	b.mutex.Lock()
+	if b.closed {
+		b.mutex.Unlock()
+		return wire.CloseSessionResponse{}, internalError("the ACP bridge has been disposed")
+	}
+	record, known := b.sessions[sessionID]
+	if !known {
+		b.mutex.Unlock()
+		return wire.CloseSessionResponse{}, invalidParams(fmt.Sprintf("unknown session: %s", sessionID))
+	}
+	b.mutex.Unlock()
+
+	closeErr := b.closeRecord(ctx, record)
+
+	b.mutex.Lock()
+	if b.sessions[sessionID] == record {
+		delete(b.sessions, sessionID)
+	}
+	b.mutex.Unlock()
+
+	if closeErr != nil {
+		return wire.CloseSessionResponse{}, internalError(fmt.Sprintf("session close failed: %v", closeErr))
+	}
+	return wire.CloseSessionResponse{}, nil
+}
+
+// closeRecord 按定死的次序收掉一条会话：停活儿、排干、冲刷、拆解。
+//
+// 源: packages/acp/acp/src/session.ts:462-520（AcpSession.close）
+//
+// 次序是要害。先置 closing，让新的提示词和配置改动当场被拒；再停掉正在跑的活儿；等准入
+// 那一段落地（一次正在写的富准入不能被丢在半路）；等这个 agent 空下来；等那条投递链把
+// 已提交的输出送完——session/event 是在空闲**之前**同步排上去的，所以这时候读到的尾巴
+// 已经包含了这一轮的全部。可续的子 agent 活得比开出它们的回合久，所以在拆掉这个顶层
+// agent 之前先孩子优先地排干那片森林。最后冲刷会话日志，再拆 agent。
+func (b *Bridge) closeRecord(ctx context.Context, record *sessionRecord) error {
+	b.mutex.Lock()
+	record.closing = true
+	inflight := record.inflight
+	if inflight != nil {
+		inflight.cancelRequested = true
+		inflight.abortAdmission(errSessionClosing)
+		b.settleAfterQuiescenceLocked(record, inflight)
+	}
+	// 和 [Bridge.Cancel] 同一条判据：准入还没落进耐久收件箱时，这个 agent 上跑的东西
+	// 和这次提示词无关，不该被它连累。
+	cancelAgent := inflight == nil || inflight.messageQueued
+	b.mutex.Unlock()
+
+	if cancelAgent {
+		record.agent.Cancel(sessionlog.UserCancel{}, agent.CancelOptions{})
+	}
+	if inflight != nil {
+		<-inflight.admissionDone
+	}
+
+	var failures []error
+	if err := record.agent.WhenIdle(ctx); err != nil {
+		failures = append(failures, fmt.Errorf("acp: 等会话 %s 静下来失败：%w", record.agent.ID(), err))
+	}
+	b.mutex.Lock()
+	tail := record.outputTail
+	b.mutex.Unlock()
+	<-tail
+
+	if b.config.Subagents != nil {
+		if err := b.config.Subagents.DrainContinuableDescendants(ctx, []agent.Agent{record.agent}); err != nil {
+			b.config.warn(fmt.Sprintf("acp: 可续子 agent 拆解失败：%v", err))
+		}
+	}
+	if _, err := b.config.Sessions.Flush(ctx, record.agent.Session()); err != nil {
+		failures = append(failures, fmt.Errorf("acp: 冲刷会话 %s 失败：%w", record.agent.ID(), err))
+	}
+	if err := record.dispose(ctx); err != nil {
+		failures = append(failures, fmt.Errorf("acp: 拆会话 %s 失败：%w", record.agent.ID(), err))
+	}
+
+	b.mutex.Lock()
+	clear(record.pendingSelections)
+	b.mutex.Unlock()
+	return errors.Join(failures...)
+}
+
+// SetSessionConfigOption 改一个摆出来的会话配置项，交回改完之后那份完整状态。
+//
+// 源: packages/acp/acp/src/index.ts:443-455（setSessionConfigOption）
+func (b *Bridge) SetSessionConfigOption(
+	ctx context.Context,
+	params wire.SetSessionConfigOptionRequest,
+) (wire.SetSessionConfigOptionResponse, error) {
+	// 这条线只摆 select 型的两项（模型、推理档位），所以一个布尔值请求指不出任何一个
+	// 摆出来的配置项。
+	if params.ValueId == nil {
+		return wire.SetSessionConfigOptionResponse{}, invalidParams("unsupported session config option value")
+	}
+	sessionID := sessionlog.SessionID(params.ValueId.SessionId)
+
+	b.mutex.Lock()
+	if b.closed {
+		b.mutex.Unlock()
+		return wire.SetSessionConfigOptionResponse{}, internalError("the ACP bridge has been disposed")
+	}
+	record, known := b.sessions[sessionID]
+	if !known {
+		b.mutex.Unlock()
+		return wire.SetSessionConfigOptionResponse{}, invalidParams(fmt.Sprintf("unknown session: %s", sessionID))
+	}
+	if record.closing {
+		b.mutex.Unlock()
+		return wire.SetSessionConfigOptionResponse{}, invalidParams(fmt.Sprintf("session is closing: %s", sessionID))
+	}
+	control := record.control
+	b.mutex.Unlock()
+
+	if control == nil {
+		return wire.SetSessionConfigOptionResponse{}, wire.NewMethodNotFound("session/set_config_option")
+	}
+	options, err := control.Set(ctx, params.ValueId.ConfigId, params.ValueId.Value)
+	if err != nil {
+		var config *ModelConfigError
+		if errors.As(err, &config) {
+			return wire.SetSessionConfigOptionResponse{}, invalidParams(config.Message)
+		}
+		return wire.SetSessionConfigOptionResponse{}, internalError(
+			fmt.Sprintf("session/set_config_option failed: %v", err))
+	}
+	return wire.SetSessionConfigOptionResponse{ConfigOptions: options}, nil
+}
+
+// 下面这两个方法这一端不办。
+//
+// 新增: DSH 那个 agent 对象只实现它真办的那几个方法，TS 的 SDK 对没装的方法自己回
+// -32601。Go 的 [github.com/coder/acp-go-sdk.Agent] 是一个 11 方法的接口，一个都不能少，
+// 所以这两个在这里显式交回 [github.com/coder/acp-go-sdk.NewMethodNotFound]——线上仍然是
+// -32601，和 DSH 逐字相同。
+//
+// 两个都由一项这座桥**从不声明**的能力把着（会话模式、以及登出），所以一个守规矩的
+// 客户端根本不会来问。
 
 // Logout 不办：这条线不做认证，见 [Bridge.Authenticate]。
 func (b *Bridge) Logout(context.Context, wire.LogoutRequest) (wire.LogoutResponse, error) {
 	return wire.LogoutResponse{}, wire.NewMethodNotFound("session/logout")
-}
-
-// CloseSession 不办：这座桥不声明 sessionCapabilities.close。
-func (b *Bridge) CloseSession(context.Context, wire.CloseSessionRequest) (wire.CloseSessionResponse, error) {
-	return wire.CloseSessionResponse{}, wire.NewMethodNotFound("session/close")
-}
-
-// ListSessions 不办：这座桥不声明 sessionCapabilities.list。
-func (b *Bridge) ListSessions(context.Context, wire.ListSessionsRequest) (wire.ListSessionsResponse, error) {
-	return wire.ListSessionsResponse{}, wire.NewMethodNotFound("session/list")
-}
-
-// ResumeSession 不办：这座桥不声明 sessionCapabilities.resume。
-func (b *Bridge) ResumeSession(context.Context, wire.ResumeSessionRequest) (wire.ResumeSessionResponse, error) {
-	return wire.ResumeSessionResponse{}, wire.NewMethodNotFound("session/resume")
-}
-
-// SetSessionConfigOption 不办：这座桥一个会话配置项都不摆出来。
-func (b *Bridge) SetSessionConfigOption(context.Context, wire.SetSessionConfigOptionRequest) (wire.SetSessionConfigOptionResponse, error) {
-	return wire.SetSessionConfigOptionResponse{}, wire.NewMethodNotFound("session/set_config_option")
 }
 
 // SetSessionMode 不办：这座桥一个会话模式都不摆出来。
@@ -926,7 +1570,7 @@ func (b *Bridge) Quiesce(ctx context.Context) error {
 // 时的另一个前端还活着。
 //
 // 新增: DSH 用 Promise.allSettled 并发拆并聚成一个 AggregateError。Go 这边顺着来一遍，
-// 失败用 [errors.Join] 攒着，理由和 [ds-harness-go/sdk/sdkserver] 那条逐字相同：拆解本来
+// 失败用 [errors.Join] 攒着，理由和 [github.com/snight1983/ds-harness-go/sdk/sdkserver] 那条逐字相同：拆解本来
 // 就是 I/O 少、次序敏感的收尾，并发省不下什么，却让"谁先拆完"变成不确定的。
 func (b *Bridge) performQuiesce(ctx context.Context) error {
 	b.mutex.Lock()
@@ -979,6 +1623,11 @@ func (b *Bridge) performQuiesce(ctx context.Context) error {
 	}
 
 	for _, record := range records {
+		// 冲刷排在拆解**之前**：拆掉这个 agent 会把它那条会话从存储里摘走，之后没人
+		// 再落得下那几条还攒在缓冲里的事件。
+		if _, err := b.config.Sessions.Flush(ctx, record.agent.Session()); err != nil {
+			failures = append(failures, fmt.Errorf("acp: 冲刷会话 %s 失败：%w", record.agent.ID(), err))
+		}
 		if err := record.dispose(ctx); err != nil {
 			failures = append(failures, fmt.Errorf("acp: 拆会话 %s 失败：%w", record.agent.ID(), err))
 		}

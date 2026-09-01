@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // recorder 记下每一次写进来的批次，并且可以把写卡住，好让测试在

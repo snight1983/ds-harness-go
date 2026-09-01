@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 func TestApplyProjectionTakesTheLastWrite(t *testing.T) {

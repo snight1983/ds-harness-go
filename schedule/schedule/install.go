@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
 )
 
 // Config 是装这一套要的那几样协作者。
@@ -75,7 +75,7 @@ type installation struct {
 
 // Install 把 schedule 装上去，交回把它整个摘下来的函数。
 //
-// 源: packages/schedule/schedule/src/index.ts:40-77
+// 源: packages/schedule/schedule/src/index.ts:42-84（apply）
 //
 // owner 决定这次登记落在哪一层，规矩和本仓库别处一样：[scope.NewRoot] 造出来的
 // 作用域没有身份，落全局层，看得见每一个 agent；有身份的只看得见它那条链下面的。

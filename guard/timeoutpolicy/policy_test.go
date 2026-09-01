@@ -30,10 +30,10 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/guard/timeoutpolicy"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/guard/timeoutpolicy"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // budget 是协作式工具用的那个短预算。

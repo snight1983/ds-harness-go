@@ -3,7 +3,7 @@
 //
 // 源: packages/core/agent/src/index.ts:53-214、244-298、360-617
 //
-// 这里的登记／公布／摘除三步和 [ds-harness-go/core/session.Store] 逐字同构，
+// 这里的登记／公布／摘除三步和 [github.com/snight1983/ds-harness-go/core/session.Store] 逐字同构，
 // 那边的每一条理由（为什么 Enter 不发公布、为什么 announced 在派发之前就置真、
 // 为什么一个过期的摘除能力删不掉后来那一次同名生命周期）在这里原样成立，
 // 不再重复，只标出两边真正不一样的地方。
@@ -17,9 +17,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // Setup 是在一个还没公布的 agent 上组装它那个世界的回调。
@@ -45,10 +45,10 @@ type Setup func(ctx context.Context, agentScope *scope.Scope) (commit func() err
 
 // CreateOptions 是通过工厂造一个新 agent 时给的东西。
 //
-// 源: packages/core/agent/src/index.ts:73-133（CreateAgentOptions）
+// 源: packages/core/agent/src/index.ts:64-124（CreateAgentOptions）
 //
 // 新增: DSH 把会话那几项裹在一个可选的 `meta` 对象里。这里摊平了，理由和
-// [ds-harness-go/core/session.CreateOptions] 上那条逐字相同——那层嵌套不承载语义。
+// [github.com/snight1983/ds-harness-go/core/session.CreateOptions] 上那条逐字相同——那层嵌套不承载语义。
 //
 // 新增: DSH 的 `signal`（只在创建期间有效的取消口）在 Go 里是
 // [Registry.Create] 的第一个 [context.Context]，规矩和本仓库每一处一样。
@@ -85,7 +85,7 @@ type CreateOptions struct {
 
 // ResumeOptions 是在一段持久化会话上续跑一个 agent 时给的东西。
 //
-// 源: packages/core/agent/src/index.ts:135-156（ResumeAgentOptions）
+// 源: packages/core/agent/src/index.ts:126-147（ResumeAgentOptions）
 type ResumeOptions struct {
 	// ResumeSessionID 是要读回来、并用作活身份的那个持久化会话标识。
 	ResumeSessionID sessionlog.SessionID
@@ -100,7 +100,7 @@ type ResumeOptions struct {
 
 // Handle 是一个 agent 加上拆掉它的那个能力。
 //
-// 源: packages/core/agent/src/index.ts:158-175（AgentHandle）
+// 源: packages/core/agent/src/index.ts:149-166（AgentHandle）
 //
 // Dispose 是一个**能力**：在消费方里只有攥着它的那一位拆得掉这个 agent。登记了
 // 造法的那个提供方在结构上也是主人——作用域内的 agent 依赖它那份服务 API，
@@ -119,7 +119,7 @@ type Handle struct {
 
 // Factory 是循环那一层交给注册表的 agent 造法。
 //
-// 源: packages/core/agent/src/index.ts:177-214（AgentFactory）
+// 源: packages/core/agent/src/index.ts:168-205（AgentFactory）
 //
 // 它定在这个包上，好让消费方（ACP 桥、子 agent、作业）只对着 [Registry] 编程，
 // 不必依赖具体那个循环包。
@@ -147,7 +147,7 @@ type Factory interface {
 // factorySlot 把造法包一层，好让「撤销登记」比的是**这一次**登记而不是两个接口
 // 值相不相等。
 //
-// 源: packages/core/agent/src/index.ts:240-242（FactorySlot）
+// 源: packages/core/agent/src/index.ts:230-233（FactorySlot）
 //
 // 新增: DSH 那个包装挡的是 cordis 在调用方上下文已知之前就追踪这个字段。Go 里
 // 没有那回事，但它换来另一样东西：两个 [Factory] 接口值用 == 比，动态类型不可
@@ -156,7 +156,7 @@ type factorySlot struct{ target Factory }
 
 // entry 是一个 agent 在注册表里那一份登记的全部可变状态。
 //
-// 源: packages/core/agent/src/index.ts:220-231（AgentEntry）
+// 源: packages/core/agent/src/index.ts:212-222（AgentEntry）
 //
 // 除了 id、agent、owner、carrierKey 四个造出来就不再变的字段，其余全部由
 // [Registry.mutex] 守着。
@@ -210,7 +210,7 @@ type RegistryOptions struct {
 // 造 agent 不在这里：那是循环那一层的事，由 [Registry.SetFactory] 把它的
 // [Factory] 登记进来，[Registry.Create] 与 [Registry.Resume] 转交过去。
 //
-// 新增: 这个类型有自己的互斥锁，规矩和 [ds-harness-go/core/session.Store] 逐字
+// 新增: 这个类型有自己的互斥锁，规矩和 [github.com/snight1983/ds-harness-go/core/session.Store] 逐字
 // 相同：**观察者一律在锁外调用**，于是一个观察者回头读同一张表不会自锁。
 type Registry struct {
 	layers *scope.Layers[*registryLayer]
@@ -504,7 +504,7 @@ func (r *Registry) Resume(ctx context.Context, owner *scope.Scope, options Resum
 //
 // 一个 agent 必须**和它的循环按次序**一起拆掉的时候不要用这个方法——用
 // [Registry.Enter] + [Registry.Announce] 把摘除折进那条复合拆除链里，理由和
-// [ds-harness-go/core/session.Store.Create] 上那条逐字相同。
+// [github.com/snight1983/ds-harness-go/core/session.Store.Create] 上那条逐字相同。
 func (r *Registry) Register(ctx context.Context, agent Agent, owner Agent) (func(context.Context) error, error) {
 	detach, err := r.Enter(agent, owner)
 	if err != nil {
@@ -1037,7 +1037,7 @@ func collectObservers[T any](
 
 // callCreatedObserver 跑一个创建观察者，把它的 panic 转成一条否决。
 //
-// panic 也算否决不是随手定的，理由和 [ds-harness-go/core/session.Store.Announce]
+// panic 也算否决不是随手定的，理由和 [github.com/snight1983/ds-harness-go/core/session.Store.Announce]
 // 那一侧逐字相同：这个观察者的返回值**就是**否决权，而一个 panic 到底是「拒绝」
 // 还是「我这儿坏了」分不出来。
 func callCreatedObserver(ctx context.Context, observer CreatedObserver, agent Agent) (err error) {

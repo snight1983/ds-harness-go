@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ErrScriptExhausted 是「这个会话要的调用次数比录下来的多」。
@@ -35,7 +35,7 @@ const anonymousSession llm.SessionID = "\x00anon\x00"
 
 // Handle 是 [Install] 交回来的句柄：摘除，加上那台跑完时的消费检查。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:126-139
+// 源: packages/test-support/llm-replay/src/index.ts:136-151（ReplayHandle）
 type Handle struct {
 	dispose func(context.Context) error
 
@@ -219,7 +219,7 @@ type adapter struct {
 	stream    func(ctx context.Context, options llm.GenerateOptions) (iter.Seq2[llm.StreamChunk, error], error)
 }
 
-// Stream 实现 [ds-harness-go/llm.Adapter]。
+// Stream 实现 [github.com/snight1983/ds-harness-go/llm.Adapter]。
 func (a *adapter) Stream(
 	ctx context.Context,
 	options llm.GenerateOptions,
@@ -227,7 +227,7 @@ func (a *adapter) Stream(
 	return a.stream(ctx, options)
 }
 
-// ProviderInfo 实现 [ds-harness-go/llm.ProviderDescriber]。
+// ProviderInfo 实现 [github.com/snight1983/ds-harness-go/llm.ProviderDescriber]。
 func (a *adapter) ProviderInfo(provider string) llm.ProviderInfo {
 	configured, known := a.providers[provider]
 	if !known || configured.Name == "" {
@@ -236,7 +236,7 @@ func (a *adapter) ProviderInfo(provider string) llm.ProviderInfo {
 	return llm.ProviderInfo{ID: provider, Name: configured.Name}
 }
 
-// ProviderRetryPolicy 实现 [ds-harness-go/llm.RetryPolicyOwner]。
+// ProviderRetryPolicy 实现 [github.com/snight1983/ds-harness-go/llm.RetryPolicyOwner]。
 //
 // 策略解算不了时当作「这条路线没发布策略」：这个接缝交不出错误，而一份坏掉的
 // 策略在 [Install] 那一步已经被拒过了，走到这里说明配置是好的。
@@ -253,7 +253,7 @@ func (a *adapter) ProviderRetryPolicy(provider string) (llm.ResolvedRetryPolicy,
 	return resolved, true
 }
 
-// ListModels 实现 [ds-harness-go/llm.ModelLister]。
+// ListModels 实现 [github.com/snight1983/ds-harness-go/llm.ModelLister]。
 func (a *adapter) ListModels(_ context.Context, provider string) ([]llm.ModelInfo, error) {
 	configured, known := a.providers[provider]
 	if !known {
@@ -266,7 +266,7 @@ func (a *adapter) ListModels(_ context.Context, provider string) ([]llm.ModelInf
 	return models, nil
 }
 
-// ResolveModel 实现 [ds-harness-go/llm.ModelResolver]。
+// ResolveModel 实现 [github.com/snight1983/ds-harness-go/llm.ModelResolver]。
 //
 // 这次问询和那份参考目录无关：一个目录里没有的模型 id 照样解算得出来，
 // 交回的就是那个身份本身。
@@ -326,16 +326,16 @@ func modelInfo(provider string, model ModelConfig) llm.ModelInfo {
 
 // Install 把按会话定位的回放装到一台运行时上。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:730-780
+// 源: packages/test-support/llm-replay/src/index.ts:810-913（installLlmReplay）
 //
 // 一个刚见到的活会话认领下一份按次序排的录好剧本，此后在**发起调用的那一刻**同步
 // 推进它自己的游标；不带 SessionID 的那些调用共用同一个匿名会话。配了非空提供方
-// 目录时登记一个带路由的回放适配器，否则用一条兜底的 [ds-harness-go/llm.StreamRule]
+// 目录时登记一个带路由的回放适配器，否则用一条兜底的 [github.com/snight1983/ds-harness-go/llm.StreamRule]
 // 拦下所有请求。
 //
 // 新增: DSH 那边「来了一个没录过的会话」和「剧本用完了」两件事被推迟到返回的生成器
 // 里才抛，因为 cordis 的监听器必须交回一个 AsyncIterable、不能抛。Go 的
-// [ds-harness-go/llm.Adapter.Stream] 本来就把「派发不出去」和「流走到一半失败」分成
+// [github.com/snight1983/ds-harness-go/llm.Adapter.Stream] 本来就把「派发不出去」和「流走到一半失败」分成
 // 两处，而这两件事都发生在一个分块都还没吐之前，所以它们就是第二个返回值。
 func Install(ctx context.Context, owner *scope.Scope, runtime *llm.Runtime, config Config) (*Handle, error) {
 	if runtime == nil {

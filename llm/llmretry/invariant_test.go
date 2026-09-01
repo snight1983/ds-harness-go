@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // rejects 把一段日志走一遍，断言它被拒并交出那句诊断。

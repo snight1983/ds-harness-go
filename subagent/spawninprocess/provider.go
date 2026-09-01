@@ -19,8 +19,8 @@ package spawninprocess
 import (
 	"context"
 
-	"ds-harness-go/subagent/inprocessdriver"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/subagent/inprocessdriver"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // DefaultProviderName 是不指定时这个提供方在注册表里的名字。

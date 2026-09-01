@@ -2,7 +2,7 @@
 // 「这一块算不算模型真的吐了东西」的判据，以及重放信封的深复制。
 //
 // 源: packages/llm/llm/src/types.ts:39-51、111-141、283-324
-// 源: packages/llm/llm/src/message.ts:243-261
+// 源: packages/client/ui-chat/src/client/conversation-nodes/event-projection.ts:153-168
 
 package llm
 
@@ -396,7 +396,7 @@ func TestChunksThatCannotBeMarshalledFail(t *testing.T) {
 
 // TestIsTokenDeltaOnlyCountsRealContent 钉住「首个 token」那类计时的判据。
 //
-// 源: packages/llm/llm/src/message.ts:243-261
+// 源: packages/client/ui-chat/src/client/conversation-nodes/event-projection.ts:153-168
 //
 // 空名字那一条是这里最要紧的：DSH 判的是 `name !== undefined`，所以一个**空串的
 // 工具名**照样算一次增量，而「没带名字」不算。本包用指针表达这个差别，

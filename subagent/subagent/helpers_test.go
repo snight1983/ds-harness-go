@@ -12,11 +12,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // testAbsolutePath 是一条在本机上确实绝对的路径。
@@ -74,7 +74,7 @@ func turnEnd(t *testing.T, turn int, reason session.TurnEndReason) session.Event
 
 // steppedTurn 造一个「进过模型步骤、然后按 reason 收尾」的完整回合。
 //
-// [ds-harness-go/core/agent.FoldConsumedWork] 只把这样的回合认成「交代得了消耗」，
+// [github.com/snight1983/ds-harness-go/core/agent.FoldConsumedWork] 只把这样的回合认成「交代得了消耗」，
 // 所以本包每一处要 HasEnd 为真的用例都从这里取事件。
 func steppedTurn(t *testing.T, turn int, reason session.TurnEndReason) []session.Event {
 	t.Helper()
@@ -141,7 +141,7 @@ func newFreeSession(t *testing.T, id session.SessionID, parent session.SessionID
 	return live
 }
 
-// fakeAgent 是一个只为满足 [ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
+// fakeAgent 是一个只为满足 [github.com/snight1983/ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
 //
 // 本包读它的地方只有三处：ID（父身份与血统）、Scope（作用域派发的载体）、
 // Session（血统链、日志后缀、驻留状态），其余方法一律空操作。
@@ -311,3 +311,7 @@ func register(t *testing.T, runtime *Runtime, owner *scope.Scope, provider Provi
 	}
 	return dispose
 }
+
+func (a *fakeAgent) Remove(llm.MessageID) {}
+
+func (a *fakeAgent) Replace(llm.MessageID, llm.Message) {}

@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // fakeSession 是一个只把日志摆在那儿的会话。

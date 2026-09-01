@@ -20,7 +20,7 @@ import (
 
 // SchemaType 是这个子集允许的七种类型。
 //
-// 源: packages/core/tools/src/json-schema.ts:21
+// 源: packages/core/tools/src/json-schema.ts:20-21（JsonSchemaType）
 type SchemaType string
 
 const (
@@ -58,7 +58,7 @@ type Property struct {
 
 // Node 是这个子集里的一个 schema 节点。
 //
-// 源: packages/core/tools/src/json-schema.ts:31-57
+// 源: packages/core/tools/src/json-schema.ts:26-56（JsonSchemaNode）
 //
 // 新增: DSH 那边这是一个「所有键都可选」的 TS 接口，配一整套运行期检查去拒绝
 // 拼错的关键字、非字符串的 description、类型数组、非 schema 的 properties……
@@ -449,7 +449,7 @@ func (err *SchemaError) Unwrap() error { return ErrUnsupportedSchema }
 
 // AssertSupportedSchema 验一个 schema 节点自己是否合法。
 //
-// 源: packages/core/tools/src/json-schema.ts:385-390
+// 源: packages/core/tools/src/json-schema.ts:378-389（assertSupportedJsonSchema）
 //
 // 「只有注解、什么约束都没写」是合法的，那是「任意 JSON」的标准写法。
 // 要求根节点是对象的调用方用 [AssertObjectSchema]。
@@ -481,7 +481,7 @@ func AssertSupportedSchema(node Node) error {
 
 // AssertObjectSchema 在 [AssertSupportedSchema] 之上再要求根节点是对象。
 //
-// 源: packages/core/tools/src/json-schema.ts:397-406
+// 源: packages/core/tools/src/json-schema.ts:58-59（ObjectJsonSchema）
 //
 // 工具参数和结构化输出都走这一条：模型那一侧的「参数」在每一家提供方的协议里
 // 都是一个对象，根上写别的类型发出去就是一份对方读不懂的请求。

@@ -21,7 +21,7 @@
 // 而那正是 [PreparationPosition] 认的那个位置。
 //
 // 不管的：这条读数落盘之后谁来验。[ValidateSession] 写好了，把它接进
-// [ds-harness-go/invariants] 是装配方的事。
+// [github.com/snight1983/ds-harness-go/invariants] 是装配方的事。
 //
 // # 为什么要有这一层
 //
@@ -90,7 +90,7 @@
 //     的基线正是本包自己那条不变量要拦的东西。
 //  11. **不变量那一侧的接线不在本包。**`invariant.ts` 里的 `apply` 只是往注册表上
 //     挂一个安装器，核心的 [ValidateSession] 在这里写完了；把它接进
-//     [ds-harness-go/invariants] 要装配方在写路径上把待写的事件接在末尾一起交进来，
+//     [github.com/snight1983/ds-harness-go/invariants] 要装配方在写路径上把待写的事件接在末尾一起交进来，
 //     成例是 core/session 的 `session.Trace`。
 //
 // # 覆盖率为什么到不了 99%

@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -204,7 +204,7 @@ func ValidateReading(history []session.Event, event session.Event, location *tim
 
 // ValidateSession 验一整段日志里本包写下的每一条读数。
 //
-// 源: packages/context/time-context/src/invariant.ts:163-170
+// 源: packages/context/time-context/src/invariant.ts:187-193（apply）
 func ValidateSession(events []session.Event, location *time.Location) error {
 	for index, event := range events {
 		reading, err := IsReadingEvent(event)

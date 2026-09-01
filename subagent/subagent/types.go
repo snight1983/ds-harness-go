@@ -12,10 +12,10 @@ package subagent
 import (
 	"context"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // RunID 认一次被接受的子 agent 运行，跨它那一对生命周期事件。
@@ -24,7 +24,7 @@ import (
 //
 // 新增: DSH 用 Branded<'SubagentRunId'> 加一个同名的铸造函数，把品牌类型在
 // 运行期抹平成字符串。Go 的具名类型本来就不和 string 互换，所以那个铸造函数
-// 就是一次转换，没有单独存在的必要（成例见 [ds-harness-go/session.SessionID]）。
+// 就是一次转换，没有单独存在的必要（成例见 [github.com/snight1983/ds-harness-go/session.SessionID]）。
 type RunID string
 
 // RunInfo 是一次已发布运行的只读身份细节，由 `subagent/start` 带着。
@@ -105,7 +105,7 @@ type StartRequest struct {
 	Parent agent.Agent
 	// AgentOptions 是给孩子的 agent 选项；零值表示不指定。
 	AgentOptions agent.Options
-	// OutputSchema 是一份以对象为根、落在 [ds-harness-go/core/tools.AssertObjectSchema]
+	// OutputSchema 是一份以对象为根、落在 [github.com/snight1983/ds-harness-go/core/tools.AssertObjectSchema]
 	// 允许的子集里的 JSON Schema。schema 不受支持、或者提供方没有这个能力时，
 	// 开工当场被拒。孩子跑成了的话，那个匹配的值成为 [Result.Structured]。
 	// nil 表示不要结构化输出。
@@ -130,7 +130,7 @@ type StartRequest struct {
 
 // ResolvedStartRequest 是服务解算出持久的孩子描述符之后，交给提供方的那份一次性请求。
 //
-// 源: packages/subagent/subagent/src/types.ts:155-158
+// 源: packages/subagent/subagent/src/types.ts:159-166（ResolvedSubagentStartRequest）
 type ResolvedStartRequest struct {
 	StartRequest
 	// Descriptor 是一个有会话的提供方要写进孩子日志里的那份脱离的描述符。
@@ -140,7 +140,7 @@ type ResolvedStartRequest struct {
 // ContinuableCreateRequest 是续接管理器在物化一个可续孩子的**第一次**活化时，
 // 向提供方要的东西。
 //
-// 源: packages/subagent/subagent/src/types.ts:167-177
+// 源: packages/subagent/subagent/src/types.ts:168-185（ContinuableCreateRequest）
 //
 // 管理器已经把那个持久的孩子身份占下来了、也拥有此后每一个操作，所以这份请求
 // 只带着「一个全新的孩子」和「一个带着父历史种子的孩子」之间的那点差别。
@@ -153,20 +153,20 @@ type ContinuableCreateRequest struct {
 
 // ContinuableCreateSpec 是提供方对一个可续孩子的创建交出去的那份脱离的贡献。
 //
-// 源: packages/subagent/subagent/src/types.ts:185-192
+// 源: packages/subagent/subagent/src/types.ts:187-200（ContinuableCreateSpec）
 //
 // 它是**数据**，绝不是能力：不带 Agent、不带句柄、不带提示词投递、不带结果、
 // 不带处置、不带恢复操作——预备之后这个孩子的整条生命周期归续接管理器。
 type ContinuableCreateSpec struct {
 	// Seed 是要拿来给孩子会话做种的、父日志上那段已完成回合的前缀；
-	// nil 表示一个全新的孩子。持久契约和 [ds-harness-go/core/agent.CreateOptions]
+	// nil 表示一个全新的孩子。持久契约和 [github.com/snight1983/ds-harness-go/core/agent.CreateOptions]
 	// 的 Seed 一样：从 seq 0 起连续、无损 JSON、成对闭合。
 	Seed []session.Event
 }
 
 // StopReason 说的是一次子 agent 运行为什么结束。
 //
-// 源: packages/subagent/subagent/src/types.ts:200-214
+// 源: packages/subagent/subagent/src/types.ts:221-222（SubagentStopReason）
 //
 // 新增: DSH 用一张可合并扩展的 SubagentStopReasonMap，好让某个后端加自己的变体，
 // 消费方 switch 剩下 default 接住。Go 没有声明合并，所以它就是一个具名字符串
@@ -189,7 +189,7 @@ const (
 
 // Result 是一次子 agent 运行的终止结局，由 [Run.Result] 解算出来。
 //
-// 源: packages/subagent/subagent/src/types.ts:219-245
+// 源: packages/subagent/subagent/src/types.ts:224-253（SubagentResult）
 type Result struct {
 	// Output 是孩子最后那段助手输出：它最后一条**非空**助手消息的内容。
 	// 内容为空的消息（包括只带用量的那种）跳过。一条非空消息都没有时，
@@ -277,7 +277,7 @@ type Provider interface {
 //
 //	preparer, ok := provider.(ContinuablePreparer)
 //
-// 这是 Go 表达可选能力的成例（见 [ds-harness-go/llm.ModelLister] 那一组），
+// 这是 Go 表达可选能力的成例（见 [github.com/snight1983/ds-harness-go/llm.ModelLister] 那一组），
 // 语义和 DSH 完全一样：没实现的提供方被可续开工拒掉，而它照样服务得了
 // 普通的一次性派发。
 type ContinuablePreparer interface {

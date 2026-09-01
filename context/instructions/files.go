@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // File 是一个指令候选，绝对路径加模型看得见的显示路径。

@@ -13,13 +13,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/interaction/userapproval"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/interaction/userapproval"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // Services 是这台驱动要用到的那几样部署服务。
@@ -27,7 +27,7 @@ import (
 // 新增: DSH 全从 `parent.ctx`（cordis 上下文）上取：`parent.ctx.agents`、
 // `childCtx.systemPrompt`、`childCtx.tools`、`childCtx.userApproval`。Go 没有那个
 // 容器，「在不在场」就是装配方手上有没有这个值，所以做成一个显式的结构体
-// （成例见 [ds-harness-go/subagent/subagent.ChildCompositionServices]）。
+// （成例见 [github.com/snight1983/ds-harness-go/subagent/subagent.ChildCompositionServices]）。
 type Services struct {
 	// Agents 是 agent 注册表：孩子从它建出来，那笔描述符前置步骤观察者也挂在它上面。必填。
 	Agents *agent.Registry
@@ -42,11 +42,11 @@ type Services struct {
 
 // RunOptions 是 spawn 和 fork 两个提供方额外给这台驱动的东西。
 //
-// 源: packages/subagent/subagent-in-process-driver/src/index.ts:67-71
+// 源: packages/subagent/subagent-in-process-driver/src/index.ts:68-72（InProcessRunOptions）
 type RunOptions struct {
 	// Seed 是 fork 那份「父日志上一段回合完整的前缀」；nil 表示一次全新的 spawn。
 	//
-	// **nil 和空切片不是一回事**（见 [ds-harness-go/core/session.Options.Seed]）：
+	// **nil 和空切片不是一回事**（见 [github.com/snight1983/ds-harness-go/core/session.Options.Seed]）：
 	// 前者是全新的孩子，后者是一段长度为零的继承前缀。
 	Seed []session.Event
 }
@@ -123,9 +123,9 @@ func StartInProcessRun(
 	}
 
 	// 新增: DSH 在 setup 里拿 `childCtx.agent.session` 现场追加那份派发策略。Go 的
-	// [ds-harness-go/core/agent.Setup] 只收作用域，那一刻会话还没登记进
-	// [ds-harness-go/core/session.Store]，所以改成在种子上排演一次——和
-	// [ds-harness-go/subagent/subagent.SeedDescriptorTurn] 完全同一条路子，理由
+	// [github.com/snight1983/ds-harness-go/core/agent.Setup] 只收作用域，那一刻会话还没登记进
+	// [github.com/snight1983/ds-harness-go/core/session.Store]，所以改成在种子上排演一次——和
+	// [github.com/snight1983/ds-harness-go/subagent/subagent.SeedDescriptorTurn] 完全同一条路子，理由
 	// 和那边的 seedWithDelegatedPolicies 逐字相同：那几条事件照样落在 SeedLength
 	// 边界**之后**，因此仍旧是这个孩子自己的历史，也照样在公布之前就定死了。
 	seed, err := seedWithDelegatedPolicies(childID, options.Seed, inherited)
@@ -151,7 +151,7 @@ func StartInProcessRun(
 //
 // 源: packages/subagent/subagent-in-process-driver/src/index.ts:118
 //
-// 新增: 这是 ds-harness-go/subagent/subagent 里那个同名未导出函数的同一份判断。
+// 新增: 这是 github.com/snight1983/ds-harness-go/subagent/subagent 里那个同名未导出函数的同一份判断。
 // 两处各写一遍而不是导出共用，是因为它交出去就成了这条接缝的公开面，而它其实是
 // 「Go 的 Setup 够不着会话」这个实现细节的补丁，不该被当成契约。
 func seedWithDelegatedPolicies(
@@ -198,7 +198,7 @@ func attachDescriptorAppend(
 	}
 	var once sync.Once
 	// 这笔登记的撤销函数**有意**丢掉：owner 就是孩子自己那个作用域，作用域一处置
-	// 它就跟着没了（成例见 [ds-harness-go/subagent/subagent.ApplyChildComposition]）。
+	// 它就跟着没了（成例见 [github.com/snight1983/ds-harness-go/subagent/subagent.ApplyChildComposition]）。
 	_, err = agents.OnPreStep(ctx, childScope, func(
 		ctx context.Context,
 		step agent.PreStep,
@@ -228,7 +228,7 @@ func attachDescriptorAppend(
 // 源: packages/subagent/subagent-in-process-driver/src/index.ts:47-64
 //
 // 新增: DSH 收的是 `TurnEndReason | undefined`，「没有交代回合」落进 default。
-// Go 这边收的是 [ds-harness-go/core/agent.FoldConsumedWork] 的产物，
+// Go 这边收的是 [github.com/snight1983/ds-harness-go/core/agent.FoldConsumedWork] 的产物，
 // HasEnd 为假就是那个 undefined。
 func toStopReason(work agent.ConsumedWork) subagent.StopReason {
 	if !work.HasEnd {
@@ -372,13 +372,13 @@ func (r *inProcessRun) isCancelled() bool {
 	return r.cancelled
 }
 
-// ID 实现 [ds-harness-go/subagent/subagent.Run]。
+// ID 实现 [github.com/snight1983/ds-harness-go/subagent/subagent.Run]。
 func (r *inProcessRun) ID() session.SessionID { return r.id }
 
-// LocalAgent 实现 [ds-harness-go/subagent/subagent.Run]。
+// LocalAgent 实现 [github.com/snight1983/ds-harness-go/subagent/subagent.Run]。
 func (r *inProcessRun) LocalAgent() agent.Agent { return r.child }
 
-// Result 实现 [ds-harness-go/subagent/subagent.Run]：等这次运行结清，反复调交出
+// Result 实现 [github.com/snight1983/ds-harness-go/subagent/subagent.Run]：等这次运行结清，反复调交出
 // 同一份结果。
 //
 // 源: packages/subagent/subagent-in-process-driver/src/index.ts:186（`result` 字段）
@@ -391,7 +391,7 @@ func (r *inProcessRun) Result(ctx context.Context) (subagent.Result, error) {
 	}
 }
 
-// Dispose 实现 [ds-harness-go/subagent/subagent.Run]：摘掉取消守望、结清本地取消、
+// Dispose 实现 [github.com/snight1983/ds-harness-go/subagent/subagent.Run]：摘掉取消守望、结清本地取消、
 // 放掉那份公布出来的句柄，然后等结果那一路也静下来。
 //
 // 源: packages/subagent/subagent-in-process-driver/src/index.ts:187-194
@@ -414,7 +414,7 @@ func (r *inProcessRun) Dispose(ctx context.Context) error {
 //
 // 源: packages/subagent/subagent-in-process-driver/src/index.ts:197-232
 //
-// [ds-harness-go/core/agent.ConsumedWork.DroppedUnrun] **有意**不读：一条一次性
+// [github.com/snight1983/ds-harness-go/core/agent.ConsumedWork.DroppedUnrun] **有意**不读：一条一次性
 // 提示词几乎立刻就被它那个被等着的第一个回合认领掉了，而主人自己那次拆解走的是
 // 下面那个 cancelled。一次连交代回合都没有的取消，经 toStopReason 落在 StopError
 // 上——它永远不会把结果说得比实情好。

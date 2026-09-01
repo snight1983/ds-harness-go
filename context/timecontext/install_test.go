@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // # 这些测试防的是什么错
@@ -527,3 +527,7 @@ func (w *world) appendReading(decision agent.PreStepDecision) {
 		session.UserMessageData{Message: decision.Messages[len(decision.Messages)-1]},
 		session.AppendOp{})
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

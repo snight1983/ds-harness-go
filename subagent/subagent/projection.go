@@ -7,8 +7,8 @@ package subagent
 import (
 	"errors"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 const (
@@ -32,7 +32,7 @@ const projectionStateVersion = 2
 
 // timingState 是计时那个单元的折叠状态。
 //
-// 源: packages/subagent/subagent/src/projection.ts:17-26
+// 源: packages/subagent/subagent/src/projection.ts:15-25（TimingState）
 type timingState struct {
 	// SettledMs 是描述符之后那些已完成回合累起来的毫秒数。
 	SettledMs int64 `json:"settledMs"`
@@ -56,11 +56,11 @@ type identityState struct {
 
 // RegisterProjections 把子 agent 那两个单元登进投影注册表，返回注销它们的函数。
 //
-// 源: packages/subagent/subagent/src/projection.ts:59-111, 161-180
+// 源: packages/subagent/subagent/src/projection.ts:157-181（subagentIdentityProjectionDefinition）, 161-180
 //
 // 新增: DSH 那边这是 apply 里的一个 ctx.inject(['sessionProjections'], ...) 子节点。
 // Go 里没有那个容器，「在不在场」就是装配方手上有没有这个注册表，所以它是一个显式
-// 的函数（成例见 [ds-harness-go/plan/planmode.RegisterProjection]）。
+// 的函数（成例见 [github.com/snight1983/ds-harness-go/plan/planmode.RegisterProjection]）。
 //
 // 两个单元一起登记：它们折的是同一条 [EventDescriptor]，分开登记只会让装配方多一次
 // 忘掉其中一个的机会，而只有身份没有计时的界面读起来是坏的。

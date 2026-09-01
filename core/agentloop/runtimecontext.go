@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // RuntimeContextSource 是这些投影出来的消息署的插件名。
@@ -61,7 +61,7 @@ type retainedSnapshot struct {
 // 它会插在那批消息中间某个说不清的位置。
 //
 // 新增: 这个类型是并发安全的。DSH 是单线程 JS，投影和事件回调不可能同时跑；
-// Go 这边追加事件的观察者由 [ds-harness-go/core/session.Session.Append] 在
+// Go 这边追加事件的观察者由 [github.com/snight1983/ds-harness-go/core/session.Session.Append] 在
 // 追加方那个 goroutine 上叫起来，而 Project 由循环那个 goroutine 叫，
 // 两者是两条链，所以状态用锁护住。
 type RuntimeContextProjection struct {

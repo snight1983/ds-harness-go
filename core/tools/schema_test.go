@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/core/tools"
 )
 
 // boolPtr 造一个布尔指针，给 AdditionalProperties 用。

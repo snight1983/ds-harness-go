@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
 )
 
 // fakeLive 是一张可以在测试中途被改动的活会话表。

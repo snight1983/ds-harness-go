@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // target 把一个世界绝对路径换成目标，用例里出现得太多了。

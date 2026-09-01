@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -120,7 +120,7 @@ func quoteRaw(raw json.RawMessage) string {
 
 // RegisterInvariants 装上持久待办快照的形状检查，返回注销函数。
 //
-// 源: packages/todo/tool-todo/src/invariant.ts:47-66
+// 源: packages/todo/tool-todo/src/invariant.ts:97-103（apply）
 //
 // 两条胳膊，和 DSH 一样：装的时候把**已经装进来的**日志走一遍（一份历史里就带着
 // 坏快照的会话，必须在装载这一刻就响，而不是等下一次追加），然后订阅后续的追加。
@@ -128,7 +128,7 @@ func quoteRaw(raw json.RawMessage) string {
 // 新增: DSH 那两条胳膊都从 cordis 上拿——ctx.sessions.list() 取历史，
 // ctx.on('internal/dispatch') 截住后来的。Go 里活会话服务是循环那一块的东西
 // （见 docs/DESIGN.md 第八节），本包在第 4 块，所以这两条胳膊由装配方以函数交进来，
-// 做法和 [ds-harness-go/workspace.RegisterInvariants] 收 facility 与 live 一致。
+// 做法和 [github.com/snight1983/ds-harness-go/workspace.RegisterInvariants] 收 facility 与 live 一致。
 //
 // subscribe 交回来的退订函数会登记进这次注册的 scope：注销之后，一条不该再查的
 // 检查绝不许继续在别人的写路径上抛。

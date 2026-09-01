@@ -8,12 +8,12 @@ package goaltool
 import (
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -34,7 +34,7 @@ const DefaultBlockedAfterConsecutiveRounds = 3
 // Agents 是本包要用的那一小块 agent 注册表能力。
 //
 // 新增: DSH 靠 `inject = ['agents', ...]` 拿到整个注册表。Go 里只声明用得着的
-// 那两个方法（窄口子的理由同 [ds-harness-go/goal/goal.Agents]）：一个回答「我手里
+// 那两个方法（窄口子的理由同 [github.com/snight1983/ds-harness-go/goal/goal.Agents]）：一个回答「我手里
 // 这个 agent 此刻还是注册表里那一个吗」，一个回答「它是不是一个顶层 agent」。
 type Agents interface {
 	// Get 按标识取此刻活着的那个 agent。
@@ -46,9 +46,9 @@ type Agents interface {
 // Service 是这三件工具用得到的那一块目标服务。
 //
 // 新增: DSH 注入整个 `ctx.goals`。这里只写出真正被调到的那七个方法，交进来的
-// [ds-harness-go/goal/goal.Service] 自然满足它（窄口子的理由同
-// [ds-harness-go/subagent/controltool.Service]）。少掉的两个是
-// [ds-harness-go/goal/goal.Service.Clear] 和 Disarm：那两条路归**生命周期持有者**
+// [github.com/snight1983/ds-harness-go/goal/goal.Service] 自然满足它（窄口子的理由同
+// [github.com/snight1983/ds-harness-go/subagent/controltool.Service]）。少掉的两个是
+// [github.com/snight1983/ds-harness-go/goal/goal.Service.Clear] 和 Disarm：那两条路归**生命周期持有者**
 // 走，不归模型——一个能自己 clear 掉目标的模型等于一个没有预算的模型。
 type Service interface {
 	// Get 读一个确切的活 agent 此刻的目标，没有就交回 nil。
@@ -84,9 +84,9 @@ type Config struct {
 	//
 	// 新增: DSH 的 exec.agent 就是 agent 对象本身。Go 这边它是一把不透明的钥匙，
 	// 所以由装配方交一条查回去的路，做法和
-	// [ds-harness-go/subagent/controltool.Config.AgentOf] 逐字相同。
+	// [github.com/snight1983/ds-harness-go/subagent/controltool.Config.AgentOf] 逐字相同。
 	//
-	// 和 [ds-harness-go/jobs/jobstool.Config.AgentOf] 不一样的是**查不回来就是错**：
+	// 和 [github.com/snight1983/ds-harness-go/jobs/jobstool.Config.AgentOf] 不一样的是**查不回来就是错**：
 	// 目标是按 agent 记的，一个无身份的调用方没有目标可言，也就没有任何一件本包的
 	// 工具对它成立。
 	AgentOf func(agent *scope.Key) (agent.Agent, error)
@@ -107,7 +107,7 @@ type Config struct {
 // Deps 是装这三件工具那一刻要交进来的协作者。
 //
 // 新增: DSH 从 cordis 上下文上按 inject 取。Go 没有那个容器，所以显式交进来，
-// 形状和 [ds-harness-go/jobs/jobstool.Deps] 一致。
+// 形状和 [github.com/snight1983/ds-harness-go/jobs/jobstool.Deps] 一致。
 type Deps struct {
 	// Tools 是工具运行时，必填。
 	Tools *tools.Runtime

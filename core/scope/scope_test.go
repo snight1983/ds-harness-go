@@ -27,7 +27,7 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // recorder 记录一串先后发生的动作名，用来钉顺序。

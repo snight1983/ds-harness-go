@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // TestAnOpenStepReportsItsRoutedProvider 钉住一个开着的步骤读得出它的提供方。

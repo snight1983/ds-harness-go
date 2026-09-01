@@ -6,7 +6,7 @@
 // 源: packages/jobs/tool-jobs/src/index.ts:1-8
 //
 // 装上它同时也把生产方开工必需的那个**控制器**挂了上去（见
-// [ds-harness-go/jobs/jobs.Registry.AttachController]）：没有任何控制器服务的属主
+// [github.com/snight1983/ds-harness-go/jobs/jobs.Registry.AttachController]）：没有任何控制器服务的属主
 // 一律开不了工，所以「谁读得了作业」和「谁起得了作业」在装配上是同一件事。
 //
 // # 一次结算怎么找到它的属主
@@ -32,9 +32,9 @@
 // 弱引用表，所以：
 //
 //   - **唤醒预算**是一张 `map[agent.Agent]int`，第一次记账时在那个属主自己的作用域
-//     上挂一项清理，做法和 [ds-harness-go/jobs/localjobs] 那张属主表逐字相同。
-//   - **每次调用的输出上限**是一张按 [ds-harness-go/core/tools.ExecutionToken] 索引
-//     的表。token 可比较、可当键，而 [ds-harness-go/core/tools.Definition.FinalizeContent]
+//     上挂一项清理，做法和 [github.com/snight1983/ds-harness-go/jobs/localjobs] 那张属主表逐字相同。
+//   - **每次调用的输出上限**是一张按 [github.com/snight1983/ds-harness-go/core/tools.ExecutionToken] 索引
+//     的表。token 可比较、可当键，而 [github.com/snight1983/ds-harness-go/core/tools.Definition.FinalizeContent]
 //     对每一份规范化过的结果恰好被调一次，所以那一次就是它的摘除点。
 //   - 两张表都被同一把 [sync.Mutex] 罩着：结算来自生产方那条协程，工具调用来自
 //     模型那条。

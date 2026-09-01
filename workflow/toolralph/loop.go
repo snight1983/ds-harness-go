@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"strings"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/llm"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // RunStatus 是一整次 Ralph 调用的收场。
@@ -224,7 +224,7 @@ func (c *Controller) roundFailed(round int, cause error) *roundFailure {
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:163-170, 471-474
 //
-// 形状和 [ds-harness-go/subagent/subagenttool] 那台前台结算一样，只有一处不同：
+// 形状和 [github.com/snight1983/ds-harness-go/subagent/subagenttool] 那台前台结算一样，只有一处不同：
 // 这里要的是 [subagent.Result.Structured] 而不是那段文本输出。一个 StopCompleted
 // 却没留下结构化结果的孩子在这里算失败——那正是 DSH 里 `rawReport === null` 的
 // 那种情况。
@@ -267,7 +267,7 @@ func collectRound(ctx context.Context, run subagent.Run) (any, error) {
 //
 // 源: packages/subagent/tool-subagent/src/index.ts:125-142
 //
-// 判断和 [ds-harness-go/subagent/subagenttool] 那份逐条相同，措辞换成 Ralph 的
+// 判断和 [github.com/snight1983/ds-harness-go/subagent/subagenttool] 那份逐条相同，措辞换成 Ralph 的
 // 说法。那个 default 接住的是后端自己加的终止原因：把一个认不出的终态当成失败，
 // 而不是把一份可能残缺的结构化结果当成一轮成功——后者会让下一轮拿着半截交接接着跑。
 func stopReasonError(result subagent.Result) string {

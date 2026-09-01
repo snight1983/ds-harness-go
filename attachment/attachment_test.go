@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/attachment"
 )
 
 // testLimits 是所有用例共用的限额，取值照抄 DSH 的测试夹具。

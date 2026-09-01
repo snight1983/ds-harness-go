@@ -36,7 +36,7 @@ const (
 
 // Record 是一条持久凭据记录，按「接缝可以拿它做什么」打了标签。
 //
-// 源: packages/credentials/credentials/src/types.ts:58-59
+// 源: packages/credentials/credentials/src/types.ts:59-60（CredentialRecord）
 //
 // 新增: DSH 那边是 `ApiKeyRecord | GrantRecord` 这个联合类型。Go 没有和类型，
 // 这里用「接口 + 一个未导出的封印方法」来代替：本包外面写不出 sealedRecord，
@@ -55,7 +55,7 @@ type Record interface {
 
 // APIKeyRecord 是接缝自己看得懂的凭据：一个 api 密钥、一组供应商环境值，或者两者都有。
 //
-// 源: packages/credentials/credentials/src/types.ts:30-43
+// 源: packages/credentials/credentials/src/types.ts:31-44（ApiKeyRecord）
 //
 // 两个字段**都可以为空**。两个都空的记录不是一条坏记录，它陈述的是一件确切的事实：
 // 拥有方确认这条路由用它自己的环境发现来认证。这和「压根没有记录」是两回事——
@@ -79,7 +79,7 @@ func (APIKeyRecord) sealedRecord() {}
 
 // GrantRecord 是一次授权换来的产物，为它的拥有方原样保管。
 //
-// 源: packages/credentials/credentials/src/types.ts:45-56
+// 源: packages/credentials/credentials/src/types.ts:46-57（GrantRecord）
 //
 // 接缝**从不**读取、校验、或者改写 [GrantRecord.Payload]：它是按拥有方插件的格式写的，
 // 只有那个插件解释得了。唯一的约束是它经得起一次 JSON 往返。

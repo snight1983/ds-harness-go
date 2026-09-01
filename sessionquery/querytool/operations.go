@@ -12,14 +12,14 @@ package querytool
 import (
 	"context"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/session"
-	"ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionquery"
 )
 
 // executeSessionSearch 跑一次跨会话检索。
 //
-// 源: packages/session-query/tool-session-query/src/operations.ts:54-114
+// 源: packages/session-query/tool-session-query/src/operations.ts:276-283（operations）
 func (c *Controller) executeSessionSearch(
 	ctx context.Context,
 	args sessionSearchArgs,

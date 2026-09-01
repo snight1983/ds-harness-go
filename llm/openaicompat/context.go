@@ -18,8 +18,8 @@ import (
 	"github.com/openai/openai-go/v3/shared"
 	"golang.org/x/sync/errgroup"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // noToolOutput 是一条什么都没输出的工具结果在线上的写法。
@@ -322,7 +322,7 @@ func toolsOf(options llm.GenerateOptions) ([]openai.ChatCompletionToolUnionParam
 
 // assistantMessage 把一条落库的助手消息翻成线上的那一条。
 //
-// 源: packages/llm/llm-pi-ai/src/replay.ts:151-235（DSH 的 toPiAssistant）
+// 源: packages/llm/llm-pi-ai/src/replay.ts:224-249（DSH 的 toPiAssistant）
 //
 // 新增: DSH 在这里把重放信封里的每块签名贴回每一块内容上——那是 Anthropic 那条
 // 协议要求原样回发的东西。OpenAI 兼容协议上一条助手历史消息只有 role/content/

@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // Key 是这个单元占的那个投影键。
@@ -156,7 +156,7 @@ func (s State) Validate() error {
 
 // Definition 交出这个单元，装配方拿它去 [projection.Register]。
 //
-// 源: packages/session/session-stats/src/projection.ts:112-207
+// 源: packages/session/session-stats/src/projection.ts:128-226（sessionStatsProjectionDefinition）
 //
 // 新增: DSH 那边这份值是一个模块级常量，注册由 index.ts 那个 cordis 插件代劳。
 // Go 里它是一个函数，因为 [State] 里带一张表：一个包级变量会让 Init 交出的那份

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 func TestIsCheckpointSource只认那一个产出方名字(t *testing.T) {

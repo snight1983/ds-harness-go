@@ -9,7 +9,7 @@ package sessionquery
 import (
 	"context"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // 源: packages/session-query/session-query/src/config.ts:6-9

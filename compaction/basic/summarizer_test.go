@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 func TestFrameSummary裹上前言和一对标签(t *testing.T) {

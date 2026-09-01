@@ -8,7 +8,7 @@ package schedule
 import (
 	"context"
 
-	coresession "ds-harness-go/core/session"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
 )
 
 // Sessions 是本包要用的那一小块会话仓库能力。

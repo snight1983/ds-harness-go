@@ -11,12 +11,12 @@ import (
 	"log/slog"
 	"strings"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/spill"
-	"ds-harness-go/util/outputretention"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/spill"
+	"github.com/snight1983/ds-harness-go/util/outputretention"
 )
 
 // readToolName 是唯一一件不做面向模型外置的工具。

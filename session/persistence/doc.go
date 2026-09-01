@@ -9,23 +9,24 @@
 // 源: packages/session/session-persistence/src/preparations.ts
 // 源: packages/session/session-persistence/src/invariant.ts
 //
-// # 这里只有词汇和纯函数，编排不在这里
+// # 这里有什么
 //
-// DSH 的 dsh-session-persistence 包里装着三样东西：一套**接口加纯函数**、
-// 一个 [WriteBehind] 那样的自足控制器、和一个 1362 行的 PersistenceCoordinator
-// ——后者是活的：它按会话串行化每一次操作、监听 cordis 的
-// `session/created` `session/event` `session/flush` `session/disposed`
-// 四个事件、把一个活的 Session 认领进来、在 HMR 之后重新播种。
+// 三层，从下往上：
 //
-// 本包只是前两样。理由和 llm、session 两个包那两次一模一样：编排那一层需要
-// 一个活的 Session 和一个活的 SessionStore，而这两样按 DESIGN.md 第八节的
-// 顺序落在第 6 块（循环）。把编排放进本包，任何一个只想实现一个后端的人
-// 都得先把整套循环立起来。
+//  1. **词汇和纯函数。**[Backend] 是给具体介质用的最小原始能力集，
+//     [Store] 是给使用方用的服务面；[CheckStored]、[BalanceStored]、
+//     [SeedCoversPrefix] 这些是读回一份存档之后要过的判据。
 //
-// 留在第 6 块的：PersistenceCoordinator 整个类、SessionPreparations
-// （它的每一个阶段都绑在一个活的 Session 上）、以及 Store.Prepare
-// ——DSH 的 SessionPersistence.prepare 返回的是一个未发布的活会话，
-// 所以本包的 [Store] 里没有这个方法。
+//  2. **[WriteBehind]。**一个自足的攒批控制器，不认识会话，只认识
+//     「攒一批、到点写下去、写失败了把缓冲留着」。
+//
+//  3. **[Coordinator]。**活的那一层：它按会话身份串行化每一次操作，
+//     挂在会话存储的四条观察者（创建／事件／刷盘／退场）上，把一个活会话
+//     认领进来，并维护那个准备池（[preparations]）。
+//
+// 第三层比前两层晚落地：它要一个活的 [github.com/snight1983/ds-harness-go/core/session.Session]
+// 和一个活的会话存储，而那两样按 DESIGN.md 第八节的顺序在第 6 块才有。
+// 分层的好处留着了——只想实现一个后端的人只需要看第一层。
 //
 // # 这里没有照抄的部分
 //
@@ -61,4 +62,38 @@
 // [Backend] 是给具体介质用的最小原始能力集；[Store] 是给使用方用的服务面。
 // 第一方的两个后端（JSONL、SQLite）在裁决表里是 OUT_OF_SCOPE
 // ——本仓库是一个空运行时，落盘介质由装配它的人挑。本包给出的是那道缝。
+//
+// # 覆盖率为什么到不了 99%
+//
+// docs/DESIGN.md 第九节给纯逻辑包定的线是 99%，低于这个数要在源码里写明为什么。
+// 本包的用例覆盖到 98.0%，没覆盖到的都在 [Coordinator] 那一层，分三类：
+//
+//  1. **只有在一段串行化区间**里**ctx 断掉才走得到的那几句。**
+//     [Coordinator.adopt] 每一轮开头、[Coordinator.readFromCore] 和
+//     [Coordinator.readStoredPrefix] 里那三处 `ctx.Err()`，还有
+//     [Coordinator.inspectOnce] 收尾里那一句。调用方进这些函数之前 serialize
+//     已经查过一次 ctx，所以要走到它们，ctx 必须**恰好**死在排队之后、
+//     这一句之前。这几句本身就是为那个窗口写的（一条已经取消的 ctx 会让
+//     adopt 那圈重试空转到天荒地老），构造不出来不等于可以删。
+//
+//  2. **一个身份在一次读操作跑到半路时才活过来。**[Coordinator.Load] 里
+//     独占消掉之后那次 `sessions.Get`，以及 [Coordinator.inspectOnce] 里
+//     那三处。它们守的是同一件事：这条读路正在跟磁盘打交道的时候，别人把
+//     这个身份发布成了活会话，那么这一份从磁盘读出来的视图立刻就旧了，
+//     该改读那个活会话。要在用例里钉住这个交错，得给内存后端加一套「读到
+//     一半停住」的闸，而那套闸本身比它验的这四句还长。
+//
+//  3. **三句标着「走不到」的兜底。**[Coordinator.loadLiveSnapshot] 里
+//     「刷盘成功了状态却没立起来」、[Coordinator.reconcileTracked] 里
+//     「同一个会话对象重入」、[Coordinator.seedMatchesPersisted] 里
+//     「游标大于零却读不到这份存档」。三句的注释各自写明了为什么走不到，
+//     以及为什么留着它而不是断言掉。
+//
+// 剩下四句零星的：[Coordinator.attachPrepared] 里那次 `attach` 失败
+// （[preparations.reservationFor] 会先一步把同一种局面拒掉，所以到这里
+// 已经不可能过期）、[Coordinator.onCreated] 情形 4 里那次 `createCore` 失败
+// （要求存档在同一次调用的两次读之间凭空出现）、[Coordinator.adoptLivePrefix]
+// 里那次 [SeedCoversPrefix] 失败和 [Coordinator.loadLiveSnapshot] 里那次
+// [github.com/snight1983/ds-harness-go/session.InterruptedTurnClosers] 失败（两者都要求一条负载
+// 排不出去／解不回来的事件，而它们进不了一个活会话）。
 package persistence

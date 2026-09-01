@@ -14,13 +14,13 @@ import (
 	"math"
 	"sync"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // Deps 是驱动一个循环要用到的那几样运行期设施。
@@ -141,9 +141,9 @@ func abortedErr(ctx context.Context) error {
 
 // ReactLoopAgent 驱动一个会话跨过它的回合和步骤边界。
 //
-// 源: packages/core/agent-loop/src/agent.ts:63-515
+// 源: packages/core/agent-loop/src/agent.ts:69-545（ReactLoopAgent）
 //
-// 它实现 [ds-harness-go/core/agent.Agent]。除了「现在跑到第几回合第几步」之外
+// 它实现 [github.com/snight1983/ds-harness-go/core/agent.Agent]。除了「现在跑到第几回合第几步」之外
 // 它自己身上不留状态——日志是权威的，重建一个 agent 就是从日志重建。
 //
 // # 并发
@@ -153,7 +153,7 @@ func abortedErr(ctx context.Context) error {
 // 所以 phase、requestHeaderLogged、activityDone 以及**所有对收件箱的访问**都由
 // 本类型这一把锁护住。
 //
-// [ds-harness-go/core/agent.Inbox] 自己不加锁，那是它那个包写下的规矩
+// [github.com/snight1983/ds-harness-go/core/agent.Inbox] 自己不加锁，那是它那个包写下的规矩
 // （「只该被那个 agent 的循环碰」），所以串行化这件事只能由这里来做。
 //
 // 通知一律在锁外发：收件箱那三个回调是在 Splice／Claim **里面**同步叫起来的，
@@ -207,7 +207,7 @@ var _ agent.Agent = (*ReactLoopAgent)(nil)
 // 外层作用域键，顶层的传 nil。
 //
 // 造出来的 agent 还没登记进注册表——那一步由造它的工厂做，好让「先把拆除挂上、
-// 再公布」这条次序拿得住，见 [ds-harness-go/core/agent.Registry.Enter]。
+// 再公布」这条次序拿得住，见 [github.com/snight1983/ds-harness-go/core/agent.Registry.Enter]。
 func NewReactLoopAgent(
 	ctx context.Context,
 	deps Deps,
@@ -416,7 +416,7 @@ func (a *ReactLoopAgent) Inject(message llm.Message) { a.Send(message, agent.Nex
 // Prepend 把一条消息放回某条边界的队头，不唤醒驱动。
 //
 // 新增: DSH 那些插件直接调 `agent.inbox.prepend(...)`。这边收件箱只当只读投影，
-// 所以那条动作得从这里走一遍这把锁——理由见 [ds-harness-go/core/agent.Agent.Prepend]。
+// 所以那条动作得从这里走一遍这把锁——理由见 [github.com/snight1983/ds-harness-go/core/agent.Agent.Prepend]。
 // 通知照 [ReactLoopAgent.Send] 的老规矩排到锁外再发：一条通知完全可能反手再调进来。
 func (a *ReactLoopAgent) Prepend(message llm.Message, target agent.InboxTarget) {
 	a.mutex.Lock()
@@ -427,6 +427,37 @@ func (a *ReactLoopAgent) Prepend(message llm.Message, target agent.InboxTarget) 
 
 	if err != nil {
 		a.reportError(fmt.Errorf("core/agentloop: 往收件箱队头放消息失败：%w", err))
+	}
+}
+
+// Remove 从收件箱里拿掉一条还没跑的消息。
+//
+// 新增: 和 [ReactLoopAgent.Prepend] 同一个理由——收件箱只当只读投影，这条动作
+// 得从这里走一遍这把锁，见 [github.com/snight1983/ds-harness-go/core/agent.Agent.Remove]。
+func (a *ReactLoopAgent) Remove(messageID llm.MessageID) {
+	a.mutex.Lock()
+	_, err := a.inbox.Remove(messageID)
+	pending := a.takeNotifyLocked()
+	a.mutex.Unlock()
+	runNotifications(pending)
+
+	if err != nil {
+		a.reportError(fmt.Errorf("core/agentloop: 从收件箱里拿掉消息失败：%w", err))
+	}
+}
+
+// Replace 原地换掉一条还没跑的消息。
+//
+// 新增: 理由同 [ReactLoopAgent.Remove]。
+func (a *ReactLoopAgent) Replace(messageID llm.MessageID, newMessage llm.Message) {
+	a.mutex.Lock()
+	_, err := a.inbox.Replace(messageID, newMessage)
+	pending := a.takeNotifyLocked()
+	a.mutex.Unlock()
+	runNotifications(pending)
+
+	if err != nil {
+		a.reportError(fmt.Errorf("core/agentloop: 换掉收件箱里那条消息失败：%w", err))
 	}
 }
 
@@ -1198,13 +1229,22 @@ func (a *ReactLoopAgent) buildRequest(
 
 	// 一个循环实例从它自己声明的那条路由起步，只把「确实属于这个确切模型、
 	// 而且是人选的」那个推理档位恢复回来。后面的步骤重新解算被标记过的默认值。
-	seed := llm.CallConfig{Provider: a.options.Provider, Model: a.options.Model, MaxTokens: a.options.MaxTokens}
+	seed := llm.CallConfig{
+		Provider:        a.options.Provider,
+		Model:           a.options.Model,
+		ReasoningEffort: a.options.ReasoningEffort,
+		MaxTokens:       a.options.MaxTokens,
+	}
 	if headerLogged {
 		seed = requestProposal(persisted)
-	} else if hasPersisted &&
+	} else if seed.ReasoningEffort == "" &&
+		hasPersisted &&
 		persisted.Config.Provider == a.options.Provider &&
 		persisted.Config.Model == a.options.Model &&
 		!persisted.AdapterDefaults.ReasoningEffort {
+		// 声明出来的档位压过持久化下来的那个，对应 DSH 那句
+		// `this.options.reasoningEffort ?? persistedReasoningEffort`（agent.ts:466）：
+		// 换了档位重挂的那个实例，要跑的是新档位，不是上次记下来的。
 		seed.ReasoningEffort = persisted.Config.ReasoningEffort
 	}
 

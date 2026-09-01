@@ -10,7 +10,7 @@
 //   - **把 nil 当成一次失败**。errorCode 收到 nil 会当场 Fatal：一条本该报错的路
 //     悄悄成功了，是这份测试最该抓住的那一种回归。
 //   - **拿一个假会话糊弄过去**。stubAgent 手里握的是一台**真的**
-//     [ds-harness-go/core/session.Session]：本包写下去的每一条事件都要真的过一遍
+//     [github.com/snight1983/ds-harness-go/core/session.Session]：本包写下去的每一条事件都要真的过一遍
 //     那台会话的信封校验，不然「排出来的字节合法」这件事根本没验到。
 
 package schedule
@@ -22,12 +22,12 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // asError 是 [errors.As] 的一层泛型薄壳，省掉每个调用点那次 `var x *T` 的声明。
@@ -73,7 +73,7 @@ func scopeOf(t *testing.T, label string, parent *scope.Scope) *scope.Scope {
 	return owner
 }
 
-// stubAgent 是一个只为满足 [ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
+// stubAgent 是一个只为满足 [github.com/snight1983/ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
 //
 // 本包用得着的只有 ID、Session、Scope、Followup、RunMaintenance 和 WhenIdle 这几样；
 // 剩下的方法在这里都是空的，被叫到说明本包越界了。
@@ -132,7 +132,7 @@ func (a *stubAgent) Cancel(sessionlog.TurnEndCancelCause, agent.CancelOptions) {
 func (a *stubAgent) Send(llm.Message, agent.InboxTarget, bool)                 {}
 func (a *stubAgent) Steer(llm.Message)                                         {}
 func (a *stubAgent) Inject(llm.Message)                                        {}
-func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget) {}
+func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget)                    {}
 
 func (a *stubAgent) Followup(message llm.Message) {
 	a.mutex.Lock()
@@ -256,3 +256,7 @@ func toolErrorOf(t *testing.T, raw json.RawMessage) ToolError {
 	}
 	return failure
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

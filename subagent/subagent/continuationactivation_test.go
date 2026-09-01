@@ -11,13 +11,13 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/userapproval"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/userapproval"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
 )
 
 // ---- 共用的小工具 ----
@@ -148,6 +148,51 @@ func TestSeedWithDelegatedPoliciesAppendsAfterTheSeed(t *testing.T) {
 	}
 	if last := staged[len(staged)-1]; last.Type != userapproval.EventPolicy {
 		t.Fatalf("最后一条该是那条策略，实际 %#v", last)
+	}
+}
+
+// brokenSeed 造一份**排演不出来**的创建种子：序号从 0 断开，而活会话表要求种子是
+// 从 0 起连续的。
+func brokenSeed(t *testing.T) []session.Event {
+	t.Helper()
+	seed := descriptorLog(t, 0, "查一下")
+	seed[0].Seq = 7
+	return seed
+}
+
+// 排演不出来的种子当场把这一步拦下，而不是把那条策略悄悄丢掉：一个没种上策略的
+// 孩子是一个不受这次派发约束的孩子。
+func TestSeedWithDelegatedPoliciesRefusesASeedItCannotStage(t *testing.T) {
+	if _, err := seedWithDelegatedPolicies("child", brokenSeed(t), DelegatedPolicyOverrides{
+		ApprovalPolicy: "never",
+	}); err == nil {
+		t.Fatal("排演不出来的种子该被拒")
+	}
+}
+
+// 这条失败落在建 agent **之前**：造法一次都没被叫到，也没有活化留下来。
+func TestMaterializeStopsWhenTheDelegatedPolicySeedCannotBeStaged(t *testing.T) {
+	fixture := newContinuation(t)
+	parent := fixture.spawnParent(t, "parent", "")
+
+	_, err := fixture.manager.materialize(t.Context(), materializeInputs{
+		childID:  "child",
+		provider: "spawn",
+		parent:   parent,
+		create: &materializeCreate{
+			seed:              brokenSeed(t),
+			meta:              ChildSessionMeta(parent, 1, 0, nil),
+			delegatedPolicies: DelegatedPolicyOverrides{ApprovalPolicy: "never"},
+		},
+	})
+	if err == nil {
+		t.Fatal("排演不出来的种子该把这次物化拦下")
+	}
+	if created := fixture.factory.created(); len(created) != 0 {
+		t.Fatalf("不该走到建 agent 那一步，实际 %#v", created)
+	}
+	if fixture.resident("child") {
+		t.Fatal("失败之后不该留下活化")
 	}
 }
 
@@ -565,6 +610,35 @@ func TestMaterializeRollsBackWhenTheCallerCancelsDuringPublication(t *testing.T)
 	}
 }
 
+// 那两笔收件箱登记挂在孩子自己那把作用域上，作用域没了就挂不上去。挂不上去还照旧
+// 公布的话，被接受的消息离开收件箱时没人来销号，这个孩子会永远停在「还在跑」上。
+func TestMaterializeRollsBackWhenTheInboxHooksCannotBeRegistered(t *testing.T) {
+	fixture := newContinuation(t)
+	parent := fixture.spawnParent(t, "parent", "")
+	// 趁同一道缝把孩子那把作用域放掉：公布那一步于是在第一笔登记上就走不下去。
+	fixture.factory.onPublished = func(id session.SessionID) {
+		if id == "child" {
+			_ = fixture.factory.child(id).Scope().Dispose(context.Background())
+		}
+	}
+
+	_, err := fixture.manager.StartContinuable(t.Context(), ContinuableStartSpec{
+		Provider: "spawn",
+		Label:    "查一下",
+		ChildID:  "child",
+		Request:  StartRequest{Prompt: textContent("干活"), Parent: parent},
+	})
+	if err == nil {
+		t.Fatal("登记挂不上去该把这次开工拦下")
+	}
+	if fixture.resident("child") {
+		t.Fatal("回滚之后不该留下一份活化")
+	}
+	if _, still := fixture.agents.Get("child"); still {
+		t.Fatal("回滚之后那个孩子不该还在注册表里")
+	}
+}
+
 // ---- 投不进去就整个回滚 ----
 
 // 接受是这次操作的成功边界：没接受成，那次物化就不许留下一个驻留的孩子。
@@ -634,6 +708,26 @@ func TestSettlementReleasesTheChildAndTellsTheParent(t *testing.T) {
 	}
 	if !strings.Contains(textOf(notice.Content), "child") {
 		t.Fatalf("那句交代该点出是哪个孩子，实际 %q", textOf(notice.Content))
+	}
+}
+
+// 守望自己开出来的那次拆解失败了：这条路上没有调用方可报，所以它记一条诊断就完事，
+// 而这个孩子照旧被放掉——留着会把它整条祖先链永远钉在 waiting 上。
+func TestSettlementLogsATeardownFailureAndStillReleasesTheChild(t *testing.T) {
+	fixture := newContinuation(t)
+	ended := fixture.watchEnds(t)
+	fixture.factory.disposeErr = errors.New("拆不干净")
+	parent := fixture.spawnParent(t, "parent", "")
+	started := fixture.startChild(t, parent, "child", "干活")
+
+	fixture.factory.child("child").settle()
+	fixture.manager.retire(fixture.livingActivation(t, "child"), started.MessageID)
+
+	if end := <-ended; end.ID != "child" {
+		t.Fatalf("该发出这个孩子那条终止边，实际 %#v", end)
+	}
+	if fixture.resident("child") {
+		t.Fatal("拆解失败也该把这份活化摘掉")
 	}
 }
 

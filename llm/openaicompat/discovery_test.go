@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // probeRecord 记下模拟端点收到的那次问询。

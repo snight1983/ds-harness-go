@@ -10,7 +10,7 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // fakeSearcher 是一个把请求原样记下来的检索后端替身。

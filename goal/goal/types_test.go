@@ -1,6 +1,6 @@
 // 本文件的作用：把这个包落到线上的那几份字节钉死——快照和改动排出去长什么样、
 // 那两段人写的自由文本为什么一个转义都不许多，以及那份消息来源怎么骑在
-// [ds-harness-go/llm.UnknownSource] 上来回走。
+// [github.com/snight1983/ds-harness-go/llm.UnknownSource] 上来回走。
 //
 // # 这些测试防的是什么错
 //
@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 func TestEventTypesNamesJustThisPackagesEvent(t *testing.T) {

@@ -7,8 +7,8 @@ package sessionquery
 import (
 	"strings"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ExtractEventText 提取一条第一方事件里可检索的语义文字。

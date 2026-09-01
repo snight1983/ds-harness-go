@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // ProjectionKey 是标题那个单元占的投影键。
@@ -53,7 +53,7 @@ type TitleView struct {
 
 // projectionDefinition 是标题那个单元。
 //
-// 源: packages/session/session-title/src/index.ts:308-317
+// 源: packages/session/session-title/src/index.ts:261-274（titleProjectionDefinition）
 //
 // 它是一次纯粹的 last-wins 折叠，消化的正是 [FoldSnapshot] 消化的那批事件。
 // 两者有意并存：折叠函数给宿主一份**带信封事实**的完整快照（谁定的、引了哪几句、

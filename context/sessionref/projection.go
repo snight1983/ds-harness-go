@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/compaction"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/sessionquery"
-	"ds-harness-go/util/outputretention"
+	"github.com/snight1983/ds-harness-go/compaction"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/util/outputretention"
 )
 
 // projectedItem 是投影出来的一条对话行，外加裁剪要用的那几个记账字段。

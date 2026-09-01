@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/session"
-	"ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionquery"
 )
 
 // searchCollection 是一次翻页收集下来的结果。
@@ -36,7 +36,7 @@ const capNotice = "Result cap reached. Narrow the query or add filters to find a
 
 // formatSessionSearch 排一次跨会话检索的结果。
 //
-// 源: packages/session-query/tool-session-query/src/presentation.ts:47-79
+// 源: packages/session-query/tool-session-query/src/presentation.ts:243-255（presentation）
 func formatSessionSearch(
 	collected searchCollection[sessionquery.SearchHit],
 	titles map[session.SessionID]titleView,
@@ -240,7 +240,7 @@ func formatEventRead(sessionID session.SessionID, title titleView, window sessio
 // Go 侧 [sessionquery.ExtractEventText] 会失败，因为负载是原始字节，解不回来就是
 // 日志坏了。这里把它**抛出去**而不是降级成 "(no semantic text)"：那两件事在模型
 // 眼里完全不同，一条坏掉的事件被画成「这条没有文字」会让它以为自己已经看全了。
-// 这个取舍和 [ds-harness-go/sessionquery] 的 doc.go 第 6 条是同一个。
+// 这个取舍和 [github.com/snight1983/ds-harness-go/sessionquery] 的 doc.go 第 6 条是同一个。
 func formatNeighbor(event session.Event) (string, error) {
 	text, err := sessionquery.ExtractEventText(event)
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestDefaultsAreTheDshValues(t *testing.T) {

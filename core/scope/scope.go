@@ -26,7 +26,7 @@
 //
 // DSH 侧这个包大半篇幅在处理 cordis（它自研的依赖注入 / 插件框架）：Context 上挂标签、
 // ctx.plugin() 起一个 fiber、ctx.effect() 登记副作用、Context.filter 这个分派钩子。
-// 和 ds-harness-go/invariants 里的判断一致，这些不照搬，换成 Go 里的直接对应物：
+// 和 github.com/snight1983/ds-harness-go/invariants 里的判断一致，这些不照搬，换成 Go 里的直接对应物：
 //
 //   - Context 上的作用域标签 + 派生上下文继承 → [Scope] 自己持有 [Key]，没有隐式继承
 //   - ctx.plugin() 起的 fiber              → [Scope] 自己的一摞 teardown，后进先出
@@ -77,7 +77,7 @@ var ErrScopeDisposed = errors.New("scope: 作用域已经释放，不能再往�
 
 // Key 是一个不透明的作用域身份，**按指针比较**。
 //
-// 源: packages/core/scope/src/index.ts:15
+// 源: packages/core/scope/src/index.ts:14-15（ScopeKey）
 //
 // 新增: DSH 那边 ScopeKey = object，任意对象都能当键（一个 Agent 常常拿自己当键），
 // 因为 JS 的 === 就是身份比较。Go 这边做成一个具体的不透明结构体，用 *Key 传递，理由有二：
@@ -289,7 +289,7 @@ func TargetFiltered[T any](subject T, key *Key, base func(subject T, listenerTag
 
 // Key 给出这个载体的路由键，无作用域的载体返回 nil。
 //
-// 源: packages/core/scope/src/index.ts:196-204
+// 源: packages/core/scope/src/index.ts:14-15（ScopeKey）
 func (c *Carrier[T]) Key() *Key {
 	if c == nil {
 		return nil

@@ -5,8 +5,27 @@ package subagent
 
 import (
 	"context"
+	"sync"
 	"testing"
 )
+
+// doneProbe 是一个只多做一件事的 ctx：Done 被取出来的那一刻它捎个信出去。
+//
+// 那把锁的等待写成 select，而 Go 在把一个 select 挂起之前会先按顺序把每个 case
+// 的通道求值出来——所以 Done 被调到，就等于「这一位已经放掉互斥锁、走到那道
+// select 了，不会再回头去抢」。等到这个信号再放开锁，那次唤醒必然从 waiter 那一
+// 支出去：要么它已经挂上了、被 close 叫醒，要么它还没挂上、进 select 时就发现
+// waiter 已经就绪。两种收场都走 `case <-waiter`，不看运气。
+type doneProbe struct {
+	context.Context
+	once  sync.Once
+	asked chan struct{}
+}
+
+func (c *doneProbe) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.asked) })
+	return c.Context.Done()
+}
 
 func TestChildLockSerialisesTheSameChild(t *testing.T) {
 	lock := newChildLock()
@@ -34,6 +53,36 @@ func TestChildLockSerialisesTheSameChild(t *testing.T) {
 		t.Fatal("锁还占着时第二位不该进得去")
 	default:
 	}
+	release()
+	<-entered
+}
+
+// 等在一个孩子上的那一位是被上一位放开叫醒的：唤醒之后它回去重抢，并且真的抢得上。
+//
+// 上面那个用例只钉住「占着的时候进不去」，它那一位有可能压根没等过——主协程
+// 抢在它进 acquire 之前就放开了，于是它当场就占上了。这里用 [doneProbe] 把
+// 「已经走到那道 select」这件事等实了再放开，被叫醒那一支才是必经的。
+func TestChildLockWakesAWaiterOnRelease(t *testing.T) {
+	lock := newChildLock()
+
+	release, err := lock.acquire(context.Background(), "child")
+	if err != nil {
+		t.Fatalf("占锁失败：%v", err)
+	}
+
+	waiting := &doneProbe{Context: context.Background(), asked: make(chan struct{})}
+	entered := make(chan struct{})
+	go func() {
+		defer close(entered)
+		second, err := lock.acquire(waiting, "child")
+		if err != nil {
+			t.Errorf("第二位该被叫醒并占上，实际 %v", err)
+			return
+		}
+		second()
+	}()
+
+	<-waiting.asked
 	release()
 	<-entered
 }

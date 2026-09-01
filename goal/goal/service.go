@@ -17,16 +17,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Agents 是本包要用的那一小块 agent 注册表能力。
 //
 // 新增: DSH 靠 `static inject = ['agents']` 拿到整个注册表。Go 里只声明用得着的
-// 那两个方法（成例见 [ds-harness-go/schedule.Agents]）：一个回答「我手里这个
+// 那两个方法（成例见 [github.com/snight1983/ds-harness-go/schedule.Agents]）：一个回答「我手里这个
 // agent 此刻还是注册表里那一个吗」，一个用来在会话生命周期起跑时把活化打回原形。
 type Agents interface {
 	// Get 按标识取此刻活着的那个 agent。
@@ -50,8 +50,8 @@ type ChangedObserver func(owner agent.Agent, change Changed)
 // changedLayer 是一个作用域在那张观察者表里的全部贡献。
 //
 // 新增: DSH 靠 cordis 的 `agentEvents(ctx, agent).emit(...)` 做作用域过滤派发，
-// 本仓库统一换成 [ds-harness-go/core/scope.Layers]——全局层加各作用域的覆盖层，
-// 派发时按载体作用域的父链取并集（成例见 [ds-harness-go/subagent.lifecycleLayer]）。
+// 本仓库统一换成 [github.com/snight1983/ds-harness-go/core/scope.Layers]——全局层加各作用域的覆盖层，
+// 派发时按载体作用域的父链取并集（成例见 [github.com/snight1983/ds-harness-go/subagent.lifecycleLayer]）。
 type changedLayer struct {
 	changed *scope.AnonymousEntries[ChangedObserver]
 }
@@ -66,7 +66,7 @@ func (l *changedLayer) IsEmpty() bool { return l.changed.IsEmpty() }
 
 // Config 是造一台服务要的部署方选择。
 //
-// 源: packages/goal/goal/src/index.ts:116-119、186-188
+// 源: packages/goal/goal/src/index.ts:170-174（Config）、186-188
 type Config struct {
 	// Agents 是 agent 注册表，必填。
 	Agents Agents
@@ -109,7 +109,7 @@ type cache struct {
 
 // Service 是那台由会话日志独家支撑的目标服务。
 //
-// 源: packages/goal/goal/src/index.ts:183-590
+// 源: packages/goal/goal/src/index.ts:235-622（GoalService）
 //
 // 新增: DSH 是单线程的，本包在 Go 里会被多条协程同时叫到，所以每一次调用整个罩在
 // 一把互斥锁下——「同步到最新、验一次跃迁、追加一条改动」这三步必须是原子的，
@@ -129,7 +129,7 @@ type Service struct {
 	// caches 是每个会话那份缓存，键是**弱**引用。
 	//
 	// 新增: DSH 用 `WeakMap<Session, GoalCache>`。Go 里对应的是 weak.Pointer
-	// （成例见 [ds-harness-go/guard/repeattoolreminder]）——一个用完就不再有人
+	// （成例见 [github.com/snight1983/ds-harness-go/guard/repeattoolreminder]）——一个用完就不再有人
 	// 引用的会话不该因为这张表而留在内存里。键必须是会话**对象**而不是它的标识：
 	// 同一个标识被重新开起来是另一段生命周期，它绝不能继承上一段的活化。
 	caches map[weak.Pointer[coresession.Session]]*cache

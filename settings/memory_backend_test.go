@@ -33,6 +33,13 @@ type memoryBackend struct {
 	writable  bool
 	// persistDelay 是人为的落盘延迟，让用例能把两次并发写叠在一起。
 	persistDelay time.Duration
+	// persistEntered 和 persistGate 合起来是一次握手：非 nil 时，Persist 一进来
+	// 先往 persistEntered 上报一声，再停在 persistGate 上等用例放行。
+	//
+	// 有了它，「一次写正停在落盘里」这件事就是被等到的，不是靠 persistDelay 和
+	// 用例里的 sleep 赛出来的——那种时序在跑满的机器上会翻过来。
+	persistEntered chan struct{}
+	persistGate    chan struct{}
 	// persistErr 非 nil 时每次落盘都失败。
 	persistErr error
 	// loadErr 非 nil 时 Load 失败。
@@ -78,8 +85,18 @@ func (m *memoryBackend) Load(context.Context) (map[string]any, error) {
 func (m *memoryBackend) Persist(_ context.Context, ns Namespace, section map[string]any) error {
 	m.mutex.Lock()
 	delay, failure := m.persistDelay, m.persistErr
+	entered, gate := m.persistEntered, m.persistGate
+	// 闸门只拦第一次落盘。留着它拦后面几次的话，一次本该被拒的写要是真的走到了
+	// 这里，用例会挂死而不是失败——挂死的红是没法读的。
+	m.persistEntered, m.persistGate = nil, nil
 	m.mutex.Unlock()
 
+	if entered != nil {
+		entered <- struct{}{}
+	}
+	if gate != nil {
+		<-gate
+	}
 	if delay > 0 {
 		time.Sleep(delay)
 	}

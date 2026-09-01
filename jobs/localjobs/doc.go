@@ -5,7 +5,7 @@
 //
 // 源: packages/jobs/jobs-local/src/index.ts:1-10
 //
-// 契约（属主、隔离、生命周期）写在 [ds-harness-go/jobs/jobs] 那一侧，本包只讲
+// 契约（属主、隔离、生命周期）写在 [github.com/snight1983/ds-harness-go/jobs/jobs] 那一侧，本包只讲
 // 它是怎么被守住的。
 //
 // # 登记活得比生产方和控制器都长
@@ -22,7 +22,7 @@
 //   - **监听器一律在锁外跑**。一个观察者回头调 [Registry.List] 是完全正常的事，
 //     在锁里通知就是自己等自己。所以每条路都是「锁里改完、拿到该通知谁、放锁、
 //     再通知」。
-//   - **调生产方也在锁外**。[Registry.Kill] 和拆除都会调 [ds-harness-go/jobs/jobs.Hooks.Cancel]，
+//   - **调生产方也在锁外**。[Registry.Kill] 和拆除都会调 [github.com/snight1983/ds-harness-go/jobs/jobs.Hooks.Cancel]，
 //     而那一下可能让生产方当场结算；结算要拿同一把锁。放锁调完再回来，回来时
 //     必须重新确认这件作业还没落定——DSH 单线程下不存在的那个窗口，Go 这边存在。
 //

@@ -8,7 +8,7 @@
 // # 它是**劝告**，不是闸门
 //
 // 这一层从不拦下任何调用，也从不改写任何结果。它只做一件事：往这次调用的
-// [ds-harness-go/core/tools.PostDecision.AdditionalContexts] 前面插一条消息。
+// [github.com/snight1983/ds-harness-go/core/tools.PostDecision.AdditionalContexts] 前面插一条消息。
 // 拦不拦、换不换，全由别的层决定——所以它装在哪个位置、和谁并排，都不影响别人。
 //
 // 这个克制是有理由的。「连着调同一个工具」并不总是错的：一次分页遍历、一次轮询、

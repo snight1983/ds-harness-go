@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // armInvariants 造一条全开的注册表，把本包的检查装到运行时上，用例结束时注销。

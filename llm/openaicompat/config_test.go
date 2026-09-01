@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // minimalProfile 造一条刚好服务得了的路由：端点加一条只写了 id 的模型。

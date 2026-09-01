@@ -17,7 +17,7 @@ import (
 
 // BehaviorConnectionRefused 是只有独立进程演得出来的那一种：**监听器还没起来**。
 //
-// 源: packages/test-support/llm-mock-server/src/cli.ts:16
+// 源: packages/test-support/llm-mock-server/src/cli.ts:15-16（CONNECTION_REFUSED_BEHAVIOR）
 //
 // 它不在 [behaviorOrder] 里，因为一个已经接下请求的处理器演不出「端口上没人」。
 // 它只能写在 --sequence 的第一位，效果是进程先等一段时间再去绑端口，这段时间里
@@ -51,7 +51,7 @@ var ErrCLIHelp = errors.New("mockserver: 要的是用法说明")
 
 // CLIUsage 是 --help 和参数出错时打印的用法说明。
 //
-// 源: packages/test-support/llm-mock-server/src/cli.ts:37-65
+// 源: packages/test-support/llm-mock-server/src/cli.ts:36-65（MOCK_LLM_CLI_USAGE）
 //
 // 正文保持英文：这是被复刻的能力的一部分，选项名本来就是英文，说明跟着选项名走
 // 才对得上；而且这份文本会被脚本 grep。
@@ -87,7 +87,7 @@ Other:
 
 // CLIConfig 是一行命令行解析出来的东西：服务器配置，加上进程级的那两件事。
 //
-// 源: packages/test-support/llm-mock-server/src/cli.ts:19-26
+// 源: packages/test-support/llm-mock-server/src/cli.ts:18-26（MockLlmCliConfig）
 type CLIConfig struct {
 	// Server 是去掉 connection_refused 之后的服务器配置。
 	Server Options

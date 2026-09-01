@@ -10,8 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/fs"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // Name 是这一层的产出方名字，落在消息来源里。

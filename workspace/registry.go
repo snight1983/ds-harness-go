@@ -18,9 +18,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/fs"
-	"ds-harness-go/session"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // Config 是打开一个 [Registry] 需要的东西。

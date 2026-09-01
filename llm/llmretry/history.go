@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // routeKind 是一条事件对「回合/步骤/提供方」这点状态的影响种类。

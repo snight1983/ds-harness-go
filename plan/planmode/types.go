@@ -11,12 +11,12 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ExitToolName 是那件面向模型的退出工具的名字。
 //
-// 源: packages/plan/plan-mode/src/index.ts:67
+// 源: packages/plan/plan-mode/src/index.ts:56-60（EXIT_PLAN_MODE）
 //
 // 它在计划模式关着的时候也保持注册，好让请求里的工具表在进出计划模式时纹丝不动。
 const ExitToolName = "exit_plan_mode"
@@ -38,7 +38,7 @@ const EventMode session.EventType = "plan/mode"
 //
 // 新增: DSH 靠 `declare module` 把它合并进 SessionEventMap。Go 没有声明合并，
 // [session.Vocabulary] 是个闭合的值，所以改成由本包交出这张单子、装配方自己拼
-// （成例见 [ds-harness-go/session/sessiontitle.EventTypes]）：
+// （成例见 [github.com/snight1983/ds-harness-go/session/sessiontitle.EventTypes]）：
 //
 //	vocabulary := session.CoreVocabulary().With(planmode.EventTypes()...)
 //
@@ -108,7 +108,7 @@ var ErrInvalidConfig = errors.New("planmode: 配置不成立")
 
 // resolveSection 验部署方拥有的那段计划指引。
 //
-// 源: packages/plan/plan-mode/src/index.ts:106-119
+// 源: packages/plan/plan-mode/src/index.ts:92-112（resolveConfig）
 //
 // 缺席或者全是空白都在构造这一刻就拒掉，而不是被忽略：一段空指引意味着计划模式
 // 开着却什么都没告诉模型，那和没开的唯一区别是用户以为它开着。

@@ -22,14 +22,14 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/skill"
-	"ds-harness-go/skill/skilltool"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/skill"
+	"github.com/snight1983/ds-harness-go/skill/skilltool"
 )
 
 // callerCwd 是这些用例里调用方那个工作目录。
@@ -71,7 +71,7 @@ func (a *stubAgent) Steer(llm.Message)                                      {}
 
 // Inject 在这里必须炸。目录和注入都走步骤边界那条瀑布，绝不该改道去 Inject——
 // 那条路绕开了「这一步提议了哪些消息」这个语义，会在别的步骤上冒出来。
-func (a *stubAgent) Inject(llm.Message) { panic("步骤边界上的目录不许走 agent.Inject()") }
+func (a *stubAgent) Inject(llm.Message)                     { panic("步骤边界上的目录不许走 agent.Inject()") }
 func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget) {}
 
 func (a *stubAgent) RunMaintenance(ctx context.Context, task func(context.Context) error) error {
@@ -1180,3 +1180,7 @@ func TestTheDescriptionCapIsValidated(t *testing.T) {
 		t.Fatalf("那句话该点出是哪个配置：%v", err)
 	}
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

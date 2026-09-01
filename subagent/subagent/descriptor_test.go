@@ -8,8 +8,8 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // continuableInput 是一份最小的、成立的可续描述符输入。

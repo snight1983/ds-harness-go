@@ -15,7 +15,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // s3Failure 造一个 minio 会认出来的协议错误。

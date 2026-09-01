@@ -2,7 +2,7 @@
 // 中间那条**派发管线**——四条可扩展的瀑布、一道审批接缝、以及把这一切串起来的
 // 分段调度器。
 //
-// 源: packages/core/tools/src/index.ts:1229-1946
+// 源: packages/core/tools/src/index.ts:1229-1935
 //
 // 注册表在 runtime.go；这里只管「一次调用怎么跑」。
 //
@@ -36,6 +36,7 @@
 // 不要跨越任意代码 recover，但这里的代码是**第三方注册进来的工具**，而这个进程
 // 同时服务多个用户的多个会话：一个工具写错了下标，代价不该是所有人的会话一起死。
 // 兜住之后它变成那一次调用的失败结果，其他调用照常。
+
 package tools
 
 import (
@@ -44,8 +45,8 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // PreDecisionKind 是一次派发前裁决的种类。
@@ -64,7 +65,7 @@ const (
 
 // PreDecision 是派发前的裁决。
 //
-// 源: packages/core/tools/src/index.ts:588-591
+// 源: packages/core/tools/src/index.ts:575-584（PreToolDecision）
 //
 // 这里**没有**「改写入参」这一档：参数在到这里之前就已经落进会话日志、也已经
 // 呈现给用户看了，此时再改，日志里记的和真正跑的就是两回事。
@@ -89,7 +90,7 @@ const (
 
 // PostDecision 是派发后的裁决。
 //
-// 源: packages/core/tools/src/index.ts:597-600
+// 源: packages/core/tools/src/index.ts:586-593（PostToolDecision）
 //
 // 新增: DSH 用两个 accept 变体在类型层面挡住「同时换值和换内容」（`value?: never`）。
 // Go 的结构体表达不了这种互斥，所以它变成一条运行时规矩：两个都给就是一次编程错误，
@@ -204,7 +205,7 @@ func (r *Runtime) ObserveResult(ctx context.Context, owner *scope.Scope, observe
 
 // ApprovalOutcome 是审批接缝给出的答复。
 //
-// 源: packages/core/tools/src/index.ts:1706-1727
+// 源: packages/interaction/user-approval/src/types.ts:28-32（ApprovalOutcome）
 type ApprovalOutcome string
 
 const (
@@ -220,7 +221,7 @@ const (
 
 // ApprovalRequest 是一次要人拍板的请求。
 //
-// 源: packages/core/tools/src/index.ts:1700-1706
+// 源: packages/interaction/user-approval/src/index.ts:114-139（ApprovalRequest）
 type ApprovalRequest struct {
 	// Agent 是代表哪个 agent 在问，界面靠它把问题送到对的会话上。
 	Agent *scope.Key
@@ -259,7 +260,7 @@ const (
 
 // Preparation 是 [Runtime.Prepare] 的产物：执行对象加上下一段该走哪。
 //
-// 源: packages/core/tools/src/index.ts:424-431
+// 源: packages/core/tools/src/index.ts:419-427（ScheduledToolPreparation）
 type Preparation struct {
 	// Kind 是下一段。
 	Kind StageKind
@@ -271,7 +272,7 @@ type Preparation struct {
 
 // Dispatched 是 [Runtime.Dispatch] 的产物。
 //
-// 源: packages/core/tools/src/index.ts:433-441
+// 源: packages/core/tools/src/index.ts:429-436（ScheduledToolDispatch）
 type Dispatched struct {
 	// Kind 只会是 [StagePostResult] 或者 [StageFinalResult]。
 	Kind StageKind
@@ -682,7 +683,7 @@ func (r *Runtime) createSuccessResult(exec *RunContext, definition *Definition, 
 
 // renderContent 跑一次内容投影，把 panic 和 error 都变成一个 [OutputError]。
 //
-// 源: packages/core/tools/src/index.ts:525-527（projectionError）
+// 源: packages/core/tools/src/index.ts:517-520（projectionError）
 func renderContent(definition *Definition, args, value json.RawMessage) (content llm.Content, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -919,7 +920,7 @@ func abortedResult(prior *Result) Result {
 
 // abortedBeforeDispatchResult 是取消让执行体压根没起步。
 //
-// 源: packages/core/tools/src/index.ts:1934-1946
+// 源: packages/core/tools/src/index.ts:1923-1935
 func abortedBeforeDispatchResult(prior *Result) Result {
 	return canonicalAbort("tool call aborted before dispatch", CodeAbortedBeforeDispatch, prior)
 }

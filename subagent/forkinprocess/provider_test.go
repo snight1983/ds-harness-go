@@ -6,9 +6,9 @@ package forkinprocess
 import (
 	"testing"
 
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/internal/providertest"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/internal/providertest"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 func TestNewFallsBackToTheDefaultProviderName(t *testing.T) {

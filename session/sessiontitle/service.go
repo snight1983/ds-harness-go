@@ -17,8 +17,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ErrDisposed 表示服务已经关掉了，不再接活。
@@ -38,7 +38,7 @@ var ErrBadProvider = errors.New("sessiontitle: 标题生成器不成立")
 
 // Service 是那个由日志托底的标题服务。
 //
-// 源: packages/session/session-title/src/index.ts:261-791
+// 源: packages/session/session-title/src/index.ts:293-829（SessionTitleService）
 //
 // 零值不可用，用 [New] 建。它可以被多个 goroutine 同时使用。
 type Service struct {

@@ -11,12 +11,12 @@ import (
 	"errors"
 	"strings"
 
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
-// 这几句是一个非 [ds-harness-go/subagent/subagent.StopCompleted] 的终止原因给模型的
+// 这几句是一个非 [github.com/snight1983/ds-harness-go/subagent/subagent.StopCompleted] 的终止原因给模型的
 // 那句话头。
 //
 // 源: packages/subagent/tool-subagent/src/index.ts:126-141
@@ -126,7 +126,7 @@ func collectForegroundRun(ctx context.Context, run subagent.Run) (llm.Content, e
 }
 
 // settleStart 结清一次还没起来的开工，而**不**违背作业生产方那条契约：
-// [ds-harness-go/jobs/jobs.Hooks.Done] 只收结局，不收错误。
+// [github.com/snight1983/ds-harness-go/jobs/jobs.Hooks.Done] 只收结局，不收错误。
 //
 // 源: packages/subagent/tool-subagent/src/index.ts:112-122
 //
@@ -155,8 +155,8 @@ func settleStart(ctx context.Context, start func(context.Context) (subagent.Run,
 // 不能报成干干净净的 killed。
 //
 // cause 是这次取消自己那句话。本仓库里一个被取消的等待交回的是 [context.Cause]
-// 而不是 [context.Canceled]（成例见 [ds-harness-go/mcp.Host] 和
-// [ds-harness-go/core/systemprompt.Registry]），而 [context.WithCancelCause] 带的
+// 而不是 [context.Canceled]（成例见 [github.com/snight1983/ds-harness-go/mcp.Host] 和
+// [github.com/snight1983/ds-harness-go/core/systemprompt.Registry]），而 [context.WithCancelCause] 带的
 // 那句话是一个普通的 error，[errors.Is] 认不出 [context.Canceled] 来。所以除了
 // 那两个哨兵之外还要认它——不然一次**明说了理由**的取消反倒会被报成 failed，
 // 理由写得越清楚判得越错。

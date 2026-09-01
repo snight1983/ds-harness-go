@@ -9,7 +9,7 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // SessionView 是投影从一个活会话身上要看的全部东西。

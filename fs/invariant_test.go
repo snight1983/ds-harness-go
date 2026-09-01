@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // armed 造一条全开的注册表，把检查装到 policy 上，并在用例结束时注销。

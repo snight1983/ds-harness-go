@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // newLoggedRegistry 造一张把事故写进缓冲区的表，好让「观察者 panic 了」这件事
@@ -1225,7 +1225,7 @@ func TestDispatchIsFilteredByScope(t *testing.T) {
 
 // TestDispatchToAnIdentitylessCarrierSeesOnlyTheGlobalLayer 一个作用域没有身份的
 // agent 的载体钥匙是 nil：它落在全局层，也就只看得见全局层那些登记。走这条的是
-// [ds-harness-go/core/scope.NewRoot] 造出来的顶层作用域。
+// [github.com/snight1983/ds-harness-go/core/scope.NewRoot] 造出来的顶层作用域。
 func TestDispatchToAnIdentitylessCarrierSeesOnlyTheGlobalLayer(t *testing.T) {
 	registry := newRegistry(t)
 	ctx := context.Background()

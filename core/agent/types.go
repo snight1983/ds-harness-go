@@ -9,13 +9,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // InboxTarget 是一个 agent 手上那两条有序待办清单之一。
 //
-// 源: packages/core/agent/src/types.ts:10
+// 源: packages/core/agent/src/types.ts:28-29（InboxTarget）
 type InboxTarget string
 
 const (

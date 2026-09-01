@@ -14,16 +14,16 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/session"
-	"ds-harness-go/util/timeout"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/util/timeout"
 )
 
 // TaskWaitTimeout 是那个把「等到点了」和「调用方自己取消了」分开的超时代号。
 //
-// 源: packages/jobs/jobs-local/src/index.ts:25
+// 源: packages/jobs/jobs-local/src/index.ts:24-25（TASK_WAIT_TIMEOUT）
 const TaskWaitTimeout = "TASK_WAIT_TIMEOUT"
 
 // defaultMaxConcurrentJobsPerOwner 是每个属主的活跃作业数默认上限。
@@ -34,7 +34,7 @@ const defaultMaxConcurrentJobsPerOwner = 10
 // Agents 是这台注册表用得到的那一小块 agent 登记簿。
 //
 // 新增: DSH 从 cordis 上取 `ctx.get('agents')`。这里只写出真正被调到的那个方法，
-// 装配方交进来的 [ds-harness-go/core/agent.Registry] 自然满足它。
+// 装配方交进来的 [github.com/snight1983/ds-harness-go/core/agent.Registry] 自然满足它。
 type Agents interface {
 	// Get 按会话 id 找那个**当下登记着**的 agent 实例。
 	Get(id session.SessionID) (agent.Agent, bool)
@@ -42,7 +42,7 @@ type Agents interface {
 
 // Config 是这台注册表的装配面。
 //
-// 源: packages/jobs/jobs-local/src/index.ts:31-37
+// 源: packages/jobs/jobs-local/src/index.ts:30-37（Config）
 type Config struct {
 	// MaxConcurrentJobsPerOwner 是同一个属主（或者那个共用的无主桶）里 running
 	// 加 stopping 的上限，0 表示用默认值 10。
@@ -56,7 +56,7 @@ type Config struct {
 	// Now 是取时刻的那只手，为 nil 时用 [time.Now]。
 	//
 	// 新增: DSH 直接调 Date.now()。做成可换的一只手是本仓库的成例
-	// （见 ds-harness-go/workspace 那台注册表），测试因此不必靠真的时钟。
+	// （见 github.com/snight1983/ds-harness-go/workspace 那台注册表），测试因此不必靠真的时钟。
 	Now func() time.Time
 	// Logger 用来报告监听器自己抛出来的错误和生产方的契约违反，为 nil 时用
 	// [slog.Default]。
@@ -72,7 +72,7 @@ type jobLayer struct {
 	// controllers 是挂在这一层的那些作业控制器，值是它们的诊断标签。
 	//
 	// 新增: DSH 存的是 `Symbol(name)`，为的是「重名的仍旧互相独立」。Go 里
-	// [ds-harness-go/core/scope.AnonymousEntries] 本来就是每次追加各发一个撤销
+	// [github.com/snight1983/ds-harness-go/core/scope.AnonymousEntries] 本来就是每次追加各发一个撤销
 	// 函数，独立性已经有了，所以直接存那个标签字符串。
 	controllers *scope.AnonymousEntries[string]
 	// listeners 是登记在这一层的完成监听器。
@@ -271,7 +271,7 @@ func (r *Registry) Start(spec jobs.Start) (jobs.JobID, error) {
 func (r *Registry) admit(spec jobs.Start) error {
 	if !r.servesOwner(spec.Owner) {
 		return errors.New("background jobs unavailable: no job controller serves this agent " +
-			"(load ds-harness-go/jobs/jobstool in its composition)")
+			"(load github.com/snight1983/ds-harness-go/jobs/jobstool in its composition)")
 	}
 	if spec.Kind == "" {
 		return errors.New("invalid job kind: expected a non-empty string")
@@ -438,7 +438,7 @@ func (r *Registry) Kill(id jobs.JobID, caller agent.Agent, reason string) (jobs.
 //
 // 源: packages/jobs/jobs-local/src/index.ts:230-279
 //
-// 新增: 形参叫 limit 而不是 timeout，让路给同名的 [ds-harness-go/util/timeout] 包。
+// 新增: 形参叫 limit 而不是 timeout，让路给同名的 [github.com/snight1983/ds-harness-go/util/timeout] 包。
 func (r *Registry) Wait(
 	ctx context.Context,
 	id jobs.JobID,
@@ -744,7 +744,8 @@ func (r *Registry) settle(job *trackedJob, outcome jobs.Outcome) {
 // 攥住那个摘除函数是为了让服务拆除能把这条跨协程的清理摘下来。
 func (r *Registry) ensureOwnerCleanup(owner agent.Agent) error {
 	if r.agents == nil {
-		return errors.New("background job ownership requires the agent registry (load ds-harness-go/core/agent)")
+		return errors.New("background job ownership requires the agent registry " +
+			"(load github.com/snight1983/ds-harness-go/core/agent)")
 	}
 	registered, ok := r.agents.Get(owner.ID())
 	if !ok || registered != owner {

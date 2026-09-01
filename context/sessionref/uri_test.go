@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestEncodeURI往返回原来那个会话id(t *testing.T) {

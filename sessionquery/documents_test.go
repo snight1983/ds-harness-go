@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestBuildEventRecordsClassifiesEverySurfacePosition(t *testing.T) {

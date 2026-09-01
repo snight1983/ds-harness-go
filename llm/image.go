@@ -8,7 +8,7 @@ package llm
 import (
 	"fmt"
 
-	"ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/attachment"
 )
 
 // OffloadedImageText 是一张为了塞进请求上限而被拿掉的图，留给模型看的替身。
@@ -27,7 +27,7 @@ const attachmentDigestLength = 8
 
 // TextOnlyImageText 是给一个收不了图的模型看的、稳定的单图占位文本。
 //
-// 源: packages/llm/llm/src/content.ts:11-19
+// 源: packages/llm/llm/src/content.ts:68-76（textOnlyImageText）
 //
 // 新增: DSH 直接按 7..15 下标切，不检查越界——JS 的 slice 越界返回空串，不会崩。
 // Go 的切片越界会 panic，所以这里把两个下标夹到长度以内。对格式正常的标识
@@ -45,7 +45,7 @@ func TextOnlyImageText(ref attachment.ImageRef) string {
 
 // RequestImageHandleText 是一份确切请求版本给模型看的、稳定的把手文本。
 //
-// 源: packages/llm/llm/src/content.ts:21-28
+// 源: packages/llm/llm/src/content.ts:78-97（requestImageHandleText）
 func RequestImageHandleText(version attachment.RequestImage) string {
 	return fmt.Sprintf(
 		"Image %s; request image %dx%dpx.",
@@ -86,7 +86,7 @@ const (
 
 // RequestImageOffloadPolicy 是一种请求表示形式的字节记账方式和量化移除策略。
 //
-// 源: packages/llm/llm/src/content.ts:48-62
+// 源: packages/llm/llm/src/content.ts:134-150（RequestImageOffloadPolicy）
 type RequestImageOffloadPolicy struct {
 	// MaxImages 是这条路由接受的图片张数；nil 表示不限张数。
 	//
@@ -214,7 +214,7 @@ func replaceImagesForTextModel(blocks Content) (Content, bool) {
 
 // ProjectImagesForTextModel 把持久的图片历史投影成一个确切的纯文本模型看得懂的文本。
 //
-// 源: packages/llm/llm/src/content.ts:130-141
+// 源: packages/llm/llm/src/content.ts:219-230（projectImagesForTextModel）
 //
 // 历史里一张图都没有时原样返回；有图时返回一份浅复制，图的位置换成稳定占位文本。
 func ProjectImagesForTextModel(messages []Message) []Message {
@@ -257,7 +257,7 @@ func OffloadRequestImages(messages []Message, maxRequestImageBytes *int) []Messa
 // OffloadRequestImagesWithPolicy 在超出路由预算之后，按**整张数**和**整字节**两个
 // 步长把最旧的图换掉，给出一份确定的临时投影。
 //
-// 源: packages/llm/llm/src/content.ts:163-202
+// 源: packages/llm/llm/src/content.ts:265-289（offloadRequestImagesWithPolicy）
 //
 // 移除目标只取决于完整的持久历史：129 张一兆的图、128 MiB 上限、64 MiB 步长时，
 // 最旧的 65 张被拿掉，剩下 64 MiB；这个被拿掉的前缀会一直固定，直到历史总量超过

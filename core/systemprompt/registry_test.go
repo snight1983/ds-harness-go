@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // harness 是一个造好的注册表加上它的根作用域和变更计数。

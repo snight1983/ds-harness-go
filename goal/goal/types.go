@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // marshalNoEscape 把一个值排成 JSON，**不**做 HTML 转义。
@@ -22,7 +22,7 @@ import (
 // 文本，里面出现尖括号一点都不稀奇；这份字节要落进会话日志并和 DSH 互读，多出来
 // 的转义会让同一句话在两侧长得不一样。
 //
-// 和 [ds-harness-go/schedule.marshalNoEscape] 同一条理由：这件事必须落在最里面
+// 和 [github.com/snight1983/ds-harness-go/schedule.marshalNoEscape] 同一条理由：这件事必须落在最里面
 // 那一层，外面那圈 Encoder 上的 SetEscapeHTML(false) 管不着自定义 MarshalJSON
 // 已经排好的字节。
 func marshalNoEscape(value any) ([]byte, error) {
@@ -61,7 +61,7 @@ func EventTypes() []session.EventType { return []session.EventType{EventChange} 
 
 // ChangeVersion 是本包实现的那一版耐久协议。
 //
-// 源: packages/goal/goal/src/runtime.ts:8
+// 源: packages/goal/goal/src/runtime.ts:7-8（GOAL_CHANGE_VERSION）
 const ChangeVersion = 1
 
 // DefaultMaxGoalRounds 是部署方没给上限时用的那个默认轮数。
@@ -80,7 +80,7 @@ type ID string
 
 // Ref 是一次目标修订的 compare-and-set 身份。
 //
-// 源: packages/goal/goal/src/types.ts:19-25
+// 源: packages/goal/goal/src/types.ts:18-24（GoalRef）
 //
 // 每一次耐久改动都把 Revision 加一，所以拿着旧 Ref 的调用方会被当场挡回去，
 // 而不是把别人刚写下的那次改动覆盖掉。
@@ -93,7 +93,7 @@ type Ref struct {
 
 // CreateRequest 是一次建目标的入参，轮数上限不给就用部署方的默认值。
 //
-// 源: packages/goal/goal/src/types.ts:27-30
+// 源: packages/goal/goal/src/types.ts:26-30（CreateGoalRequest）
 //
 // 新增: DSH 的 `maxGoalRounds?: number` 在 Go 里是一个指针。用零值当「没给」不行：
 // 0 本身是一个**非法**的上限（必须是正整数），而调用方显式传 0 该被当场拒掉，
@@ -107,7 +107,7 @@ type CreateRequest struct {
 
 // CreateResult 是一次建目标在远端边界上的回执。
 //
-// 源: packages/goal/goal/src/types.ts:33-35
+// 源: packages/goal/goal/src/types.ts:32-35（CreateGoalResult）
 type CreateResult struct {
 	// Ref 是刚建出来那个目标的身份。
 	Ref Ref `json:"ref"`
@@ -115,7 +115,7 @@ type CreateResult struct {
 
 // EditRequest 是一次 edit 要换掉的那几个字段，至少得给一个。
 //
-// 源: packages/goal/goal/src/types.ts:38-41
+// 源: packages/goal/goal/src/types.ts:37-41（EditGoalRequest）
 //
 // 两个都是指针，理由同 [CreateRequest.MaxGoalRounds]：「不换」和「换成一个非法值」
 // 必须分得开，否则一次只想改轮数的调用会把目标描述清空。
@@ -128,7 +128,7 @@ type EditRequest struct {
 
 // Phase 是一个目标的耐久生命周期阶段。
 //
-// 源: packages/goal/goal/src/types.ts:44-48
+// 源: packages/goal/goal/src/types.ts:43-48（GoalPhase）
 //
 // 「这个进程能不能自动往下推」是另一条轴（[Activation]），故意不落进这里，
 // 也永远不落盘。
@@ -152,7 +152,7 @@ var blockCodePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
 
 // BlockReason 是一次阻塞的机器可路由分类加一句给人看的解释。
 //
-// 源: packages/goal/goal/src/types.ts:51-56
+// 源: packages/goal/goal/src/types.ts:50-56（GoalBlockReason）
 //
 // 提供方限额、配置预算、执行错误、需要人来拍板——这几件事共用 [PhaseBlocked]
 // 这一个耐久阶段，靠 Code 分开，而不是各自再立一个生命周期状态。
@@ -165,7 +165,7 @@ type BlockReason struct {
 
 // Snapshot 是每一次非 clear 改动写下的完整耐久状态。
 //
-// 源: packages/goal/goal/src/types.ts:59-69
+// 源: packages/goal/goal/src/types.ts:58-68（GoalSnapshot）
 type Snapshot struct {
 	Ref
 	// Objective 是人提出的那个完成目标。
@@ -251,7 +251,7 @@ func (s *Snapshot) UnmarshalJSON(data []byte) error {
 
 // Activation 是「这个活着的进程可不可以自动接着推一个 active 的目标」。
 //
-// 源: packages/goal/goal/src/types.ts:71
+// 源: packages/goal/goal/src/types.ts:70-71（GoalActivation）
 //
 // 它**从不落盘**：一份新的缓存、每一次 agent/session-start 边沿，都会把它打回
 // [Disarmed]，哪怕回放出来的耐久阶段是 active。续会话、分叉、换驱动因此都保留
@@ -268,7 +268,7 @@ const (
 
 // View 是当前目标的一份脱手投影：耐久快照加上从日志里算出来的那几个量。
 //
-// 源: packages/goal/goal/src/types.ts:74-89
+// 源: packages/goal/goal/src/types.ts:73-83（GoalView）
 type View struct {
 	Snapshot
 	// RoundsStarted 是这个目标已经准入过的最高轮号。
@@ -299,7 +299,7 @@ type Projection struct {
 
 // Operation 是记进耐久改动的那几个动词。
 //
-// 源: packages/goal/goal/src/domain.ts:14-21
+// 源: packages/goal/goal/src/domain.ts:13-21（GoalOperation）
 type Operation string
 
 const (
@@ -325,7 +325,7 @@ const (
 //
 // 新增: DSH 那边这是 GoalSnapshotChangeMeta | GoalClearChangeMeta 两支联合。
 // Go 里合成一个带 Operation 判别的结构体（成例见
-// [ds-harness-go/schedule.Change]）：排字节时按 Operation 分支，读回来时先看
+// [github.com/snight1983/ds-harness-go/schedule.Change]）：排字节时按 Operation 分支，读回来时先看
 // Operation 再验那一支该有的键。
 //
 // Operation 是 [OpClear] 时用 Cleared / ClearedAt，别的时候用 Goal /
@@ -428,7 +428,7 @@ var phases = map[Phase]bool{
 
 // Changed 是一次耐久改动提交之后发出去的通知。
 //
-// 源: packages/goal/goal/src/domain.ts:85-90
+// 源: packages/goal/goal/src/domain.ts:84-90（GoalChanged）
 type Changed struct {
 	// Operation 是这次改动的动词。
 	Operation Operation
@@ -440,12 +440,12 @@ type Changed struct {
 
 // Source 是一条准入续推轮次的消息来源。
 //
-// 源: packages/goal/goal/src/domain.ts:47-54
+// 源: packages/goal/goal/src/domain.ts:46-53（GoalMessageSource）
 //
 // 新增: DSH 靠 declare module 把 'goal' 挂进 llm 的 MessageSourceMap。Go 的
 // [llm.MessageSource] 是封闭接口（理由见 llm 的包文档），插件挂不进去。这里给出
 // 一个普通结构体加它的 JSON 编解码，再靠 [llm.UnknownSource] 那个留出来的口子
-// 原样携带它（成例见 [ds-harness-go/context/sessionref.Source]）。
+// 原样携带它（成例见 [github.com/snight1983/ds-harness-go/context/sessionref.Source]）。
 //
 // 只有带着这份来源的 user/message 才会把 [View.RoundsStarted] 往上推：普通的
 // 人类回合一次都不算。
@@ -515,7 +515,7 @@ func ParseSource(source llm.MessageSource) (Source, bool) {
 
 // ErrorCode 是本包拒收一次读或一次改动时给出的稳定码。
 //
-// 源: packages/goal/goal/src/domain.ts:93-102
+// 源: packages/goal/goal/src/domain.ts:92-102（GoalErrorCode）
 type ErrorCode string
 
 const (
@@ -541,7 +541,7 @@ const (
 
 // Error 是本包边界上交回的那种失败。
 //
-// 源: packages/goal/goal/src/runtime.ts:20-30
+// 源: packages/goal/goal/src/runtime.ts:19-30（GoalError）
 //
 // 新增: DSH 那个 GoalError 继承 HarnessError，只为把 code 收窄到
 // [ErrorCode]。Go 里直接就是一个带具名码字段的错误类型，收窄由编译器管。

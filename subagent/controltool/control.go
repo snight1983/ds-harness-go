@@ -11,12 +11,12 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -80,8 +80,8 @@ const missingInterruptAgent = "interrupt_agent requires a calling agent (exec.ag
 // Service 是这两件工具用得到的那一小块子 agent 运行时。
 //
 // 新增: DSH 注入整个 `ctx.subagents`。这里只写出真正被调到的那两个方法，装配方交
-// 进来的 [ds-harness-go/subagent/subagent.Runtime] 自然满足它（窄口子的理由同
-// [ds-harness-go/sessionquery/querytool.Service]）。
+// 进来的 [github.com/snight1983/ds-harness-go/subagent/subagent.Runtime] 自然满足它（窄口子的理由同
+// [github.com/snight1983/ds-harness-go/sessionquery/querytool.Service]）。
 type Service interface {
 	// Followup 把一条后续消息投给一个可续孩子的下一个 FIFO 回合。
 	Followup(
@@ -93,7 +93,7 @@ type Service interface {
 	) (llm.MessageID, error)
 	// Interrupt 打断一个活着的可续孩子当下那段活动。
 	//
-	// 新增: 这个方法**不收 ctx**，和 [ds-harness-go/subagent/subagent.Runtime.Interrupt]
+	// 新增: 这个方法**不收 ctx**，和 [github.com/snight1983/ds-harness-go/subagent/subagent.Runtime.Interrupt]
 	// 一样：打断是发完就返回的，它自己不等任何东西，没有可取消的等待。
 	Interrupt(targetSessionID session.SessionID, authority subagent.InterruptAuthority) error
 }
@@ -108,14 +108,14 @@ type Config struct {
 	//
 	// 新增: DSH 的 exec.agent 就是 agent 对象本身。Go 这边它是一把不透明的钥匙，
 	// 所以由装配方交一条查回去的路，做法和
-	// [ds-harness-go/sessionquery/querytool.Config.AgentOf] 逐字相同。
+	// [github.com/snight1983/ds-harness-go/sessionquery/querytool.Config.AgentOf] 逐字相同。
 	AgentOf func(agent *scope.Key) (agent.Agent, error)
 }
 
 // Deps 是装这两件工具那一刻要交进来的东西。
 //
 // 新增: DSH 从 cordis 上下文上直接取 `ctx.tools`。Go 没有那个容器，所以显式交进来，
-// 形状和 [ds-harness-go/sessionquery/querytool.Deps] 一致。
+// 形状和 [github.com/snight1983/ds-harness-go/sessionquery/querytool.Deps] 一致。
 type Deps struct {
 	// Tools 是工具运行时，那两件工具登记在它上面，必填。
 	Tools *tools.Runtime
@@ -345,7 +345,7 @@ func (c *Controller) Install(
 
 // installAll 按次序装一组工具，中途失败就把已经装上的按反序摘干净。
 //
-// 新增: 本包两个控制器共用它。做法和 [ds-harness-go/sessionquery/querytool.Controller.Install]
+// 新增: 本包两个控制器共用它。做法和 [github.com/snight1983/ds-harness-go/sessionquery/querytool.Controller.Install]
 // 里那段逐字相同，只是抽了出来——那边还要连一段提示词指引，本包没有。
 func installAll(
 	ctx context.Context,

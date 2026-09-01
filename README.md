@@ -8,6 +8,29 @@
 
 文档入口：[项目文档](docs/README.md) · [总体架构](docs/architecture.md) · [嵌入 Go 服务](docs/embedding.md) · [逐包文档映射](docs/packages.md)
 
+## 引入方式
+
+公开 module path 是 `github.com/snight1983/ds-harness-go`，与仓库地址一致。所有包都从这个前缀引入：
+
+```go
+import (
+    "github.com/snight1983/ds-harness-go/core/agentloop"
+    "github.com/snight1983/ds-harness-go/core/session"
+)
+```
+
+分发走标准 Go 模块代理，不提供 vendor 目录、不提供单独发布的子模块——`tools/` 下的门禁工具是 `package main`，`internal/` 下的包按语言规则外部进不来，其余 79 个包全部对外可引。
+
+**尚未打稳定版本 tag。** 在打 tag 之前，外部宿主用 `replace` 指到本地检出：
+
+```
+require github.com/snight1983/ds-harness-go v0.0.0
+
+replace github.com/snight1983/ds-harness-go => ../ds-harness-go
+```
+
+「仓库外面引得进来」这件事在仓库内部是验不出来的：`go build ./...` 解析 import 走的是主模块自己的 module 行，module path 写错了内部照样全绿，外部调用方才会撞上 `package ... is not in std`。所以它有一道单独的门禁，见下面的开发与核验。
+
 ## 项目边界
 
 - 面向长期运行、多用户的服务端进程，而不是桌面编程助手。
@@ -194,7 +217,11 @@ go build ./...
 go vet ./...
 go test ./...
 go test -race ./...
+go run ./tools/doccheck
+go run ./tools/consumercheck
 ```
+
+`tools/consumercheck` 在临时目录里建一个仓库外的模块，用公开 module path 把全部 79 个可发布包引进去，编译、vet，再跑一遍最小闭环。它是 module path 和「每个公开包都对外可引」这两件事唯一测得到的地方。
 
 移植完整性门禁以此命令为准：
 
@@ -203,6 +230,8 @@ go run ./tools/portcheck
 ```
 
 `PENDING` 表示对应 DSH 符号仍未完成最终裁决。只要存在 `PENDING`，移植完整性门禁就不会通过；不能把单元测试通过等同于项目已经完成。
+
+门禁校验溯源注释时要读 DSH 源码，当前基准快照是 `deepseek-harness-dsh-v0.1.2-alpha.3`，默认从 `-dsh-root` 指向的目录读取。快照放在别处时用 `-dsh-root` 指定；指向不存在的目录只会让每条注释都报「出处不存在」，那是路径错了，不是移植漏了。
 
 PostgreSQL 后端测试需要设置真实数据库连接环境变量；未提供连接时，对应集成测试会跳过。
 
@@ -214,13 +243,19 @@ go build ./...
 go vet ./...
 go test ./...
 go test -race ./...
+$env:CGO_ENABLED = "0"
 $env:GOOS = "linux"
 go build ./...
 $env:GOOS = "darwin"
 go build ./...
 Remove-Item Env:GOOS
+Remove-Item Env:CGO_ENABLED
+go run ./tools/doccheck
+go run ./tools/consumercheck
 go run ./tools/portcheck
 ```
+
+交叉编译要关掉 cgo。本仓库自己不用 cgo，但只要机器上装了 C 工具链，`go build` 就会拿本机的 gcc 去编 runtime 里那几个 cgo 文件，报出一串跟本仓库无关的 `sigset_t` 错误。`CGO_ENABLED=0` 是在验「纯 Go 代码能不能为目标平台编出来」这个真问题。
 
 关键文档：
 

@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // ActivationSetupContribution 是往一个可续孩子还没公布的创建窗口里装的一样部署方
@@ -72,7 +72,7 @@ type ActivationSetupRegistry struct {
 	// registrations 是活着的那些贡献，按安装顺序。
 	//
 	// 新增: DSH 用一个 Set 表达「按插入顺序、可单独删掉一项」。Go 这边
-	// [ds-harness-go/core/scope.AnonymousEntries] 正是这样东西，而且它的 Values
+	// [github.com/snight1983/ds-harness-go/core/scope.AnonymousEntries] 正是这样东西，而且它的 Values
 	// 本来就是快照语义——DSH 那句 `[...this.registrations]` 拷贝一份再遍历，
 	// 为的就是同一件事（遍历中途有人撤销不能把这次遍历弄坏）。
 	registrations *scope.AnonymousEntries[*setupRegistration]
@@ -118,6 +118,9 @@ func (r *ActivationSetupRegistry) Register(
 	return func(ctx context.Context) error {
 		once.Do(func() {
 			r.mutex.Lock()
+			// 走不到：把 removed 置上的只有下面那一行，而那一行在这个 sync.Once
+			// 里面，重进不来。留着是因为这份状态是**共享**的：日后要是多出第二条
+			// 摘除路径，这道检查就是它和这里之间唯一的护栏。
 			if registration.removed {
 				r.mutex.Unlock()
 				return
@@ -142,7 +145,7 @@ func (r *ActivationSetupRegistry) Register(
 //
 // 源: packages/subagent/subagent/src/activation-setup-registry.ts:90-139
 //
-// 新增: 它的签名**恰好**就是 [ds-harness-go/core/agent.Setup]，所以这个方法值可以
+// 新增: 它的签名**恰好**就是 [github.com/snight1983/ds-harness-go/core/agent.Setup]，所以这个方法值可以
 // 直接当成 CreateOptions.Setup 交出去，不需要中间再包一层。
 func (r *ActivationSetupRegistry) Apply(
 	ctx context.Context,
@@ -251,7 +254,7 @@ func (r *ActivationSetupRegistry) releaseChild(ctx context.Context, childScope *
 //
 // 新增: DSH 把每个失败过一遍 errorChain 再用 '; ' 拼成一句话。Go 里
 // [errors.Join] 就是这件事，而且拼出来的东西仍旧 [errors.Is] 得出每一个原因
-// （成例见 [ds-harness-go/core/agentloop] 那次收尾）。
+// （成例见 [github.com/snight1983/ds-harness-go/core/agentloop] 那次收尾）。
 func (r *ActivationSetupRegistry) releaseAll(
 	ctx context.Context,
 	installations []*setupInstallation,

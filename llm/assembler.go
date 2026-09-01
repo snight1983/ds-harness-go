@@ -38,7 +38,7 @@ type partialBlock struct {
 // BlockAssembler 把原始的 [StreamChunk] 一块一块攒成完整的 [ContentBlock] 和最后
 // 那条助手 [Message]。
 //
-// 源: packages/llm/llm/src/assembler.ts:25-207
+// 源: packages/llm/llm/src/assembler.ts:26-208（BlockAssembler）
 //
 // 循环一边喂它、一边把原始分块记进日志留着重放，流结束之后读 [BlockAssembler.Blocks]／
 // [BlockAssembler.Message]／[BlockAssembler.Usage]／[BlockAssembler.Finish]；

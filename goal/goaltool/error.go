@@ -3,7 +3,7 @@
 // 源: packages/goal/tool-goal/src/authority.ts:25-27
 // 源: packages/goal/tool-goal/src/index.ts:148-151
 //
-// 形状照抄 [ds-harness-go/sessionquery/querytool] 的 error.go：分类码本身就是一个
+// 形状照抄 [github.com/snight1983/ds-harness-go/sessionquery/querytool] 的 error.go：分类码本身就是一个
 // error，所以 errors.Is(err, goaltool.CodeDriverRequired) 直接成立，不必先
 // errors.As 出一个结构体再比字段。
 //

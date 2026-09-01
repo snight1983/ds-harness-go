@@ -12,16 +12,16 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // MaxTimerDelay 是一段定时器一次最多等多久。
 //
-// 源: packages/schedule/schedule/src/runtime.ts:22
+// 源: packages/schedule/schedule/src/runtime.ts:21-22（MAX_TIMER_DELAY_MS）
 //
 // 新增: DSH 这个数是 Node 的 setTimeout 那个 32 位限制。Go 的
 // [time.Timer] 没有这个限制，但这里照样分段：**每一次醒来都重新看一眼墙上时钟**

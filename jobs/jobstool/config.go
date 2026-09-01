@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -32,7 +32,7 @@ const PluginName = "tool-jobs"
 // wakeup 为它开一个回合，quiet 就让它挂在那儿，等别的东西把这个属主唤醒。忙着的
 // 属主两种都是注入。
 //
-// 源: packages/jobs/tool-jobs/src/index.ts:24-29
+// 源: packages/jobs/tool-jobs/src/index.ts:23-28（CompletionDelivery）
 type CompletionDelivery string
 
 const (
@@ -57,9 +57,9 @@ const (
 // Service 是这三件工具用得到的那一块作业注册表。
 //
 // 新增: DSH 注入整个 `ctx.jobs`。这里只写出真正被调到的那七个方法，交进来的
-// [ds-harness-go/jobs/jobs.Registry] 自然满足它（窄口子的理由同
-// [ds-harness-go/subagent/controltool.Service]）。少掉的两个是
-// [ds-harness-go/jobs/jobs.Registry.Start] 和 OnJobsChanged，这不是省字：
+// [github.com/snight1983/ds-harness-go/jobs/jobs.Registry] 自然满足它（窄口子的理由同
+// [github.com/snight1983/ds-harness-go/subagent/controltool.Service]）。少掉的两个是
+// [github.com/snight1983/ds-harness-go/jobs/jobs.Registry.Start] 和 OnJobsChanged，这不是省字：
 // **本包不是生产方**，它一件作业都起不了；那条「变了」的流也归别人。
 type Service interface {
 	// List 列出调用方看得见的那些作业。
@@ -89,8 +89,8 @@ type Service interface {
 // Agents 是唤醒预算的那条补给线：它只需要知道「一条用户自己写的输入被认领走了」。
 //
 // 新增: DSH 挂在 cordis 事件总线的 `agent/inbox/claimed` 上。Go 里那条事件是
-// [ds-harness-go/core/agent.Registry.OnInboxClaimed]，做法参照
-// [ds-harness-go/subagent/subagent] 里那处订阅。
+// [github.com/snight1983/ds-harness-go/core/agent.Registry.OnInboxClaimed]，做法参照
+// [github.com/snight1983/ds-harness-go/subagent/subagent] 里那处订阅。
 //
 // 只有 [DeliveryWakeup] 用得上它：quiet 之下没有东西花掉预算，也就没有东西需要
 // 把它补回来。
@@ -114,7 +114,7 @@ type Config struct {
 	//
 	// 新增: DSH 的 exec.agent 就是 agent 对象本身。Go 这边它是一把不透明的钥匙，
 	// 所以由装配方交一条查回去的路，做法和
-	// [ds-harness-go/subagent/controltool.Config.AgentOf] 逐字相同。
+	// [github.com/snight1983/ds-harness-go/subagent/controltool.Config.AgentOf] 逐字相同。
 	//
 	// 和那边不一样的是**查不回来不是错**：这三件工具对一个无身份的调用方照样
 	// 成立，它看得见的就是那些无主作业——那是最紧的一档可见范围，不是最松的。
@@ -146,7 +146,7 @@ type Config struct {
 // Deps 是装这三件工具那一刻要交进来的协作者。
 //
 // 新增: DSH 从 cordis 上下文上按 inject 取。Go 没有那个容器，所以显式交进来，
-// 形状和 [ds-harness-go/sessionquery/querytool.Deps] 一致。
+// 形状和 [github.com/snight1983/ds-harness-go/sessionquery/querytool.Deps] 一致。
 type Deps struct {
 	// Tools 是工具运行时，必填。
 	Tools *tools.Runtime

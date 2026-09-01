@@ -21,9 +21,9 @@ import (
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/shared"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/llm"
-	"ds-harness-go/util/timeout"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/util/timeout"
 )
 
 // StreamIdleTimeoutCode 是「提供方在流读到一半时哑了太久」这条超时的代号。

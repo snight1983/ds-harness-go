@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage"
 )
 
 // GlobalSpec 是全局单例槽的声明：记录类型、第一次写之前供出去的那个初值、校验。
@@ -69,7 +69,7 @@ func (t TableSpec) Name() string { return t.name }
 
 // DefineTable 声明一张表，V 是它每条记录的类型。
 //
-// 源: packages/storage/storage-domain/src/spec.ts:58-65
+// 源: packages/storage/storage-domain/src/spec.ts:66-73（domainTable）
 //
 // validate 可以为 nil。它跑在两处：从介质读回来的每一条记录（这是 DSH 唯一跑校验的地方），
 // 以及每一次写入。
@@ -195,7 +195,7 @@ type Spec struct {
 
 // Validate 检查这份声明本身立不立得住。
 //
-// 源: packages/storage/storage-domain/src/spec.ts:67-98
+// 源: packages/storage/storage-domain/src/spec.ts:75-114（defineDomain）
 //
 // 它由 [Facility.Open] 在碰介质之前调用，所以一份配错的声明不会在介质上留下任何痕迹。
 //
@@ -239,7 +239,7 @@ func (s Spec) Validate() error {
 
 // Descriptor 把声明投影成后端要的那份单元描述符。
 //
-// 源: packages/storage/storage-domain/src/spec.ts:100-112
+// 源: packages/storage/storage-domain/src/spec.ts:116-129（descriptorOf）
 func (s Spec) Descriptor() storage.KVUnitDescriptor {
 	tables := make([]string, 0, len(s.Tables))
 	for _, table := range s.Tables {

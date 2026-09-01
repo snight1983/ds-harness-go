@@ -11,12 +11,12 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
 )
 
 // materializeCreate 是「这一次是全新创建」那一支才有的东西；冷恢复这一支为 nil。
@@ -295,8 +295,8 @@ func (m *ContinuationManager) materializeTracked(
 // 回放的是那几条已经落盘的事件。
 //
 // 新增: DSH 是在 setup 回调里拿 `childCtx.agent.session` 现场追加的。Go 的
-// [ds-harness-go/core/agent.Setup] 只收作用域，而那一刻会话还没登记进
-// [ds-harness-go/core/session.Store]（见 [ds-harness-go/core/agentloop.AgentLoop]
+// [github.com/snight1983/ds-harness-go/core/agent.Setup] 只收作用域，而那一刻会话还没登记进
+// [github.com/snight1983/ds-harness-go/core/session.Store]（见 [github.com/snight1983/ds-harness-go/core/agentloop.AgentLoop]
 // 的 setupAndPublish：Prepare 出来的会话到 publish 才登记），所以这里够不着那份
 // 会话。改成在种子上排演一次——和 [SeedDescriptorTurn] 完全同一条路子：那几条事件
 // 照样落在 SeedLength 边界**之后**，因此仍旧是这个孩子自己的历史，而且照样在公布
@@ -314,6 +314,8 @@ func seedWithDelegatedPolicies(
 		return nil, fmt.Errorf("排演子 agent 派发策略种子失败：%w", err)
 	}
 	if err := AppendDelegatedPolicyOverrides(staged, overrides); err != nil {
+		// 走不到：那份负载是两个字符串转出来的 JSON，而这次追加落在一个刚排演
+		// 出来的游离会话上，没有别的边界会拒它。
 		return nil, fmt.Errorf("追加子 agent 派发策略失败：%w", err)
 	}
 	return staged.Events(), nil
@@ -357,6 +359,8 @@ func (m *ContinuationManager) publishActivation(
 				m.retire(live, message.ID)
 			}
 		}); err != nil {
+		// 走不到：这两笔登记挂的是同一把作用域，唯一的失败缘由是它已经处置了，
+		// 而那种情形上面第一笔就已经报出来了。
 		return err
 	}
 	// 建 agent 那一步已经在它的公布边界上提交过 setup；从这儿起的撤销都是对活着的
@@ -391,6 +395,9 @@ func (m *ContinuationManager) rollbackUnpublished(live *activation) error {
 	transaction, opened := m.beginDisposalLocked(live)
 	m.mutex.Unlock()
 	if !opened {
+		// 测不到：要走到这儿，得有一次并发的排干**恰好**在同一个孩子还没公布的
+		// 那几微秒里开出处置。这是真竞态，不是死代码——两条路都摘同一份活化，
+		// 谁先开谁负责结清，后来的那条只等结局。
 		return transaction.wait(context.Background())
 	}
 	err := live.handle.Dispose(context.Background())
@@ -466,6 +473,8 @@ func (m *ContinuationManager) submit(
 ) (llm.MessageID, error) {
 	// 父发起的投递靠所有权把父留活，所以要在消息进得了孩子收件箱之前先立起来。
 	if err := m.acquireOwnership(parent, target.childID); err != nil {
+		// 测不到：这一步在这条路上只可能因为父那把作用域正在处置而失败，而调用方
+		// 手上攥着的正是这个父。这是真竞态，不是死代码。
 		return "", err
 	}
 	message := llm.NewUserMessage(content, source)
@@ -482,9 +491,9 @@ func (m *ContinuationManager) submit(
 // 源: packages/subagent/subagent/src/continuation.ts:1218-1236
 //
 // 新增: DSH 那里 send 外面包了一层 try/catch，抛了就把这个 id 从 accepted 里撤回来。
-// Go 这边送不出错——[ds-harness-go/core/agent.Agent] 的 Follower／Steer／Inject
+// Go 这边送不出错——[github.com/snight1983/ds-harness-go/core/agent.Agent] 的 Follower／Steer／Inject
 // 签名上没有错误通道，入队失败由循环那一层报给它自己的错误出口（见
-// [ds-harness-go/core/agentloop.ReactLoopAgent.Send]）——所以没有那条撤回路。
+// [github.com/snight1983/ds-harness-go/core/agentloop.ReactLoopAgent.Send]）——所以没有那条撤回路。
 func (m *ContinuationManager) admitWaking(target *activation, messageID llm.MessageID, send func()) {
 	// 唤醒式的投递会同步地发出收件箱事件，所以在调用开始之前，观察方就得看见这次
 	// 活化是忙的。
@@ -563,7 +572,7 @@ func (m *ContinuationManager) authorizeLineage(
 // 源: packages/subagent/subagent/src/continuation.ts:1295-1330
 //
 // 新增: DSH 是 `Promise.race([whenIdle(), poked])`。Go 的
-// [ds-harness-go/core/agent.Agent.WhenIdle] 是阻塞调用，所以这里把它放进一条自己的
+// [github.com/snight1983/ds-harness-go/core/agent.Agent.WhenIdle] 是阻塞调用，所以这里把它放进一条自己的
 // 线，用一个派生 ctx 掐掉输的那一边，并且在下一轮之前等它退干净——不等就是每一圈
 // 漏一条 goroutine。
 func (m *ContinuationManager) watchSettlement(target *activation) {
@@ -789,6 +798,8 @@ func (m *ContinuationManager) notifySettlement(target *activation, terminal acti
 	summary := settlementSummary(target.childID, terminal.StopReason)
 	source, err := NewSettledSource(target.childID, summary)
 	if err != nil {
+		// 走不到：这个 id 非空（一份活化必然有），而剩下那一步是 marshalSenderExtra
+		// 里那次转不失败的编码。fail-soft 照旧留着：绝不因为一条通知挡住处置。
 		m.warn("子 agent 的结清通知没有投给它的父", "孩子", string(target.childID), "错误", err)
 		return
 	}

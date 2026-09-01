@@ -19,8 +19,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // textOf 把一份内容折成它唯一那个文本块里的字符串。

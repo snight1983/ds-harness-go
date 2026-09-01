@@ -36,9 +36,9 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // ---- 替身 ----

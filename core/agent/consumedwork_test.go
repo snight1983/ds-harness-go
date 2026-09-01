@@ -3,10 +3,10 @@ package agent
 import (
 	"encoding/json"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 	"testing"
 
-	sessionlog "ds-harness-go/session"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // turnStart 造一条回合开始事件。

@@ -13,11 +13,11 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // toolDescription 是模型在工具表里看到的那段话。
@@ -232,7 +232,7 @@ func (c *Controller) execute(
 
 // newTool 造那件工具。
 //
-// 源: packages/workflow/tool-ralph/src/index.ts:412-478
+// 源: packages/workflow/tool-ralph/src/index.ts:410-476
 //
 // 那条子 agent 接缝由闭包捕获，理由见 [Controller]。
 func (c *Controller) newTool(subagents Subagents) *tools.Definition {
@@ -291,7 +291,7 @@ func (c *Controller) newTool(subagents Subagents) *tools.Definition {
 // 源: packages/workflow/tool-ralph/src/index.ts:405-411
 //
 // 中途失败按反序摘干净，形状和
-// [ds-harness-go/subagent/subagenttool.Controller.Install] 一样。
+// [github.com/snight1983/ds-harness-go/subagent/subagenttool.Controller.Install] 一样。
 //
 // 新增: DSH 那边先登记提示词段再登记工具。这里反过来：工具装不上是这次装配失败的
 // 大头（重名、作用域不对），先装它就不用把一段已经登记好的提示词再摘回来。两条

@@ -29,13 +29,13 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
-	"ds-harness-go/session/checkpointpolicy"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/checkpointpolicy"
 )
 
 // errFlush 是「刷盘刷不下去」这件事在测试里的样子。
@@ -65,7 +65,7 @@ func (a *fakeAgent) Send(llm.Message, agent.InboxTarget, bool)                  
 func (a *fakeAgent) Followup(llm.Message)                                              {}
 func (a *fakeAgent) Steer(llm.Message)                                                 {}
 func (a *fakeAgent) Inject(llm.Message)                                                {}
-func (a *fakeAgent) Prepend(llm.Message, agent.InboxTarget) {}
+func (a *fakeAgent) Prepend(llm.Message, agent.InboxTarget)                            {}
 
 // recordingAdapter 是最里面那道适配器边界，只记自己被派发了几次。
 //
@@ -594,3 +594,7 @@ func TestTheDisposerRemovesAllThreeCheckpoints(t *testing.T) {
 		t.Fatalf("三条边界一共刷了 %d 次，要的是 3 次——摘掉的那份还在刷", got)
 	}
 }
+
+func (a *fakeAgent) Remove(llm.MessageID) {}
+
+func (a *fakeAgent) Replace(llm.MessageID, llm.Message) {}

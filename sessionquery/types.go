@@ -6,12 +6,12 @@
 package sessionquery
 
 import (
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // EventSurface 说的是一条事件此刻在表面上的位置。
 //
-// 源: packages/session-query/session-query/src/types.ts:21
+// 源: packages/session-query/session-query/src/types.ts:20-21（SessionEventSurface）
 type EventSurface string
 
 const (
@@ -37,7 +37,7 @@ type SearchCursor string
 
 // Record 是一个逻辑会话的轻量身份，外加它此刻在哪儿有。
 //
-// 源: packages/session-query/session-query/src/types.ts:24-32
+// 源: packages/session-query/session-query/src/types.ts:23-31（SessionRecord）
 type Record struct {
 	// Header 是从「活的优先」那份观察里选出来的会话头，已经脱离。
 	Header session.SessionHeader
@@ -49,7 +49,7 @@ type Record struct {
 
 // SurfaceSnapshot 是一次「活的优先」观察里，某个会话当前的模型表面。
 //
-// 源: packages/session-query/session-query/src/types.ts:34-42
+// 源: packages/session-query/session-query/src/types.ts:33-41（SessionSurfaceSnapshot）
 type SurfaceSnapshot struct {
 	// Session 是和 Events 出自同一次观察的会话头。
 	Session session.SessionHeader
@@ -66,7 +66,7 @@ type SurfaceSnapshot struct {
 
 // LogSnapshot 是一次脱离的、验过的完整原始日志观察。
 //
-// 源: packages/session-query/session-query/src/types.ts:44-50
+// 源: packages/session-query/session-query/src/types.ts:43-49（SessionLogSnapshot）
 type LogSnapshot struct {
 	// Session 是和 Events 出自同一次观察的会话头。
 	Session session.SessionHeader
@@ -76,7 +76,7 @@ type LogSnapshot struct {
 
 // EventRecord 是一个逻辑会话里某条事件的轻量元数据。
 //
-// 源: packages/session-query/session-query/src/types.ts:52-64
+// 源: packages/session-query/session-query/src/types.ts:51-63（SessionEventRecord）
 type EventRecord struct {
 	// SessionID 是拥有这条事件的会话。
 	SessionID session.SessionID
@@ -92,7 +92,7 @@ type EventRecord struct {
 
 // LineageNode 是一棵血统树上的一个后代节点。
 //
-// 源: packages/session-query/session-query/src/types.ts:66-72
+// 源: packages/session-query/session-query/src/types.ts:65-71（SessionLineageNode）
 type LineageNode struct {
 	// Session 是这个后代脱离出来的记录。
 	Session Record
@@ -102,7 +102,7 @@ type LineageNode struct {
 
 // LineageTrace 是一个逻辑会话已知的祖先与后代。
 //
-// 源: packages/session-query/session-query/src/types.ts:74-95
+// 源: packages/session-query/session-query/src/types.ts:73-94（SessionLineageTrace）
 //
 // 新增: DSH 是一个判别联合——`{complete:true; root} | {complete:false;
 // unresolvedParentId}`。Go 的结构体没有这个表达法，所以用一个 Complete 布尔
@@ -124,7 +124,7 @@ type LineageTrace struct {
 
 // EventTraceRequest 是一次事件关系追溯的请求。
 //
-// 源: packages/session-query/session-query/src/types.ts:97-103
+// 源: packages/session-query/session-query/src/types.ts:96-102（SessionEventTraceRequest）
 type EventTraceRequest struct {
 	// SessionID 是拥有目标事件的会话。
 	SessionID session.SessionID
@@ -134,7 +134,7 @@ type EventTraceRequest struct {
 
 // EventTrace 是一条事件的直接表面替换关系，加上它和被引用来源事件的关系。
 //
-// 源: packages/session-query/session-query/src/types.ts:105-119
+// 源: packages/session-query/session-query/src/types.ts:104-118（SessionEventTrace）
 type EventTrace struct {
 	// Target 是目标的轻量记录。
 	Target EventRecord
@@ -157,7 +157,7 @@ type EventTrace struct {
 
 // EventTraceObservation 把一次事件追溯绑在同一次会话头观察上。
 //
-// 源: packages/session-query/session-query/src/types.ts:121-125
+// 源: packages/session-query/session-query/src/types.ts:120-124（SessionEventTraceObservation）
 type EventTraceObservation struct {
 	EventTrace
 	// Session 是和这次追溯所用日志一起选出来的会话头。
@@ -166,7 +166,7 @@ type EventTraceObservation struct {
 
 // EventReadRequest 是一次「读一条事件外加一圈原始上下文」的请求。
 //
-// 源: packages/session-query/session-query/src/types.ts:127-137
+// 源: packages/session-query/session-query/src/types.ts:126-136（SessionEventReadRequest）
 type EventReadRequest struct {
 	// SessionID 是拥有目标事件的会话。
 	SessionID session.SessionID
@@ -180,7 +180,7 @@ type EventReadRequest struct {
 
 // EventWindow 是一条完整的目标事件，加上一段有界的原始日志窗口。
 //
-// 源: packages/session-query/session-query/src/types.ts:139-151
+// 源: packages/session-query/session-query/src/types.ts:138-150（SessionEventWindow）
 type EventWindow struct {
 	// Session 是这次「活的优先」读取所用的会话头。
 	Session session.SessionHeader
@@ -196,7 +196,7 @@ type EventWindow struct {
 
 // Range 是时间与序号过滤器用的闭区间。
 //
-// 源: packages/session-query/session-query/src/types.ts:180-186
+// 源: packages/session-query/session-query/src/types.ts:179-185（SessionResultRange）
 //
 // 新增: 上下界用指针，nil 表示这一侧不设限——0 是合法的 seq、也是合法的
 // 纪元毫秒，拿零值当「没给」会撞车。DSH 那边还要验 Number.isFinite，
@@ -210,7 +210,7 @@ type Range struct {
 
 // Availability 是逻辑会话过滤器认识的来源谓词。
 //
-// 源: packages/session-query/session-query/src/types.ts:188
+// 源: packages/session-query/session-query/src/types.ts:187-188（SessionAvailability）
 type Availability string
 
 const (
@@ -222,7 +222,7 @@ const (
 
 // SessionFilter 是一条逻辑会话谓词。
 //
-// 源: packages/session-query/session-query/src/types.ts:194-203
+// 源: packages/session-query/session-query/src/types.ts:190-199（SessionResultFilter）
 //
 // 一组过滤器之间是**与**，一条过滤器内部的 Values 之间是**或**。
 //
@@ -273,7 +273,7 @@ func (AvailabilityFilter) sealedSessionFilter() {}
 
 // EventFilter 是一条事件谓词。
 //
-// 源: packages/session-query/session-query/src/types.ts:205-211
+// 源: packages/session-query/session-query/src/types.ts:201-210（SessionEventResultFilter）
 //
 // 一组过滤器之间是**与**，一条过滤器内部的 Values 之间是**或**。
 type EventFilter interface {
@@ -282,7 +282,7 @@ type EventFilter interface {
 
 // EventMetadataFilter 是检索后端在排序之前就能用上的那些事件谓词。
 //
-// 源: packages/session-query/session-query/src/types.ts:213
+// 源: packages/session-query/session-query/src/types.ts:212-213（SessionEventMetadataFilter）
 //
 // 新增: DSH 是 `Exclude<SessionEventResultFilter, { kind: 'text' }>`——从联合里
 // 减掉一个成员。Go 没有类型减法，所以反过来做：四个元数据变体多实现一个封印
@@ -336,7 +336,7 @@ func (TextFilter) sealedEventFilter() {}
 
 // EventSearchDocument 是从一条事件里提出来的、可检索的语义文档。
 //
-// 源: packages/session-query/session-query/src/types.ts:216-220
+// 源: packages/session-query/session-query/src/types.ts:215-219（SessionEventSearchDocument）
 type EventSearchDocument struct {
 	EventRecord
 	// Text 是这条事件的第一方语义文字，扫描过滤和全文索引用的都是它。
@@ -345,7 +345,7 @@ type EventSearchDocument struct {
 
 // SearchPage 是一页游标分页结果。
 //
-// 源: packages/session-query/session-query/src/types.ts:222-228
+// 源: packages/session-query/session-query/src/types.ts:221-227（SessionSearchPage）
 type SearchPage[T any] struct {
 	// Items 是这一页的结果，顺序由契约定义。
 	Items []T
@@ -355,7 +355,7 @@ type SearchPage[T any] struct {
 
 // EventSearchPage 把一页事件检索结果绑在被索引的那次目标会话观察上。
 //
-// 源: packages/session-query/session-query/src/types.ts:230-234
+// 源: packages/session-query/session-query/src/types.ts:229-233（SessionEventSearchPage）
 type EventSearchPage struct {
 	SearchPage[EventSearchHit]
 	// Session 是和 Items 出自同一个索引世代的目标会话头。
@@ -364,7 +364,7 @@ type EventSearchPage struct {
 
 // SearchRequest 是一次跨会话全文检索请求。
 //
-// 源: packages/session-query/session-query/src/types.ts:242-254
+// 源: packages/session-query/session-query/src/types.ts:241-253（SessionSearchRequest）
 type SearchRequest struct {
 	// Query 是全文查询串，一律当数据看，永远不当可执行的检索语法。
 	Query string
@@ -380,7 +380,7 @@ type SearchRequest struct {
 
 // EventSearchRequest 是一次会话内全文检索请求。
 //
-// 源: packages/session-query/session-query/src/types.ts:256-268
+// 源: packages/session-query/session-query/src/types.ts:255-267（SessionEventSearchRequest）
 type EventSearchRequest struct {
 	// SessionID 是要检索哪个会话「活的优先」的那份逻辑日志。
 	SessionID session.SessionID
@@ -396,7 +396,7 @@ type EventSearchRequest struct {
 
 // EventSearchHit 是一条事件全文命中，带一段有界的纯文本摘录。
 //
-// 源: packages/session-query/session-query/src/types.ts:270-273
+// 源: packages/session-query/session-query/src/types.ts:269-273（SessionEventSearchHit）
 type EventSearchHit struct {
 	EventRecord
 	// Snippet 是围绕命中位置选出来的纯文本摘录。
@@ -405,7 +405,7 @@ type EventSearchHit struct {
 
 // SearchHit 是一个按最强命中事件排序的、按会话归并的命中。
 //
-// 源: packages/session-query/session-query/src/types.ts:276-279
+// 源: packages/session-query/session-query/src/types.ts:275-279（SessionSearchHit）
 type SearchHit struct {
 	Record
 	// BestMatch 是这个会话里最强的那条命中事件。

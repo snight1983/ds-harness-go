@@ -8,13 +8,13 @@ package agent
 import (
 	"context"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // CreatedObserver 是一次 agent 公布的观察者，**有否决权**。
 //
-// 源: packages/core/agent/src/runtime-types.ts:148-159（`agent/created`）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/created`）
 //
 // 返回错误（或者 panic）会让 [Registry.Announce] 失败。调用方交出去的那个摘除
 // 函数随即把这次登记回滚掉，并配对地发出一次 disposed——所以一个否决掉创建的
@@ -28,7 +28,7 @@ type CreatedObserver func(ctx context.Context, agent Agent) error
 
 // DisposedObserver 是「一个已公布的 agent 离开了注册表」的观察者。
 //
-// 源: packages/core/agent/src/runtime-types.ts:160-168（`agent/disposed`）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/disposed`）
 //
 // 只观察，不否决：这条边是配对通知，它已经发生了。观察者 panic 被逐个兜住记日志。
 //
@@ -38,7 +38,7 @@ type DisposedObserver func(agent Agent)
 
 // StatusObserver 是状态跃迁的观察者。
 //
-// 源: packages/core/agent/src/runtime-types.ts:169-178（`agent/status`）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/status`）
 //
 // 报的是**跃迁的落点**，不是来处。观察者 panic 被逐个兜住记日志。
 type StatusObserver func(agent Agent, status Status)
@@ -53,7 +53,7 @@ type InboxObserver func(agent Agent, message llm.Message)
 
 // InboxClaimedObserver 是「一条消息在它那个已开回合里被认领走」的观察者。
 //
-// 源: packages/core/agent/src/runtime-types.ts:187-197（`agent/inbox/claimed`）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/inbox/claimed`）
 //
 // 提议的那个步骤如果被拒，被认领的这条消息就到此为止：它既不会被丢弃、也不会
 // 被重新报成一条 user/message，而那个回合会不进步骤就关掉。
@@ -61,7 +61,7 @@ type InboxClaimedObserver func(agent Agent, message llm.Message, turn int)
 
 // SessionStartObserver 是「会话生命周期开始了」的观察者，第一个回合之前一次。
 //
-// 源: packages/core/agent/src/runtime-types.ts:206-217（`agent/session-start`）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/session-start`）
 //
 // 这是通知不是否决；一个生命周期持有者提出的处置会在驱动起跑之前被重新检查。
 // 想往里塞模型可见的上下文就调 [Agent.Inject]。
@@ -83,7 +83,7 @@ type PreStep struct {
 
 // PreStepObserver 决定一个提议中的步骤进不进、带着哪些消息进。
 //
-// 源: packages/core/agent/src/runtime-types.ts:219-231（`agent/pre-step`，瀑布）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/pre-step`，瀑布）
 //
 // **先登记的在外层**，一层层往里套，最里面那个 next 交出机器本来的提议。这条
 // 次序照抄 cordis 的 waterfall（vendor/cordis/src/events.ts:234-243，它从名单头上
@@ -112,7 +112,7 @@ type Request struct {
 
 // RequestObserver 换掉那份已经定下来的调用配置。
 //
-// 源: packages/core/agent/src/runtime-types.ts:232-244（`agent/request`，瀑布）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/request`，瀑布）
 //
 // 调 next 拿到「机器本来会用的那一份」——第一次请求是 agent 选项，之后是日志里
 // 那份请求头；返回一份新的就切过去。
@@ -147,7 +147,7 @@ type RequestFailure struct {
 
 // RequestErrorObserver 在循环重试或者收掉步骤之前，处理一次失败的模型请求尝试。
 //
-// 源: packages/core/agent/src/runtime-types.ts:245-260（`agent/request-error`，瀑布）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/request-error`，瀑布）
 //
 // 认领了恢复的观察者**不调 next**，直接返回 `RequestErrorAction{Retry: true}`；
 // 想往下传就调 next。默认的零值让这次失败成为终局。
@@ -155,7 +155,7 @@ type RequestErrorObserver func(ctx context.Context, failure RequestFailure, next
 
 // TurnStoppingObserver 是回合就要关掉时的串行观察者。
 //
-// 源: packages/core/agent/src/runtime-types.ts:261-278（`agent/turn-stopping`，串行）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/turn-stopping`，串行）
 //
 // 到这里时模型不欠任何回应了：没有活着的工具调用，也没有新的引导。边界提交
 // **之前**等它跑完——一个有意见的观察者就自己 [Agent.Steer]，机器随后重读
@@ -183,7 +183,7 @@ type TurnError struct {
 
 // ErrorObserver 是「一个步骤或者回合出错了」的观察者。
 //
-// 源: packages/core/agent/src/runtime-types.ts:279-290（`agent/error`）
+// 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/error`）
 //
 // 机器在这里报失败，哪怕那个错误在回合里找不到一个位置留下耐久记录。
 // 只观察，panic 被逐个兜住记日志。

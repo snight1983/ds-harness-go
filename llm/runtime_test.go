@@ -9,7 +9,7 @@ import (
 	"iter"
 	"testing"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // codeOf 取出一条错误挂着的失败码；不是本包的 Error 时让用例失败。

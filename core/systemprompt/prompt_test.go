@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 func text(value string) *string { return &value }

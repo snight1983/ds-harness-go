@@ -12,8 +12,8 @@ import (
 	"encoding/json"
 	"sync"
 
-	"ds-harness-go/storage"
-	"ds-harness-go/storage/storagetest"
+	"github.com/snight1983/ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )
 
 // bareBackend 是一个什么数据形态都不提供的后端。

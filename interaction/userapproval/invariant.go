@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -161,7 +161,7 @@ func ValidateLog(events []session.Event) (*Trace, error) {
 // 新增: DSH 那两条胳膊都从 cordis 上拿——ctx.sessions.list() 取历史，
 // ctx.on('internal/dispatch') 截住后来的。Go 里活会话服务是循环那一块的东西，
 // 本包在第 4 块，所以这两条胳膊由装配方以函数交进来，做法和
-// [ds-harness-go/todo.RegisterInvariants] 逐字相同。
+// [github.com/snight1983/ds-harness-go/todo.RegisterInvariants] 逐字相同。
 //
 // 后续那条胳膊上的轨迹是**接着**装载时那条往下走的，所以一条 approval/decided 认得出
 // 它那条写在装载之前的 approval/asked。DSH 靠一张按 Session 索引的 WeakMap 做同一件事。

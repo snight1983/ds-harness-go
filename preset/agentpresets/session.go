@@ -8,7 +8,7 @@ package agentpresets
 import (
 	"encoding/json"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // EventPresetSelected 记下这个会话在**建出来之后**改点了哪一份预设。
@@ -27,7 +27,7 @@ const EventPresetSelected session.EventType = "agent-preset/selected"
 //
 // 新增: DSH 靠 `declare module` 把它合并进 SessionEventMap。Go 没有声明合并，
 // [session.Vocabulary] 是个闭合的值，所以改成由本包交出这张单子、装配方自己拼
-// （成例见 [ds-harness-go/plan/planmode.EventTypes]）：
+// （成例见 [github.com/snight1983/ds-harness-go/plan/planmode.EventTypes]）：
 //
 //	vocabulary := session.CoreVocabulary().With(agentpresets.EventTypes()...)
 //
@@ -47,7 +47,12 @@ type SelectedData struct {
 
 // ResolveSessionPreset 交出一个会话**实际跑在**的那份预设，最新的一次选择算数。
 //
-// 源: packages/preset/agent-presets/src/session.ts:48-54
+// 源: packages/preset/agent-presets/src/session.ts:34-44
+//
+// 上移: 上游没有这么一个函数，同一条判据被写成会话投影
+// `agentPresetProjectionDefinition`：init 取头上那个值，apply 让每一条选择事件
+// 盖掉前一个。Go 这边不引投影框架，就把它折成一次从后往前的扫描——两者答案一样，
+// 因为那个投影的 apply 除了「最后一条选择算数」不做别的事。
 //
 // 头提供创建时那个值，之后每一次更改都是一条记进日志的事件，所以最后一条就是答案。
 // 只读头会把一个换过预设的会话按它**建出来时**那份组合重建，而不是它那段历史真正
@@ -65,7 +70,7 @@ func ResolveSessionPreset(header session.SessionHeader, events []session.Event) 
 		}
 		var data SelectedData
 		// 新增: DSH 那边负载已经是解好的对象，这一步在那里不存在；Go 这边是原始
-		// 字节，所以要多问一句「读得回来吗」（成例见 [ds-harness-go/plan/planmode] 的
+		// 字节，所以要多问一句「读得回来吗」（成例见 [github.com/snight1983/ds-harness-go/plan/planmode] 的
 		// decodeMode）。读不回来时**往前接着找**：一条更早的选择、或者创建头，
 		// 都比拿一个空串当「这套部署一份预设都不装」要诚实。
 		if err := json.Unmarshal(events[index].Data, &data); err != nil || data.AgentPreset == "" {

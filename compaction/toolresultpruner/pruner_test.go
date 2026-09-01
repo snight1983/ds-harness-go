@@ -9,7 +9,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // smallPruner 造一个预算很小的 [Pruner]，让用例不用堆几千个字符。

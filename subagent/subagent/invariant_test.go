@@ -3,7 +3,7 @@
 //
 // 源: packages/subagent/subagent/src/invariant.ts
 //
-// 检查是**panic**着报的（见 [ds-harness-go/invariants.Fail]），所以每一条用例都
+// 检查是**panic**着报的（见 [github.com/snight1983/ds-harness-go/invariants.Fail]），所以每一条用例都
 // 用 mustFail／mustNotFail 把那次 panic 接住再断言。正常代码路径违反不了它们，
 // 于是绝大多数用例直接往那份检查上发捏造的边——白盒手法，同包测试拿得到。
 
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // newRegistry 造一条全开的不变量注册表。

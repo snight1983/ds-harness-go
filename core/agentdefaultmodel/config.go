@@ -6,6 +6,7 @@
 // 这个包刻意不认识任何宿主、任何传输层：它只拥有一份选择，谁要用谁来读。
 // 各个 agent 入口读的都是 [Service.CurrentSelection]，所以设置文档一变，
 // 下一次读就看得见——不需要任何人重建什么登记级的事实。
+
 package agentdefaultmodel
 
 import (
@@ -13,9 +14,9 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/llm"
-	"ds-harness-go/settings"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/settings"
 )
 
 // SettingsNamespace 是本包那个设置小节的命名空间。

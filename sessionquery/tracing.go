@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // eventLogAnalysis 是一份日志折一次表面之后，追溯要用的那几张表。
@@ -37,7 +37,7 @@ func EventRecords(id session.SessionID, events []session.Event) ([]EventRecord, 
 
 // CurrentSurfaceEvents 验完整份日志之后，交出当前的模型表面。
 //
-// 源: packages/session-query/session-query/src/tracing.ts:35-58
+// 源: packages/session-query/session-query/src/tracing.ts:34-56（currentSurfaceEvents）
 //
 // 交出去的是脱离的副本：调用方拿到之后怎么改都碰不到语料里那一份。
 func CurrentSurfaceEvents(id session.SessionID, events []session.Event) ([]session.Event, error) {
@@ -61,7 +61,7 @@ func CurrentSurfaceEvents(id session.SessionID, events []session.Event) ([]sessi
 
 // TraceEvent 折一次表面并验完整份日志之后，追溯一条目标事件的直接关系。
 //
-// 源: packages/session-query/session-query/src/tracing.ts:60-111
+// 源: packages/session-query/session-query/src/tracing.ts:58-105（traceEvent）
 func TraceEvent(id session.SessionID, events []session.Event, seq int) (EventTrace, error) {
 	target, ok := eventAtSeq(events, seq)
 	if !ok {

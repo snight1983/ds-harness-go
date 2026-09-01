@@ -11,17 +11,17 @@
 //
 // # 新增: 登记这件事没有对应物
 //
-// 同 ds-harness-go/subagent/spawninprocess：DSH 那个 apply 是往 cordis 上下文上
+// 同 github.com/snight1983/ds-harness-go/subagent/spawninprocess：DSH 那个 apply 是往 cordis 上下文上
 // 挂提供方，Go 里登记是组装根的一句话，所以这个包只交出 [New]。
 package forkinprocess
 
 import (
 	"context"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/inprocessdriver"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/inprocessdriver"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // DefaultProviderName 是不指定时这个提供方在注册表里的名字。
@@ -48,7 +48,7 @@ func completedTurnPrefix(parent agent.Agent) []session.Event {
 		// seq 就等于数组下标（那条追加契约），所以切到它为止、并且带上它。
 		//
 		// 新增: 三下标切法把容量也掐到这里。DSH 的 Array.slice 本来就另开一个
-		// 数组，Go 的切片却和 [ds-harness-go/core/session.Session.Events] 那份
+		// 数组，Go 的切片却和 [github.com/snight1983/ds-harness-go/core/session.Session.Events] 那份
 		// 快照共用底层数组——而那份快照会被重复交给别的调用方。不掐容量的话，
 		// 拿到这段种子的人一次 append 就会写进快照第 n 格，别人手里那份跟着变。
 		end := events[i].Seq + 1
@@ -65,7 +65,7 @@ func completedTurnPrefix(parent agent.Agent) []session.Event {
 // 外加 ToolFilter 与 Persona（带作用域的一次 restrict 和一段盖掉部署人设的
 // 提示词小节）。
 //
-// 新增: 改名理由同 ds-harness-go/subagent/spawninprocess.Provider。
+// 新增: 改名理由同 github.com/snight1983/ds-harness-go/subagent/spawninprocess.Provider。
 type Provider struct {
 	// name 是注册表里的名字。
 	name string

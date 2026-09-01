@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // fixedRandom 造一个总是交出同一个数的抖动源。
@@ -731,7 +731,7 @@ func TestInstallNeedsBothHosts(t *testing.T) {
 
 // TestTearingDownTwiceOnlyDetachesOnce 钉住拆除函数调第二遍是个空操作。
 //
-// 装配方常常把它挂在自己的 [ds-harness-go/core/scope.Scope] 上、同时也在出错路径上
+// 装配方常常把它挂在自己的 [github.com/snight1983/ds-harness-go/core/scope.Scope] 上、同时也在出错路径上
 // 手动调一遍。第二遍真的去摘一次观察者的话，摘掉的会是**后来装上去的**那一个。
 func TestTearingDownTwiceOnlyDetachesOnce(t *testing.T) {
 	t.Parallel()

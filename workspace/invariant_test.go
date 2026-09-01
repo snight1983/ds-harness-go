@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // mustInvariants 造一个全放行的不变量注册表。

@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // testAbsolutePath 是一条在本机上确实绝对的路径。
@@ -22,7 +22,7 @@ import (
 var testAbsolutePath = filepath.Join(os.TempDir(), "ds-harness-go-session-test")
 
 // data 把一份负载排成字节，排不出去当场失败。
-func data(t *testing.T, payload any) json.RawMessage {
+func data(t testing.TB, payload any) json.RawMessage {
 	t.Helper()
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -32,7 +32,7 @@ func data(t *testing.T, payload any) json.RawMessage {
 }
 
 // userEvent 造一条上表面的用户消息事件。
-func userEvent(t *testing.T, text string) sessionlog.Event {
+func userEvent(t testing.TB, text string) sessionlog.Event {
 	t.Helper()
 	message := llm.NewUserMessage(llm.Content{llm.TextBlock{Text: text}}, llm.UserSource{})
 	return sessionlog.Event{
@@ -43,7 +43,7 @@ func userEvent(t *testing.T, text string) sessionlog.Event {
 }
 
 // assistantEvent 造一条上表面的助手消息事件。
-func assistantEvent(t *testing.T, turn, step int, text string) sessionlog.Event {
+func assistantEvent(t testing.TB, turn, step int, text string) sessionlog.Event {
 	t.Helper()
 	content := llm.Content{llm.TextBlock{Text: text}}
 	if text == "" {
@@ -60,7 +60,7 @@ func assistantEvent(t *testing.T, turn, step int, text string) sessionlog.Event 
 }
 
 // toolResultEvent 造一条上表面的工具结果事件。
-func toolResultEvent(t *testing.T, turn, step int, callID llm.CallID) sessionlog.Event {
+func toolResultEvent(t testing.TB, turn, step int, callID llm.CallID) sessionlog.Event {
 	t.Helper()
 	message := llm.NewToolResultMessage(callID, llm.Content{llm.TextBlock{Text: "ok"}}, false)
 	return sessionlog.Event{
@@ -73,7 +73,7 @@ func toolResultEvent(t *testing.T, turn, step int, callID llm.CallID) sessionlog
 }
 
 // headerEvent 造一条请求头快照事件。
-func headerEvent(t *testing.T, provider, model string) sessionlog.Event {
+func headerEvent(t testing.TB, provider, model string) sessionlog.Event {
 	t.Helper()
 	return sessionlog.Event{
 		Type: sessionlog.EventRequestHeader,
@@ -137,7 +137,7 @@ func fixedClock() func() int64 {
 }
 
 // newStore 造一个用固定时钟的空存储。
-func newStore(t *testing.T) *Store {
+func newStore(t testing.TB) *Store {
 	t.Helper()
 	store, err := NewStore(StoreOptions{Now: fixedClock()})
 	if err != nil {
@@ -147,7 +147,7 @@ func newStore(t *testing.T) *Store {
 }
 
 // rootScope 造一个没有身份的作用域，用完自动释放。
-func rootScope(t *testing.T) *scope.Scope {
+func rootScope(t testing.TB) *scope.Scope {
 	t.Helper()
 	owner := scope.NewRoot()
 	t.Cleanup(func() { _ = owner.Dispose(context.Background()) })
@@ -155,7 +155,7 @@ func rootScope(t *testing.T) *scope.Scope {
 }
 
 // agentScope 造一个有身份的作用域，用完自动释放。
-func agentScope(t *testing.T, label string) *scope.Scope {
+func agentScope(t testing.TB, label string) *scope.Scope {
 	t.Helper()
 	owner, err := scope.New(scope.NewKey(label), scope.Options{})
 	if err != nil {
@@ -166,7 +166,7 @@ func agentScope(t *testing.T, label string) *scope.Scope {
 }
 
 // liveSession 在存储里建一个已公布的会话。
-func liveSession(t *testing.T, store *Store, owner *scope.Scope, id sessionlog.SessionID, options CreateOptions) *Session {
+func liveSession(t testing.TB, store *Store, owner *scope.Scope, id sessionlog.SessionID, options CreateOptions) *Session {
 	t.Helper()
 	session, err := store.Create(context.Background(), owner, id, options)
 	if err != nil {

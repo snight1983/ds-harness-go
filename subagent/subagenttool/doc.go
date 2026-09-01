@@ -10,7 +10,7 @@
 //   - 按配置把一次调用送上前台、一次性后台、或者可续后台这三条路里的一条。
 //
 // 前台调用收完结果**一定**处置这次运行。后台那条路由配置选：一次性走一件普通的
-// 后台作业，可续走 [ds-harness-go/subagent/subagent.Runtime.StartContinuable]
+// 后台作业，可续走 [github.com/snight1983/ds-harness-go/subagent/subagent.Runtime.StartContinuable]
 // 并当场把那个耐久的孩子 id 交回去。
 //
 // # 一个装配挂一个提供方
@@ -24,7 +24,7 @@
 // 一个 fork 出来的孩子已经看得见这段对话里那些已完成的回合，一个全新的孩子看不见。
 // 对着一个 fork 说「它看不到这段对话，请把话说全」是**假话**，会让模型白白重述一遍
 // 它其实已经知道的东西。所以那句措辞由
-// [ds-harness-go/subagent/subagent.Provider.InheritsParentContext] 决定，
+// [github.com/snight1983/ds-harness-go/subagent/subagent.Provider.InheritsParentContext] 决定，
 // 在装的那一刻定下来。
 //
 // # 新增

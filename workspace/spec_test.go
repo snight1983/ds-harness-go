@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/session"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // goodRecord 造一条各字段都填齐的记录，给「只改一处看它拒不拒」的用例当底稿。

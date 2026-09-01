@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestExtractEventTextTakesTheFirstPartySemanticText(t *testing.T) {

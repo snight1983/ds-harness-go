@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unicode"
 
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
-	"ds-harness-go/util/outputretention"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/util/outputretention"
 )
 
 // noticeOmitted 是通知被截掉时补上的那一句。
@@ -64,7 +64,7 @@ func retainTail(text string, maxBytes int) string {
 //
 // 源: packages/jobs/tool-jobs/src/index.ts:123-135
 //
-// maxBytes 为 0 表示不设上限（[ds-harness-go/jobs/jobs.Snapshot.OutputLimitBytes]
+// maxBytes 为 0 表示不设上限（[github.com/snight1983/ds-harness-go/jobs/jobs.Snapshot.OutputLimitBytes]
 // 的约定），对应 DSH 那个 `maxBytes === undefined`。
 func fitWithSuffix(content, suffix string, maxBytes int, omitted string) string {
 	complete := content + suffix

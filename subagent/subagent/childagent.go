@@ -14,14 +14,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/userapproval"
-	"ds-harness-go/preset/agentpresets"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/userapproval"
+	"github.com/snight1983/ds-harness-go/preset/agentpresets"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // DepthError 是「再起一个孩子就会越过请求方给的深度上限」。
@@ -64,17 +64,17 @@ func ResolveChildDepth(parent agent.Agent, maxDepth *int) (int, error) {
 // ResolveChildAgentOptions 解算孩子那份 agent 选项：父的提供方／模型／token 上限
 // 那条路由，除非请求自己另有说法。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:68-83
+// 源: packages/subagent/subagent/src/child-agent.ts:87-119（resolveChildAgentOptions）
 //
 // 新增: DSH 还在返回值上盖一个 `subagentDepth: childDepth`——它的 AgentOptions 是
 // 一个可声明合并的对象，depth.ts 往上贴了那个字段。Go 这边
-// [ds-harness-go/core/agent.Options] 是闭合结构体，贴不上；那份深度改走
-// [ds-harness-go/core/agent.CreateOptions.DelegationDepth] 写进会话头，
+// [github.com/snight1983/ds-harness-go/core/agent.Options] 是闭合结构体，贴不上；那份深度改走
+// [github.com/snight1983/ds-harness-go/core/agent.CreateOptions.DelegationDepth] 写进会话头，
 // 也就是 [ChildSessionMeta] 盖的那一下。理由和 [DelegationDepthOf] 上那条一样：
 // 头是唯一的事实，所以这个函数不再收 childDepth 这个参数。
 //
 // 新增: DSH 用对象展开表达「请求里有这个键就盖掉父的」。Go 的零值就是「没给」
-// （见 [ds-harness-go/core/agent.Options] 上那条注释），所以逐字段判零值。
+// （见 [github.com/snight1983/ds-harness-go/core/agent.Options] 上那条注释），所以逐字段判零值。
 func ResolveChildAgentOptions(parent agent.Agent, requested agent.Options) agent.Options {
 	resolved := parent.Options()
 	if requested.Provider != "" {
@@ -93,7 +93,7 @@ func ResolveChildAgentOptions(parent agent.Agent, requested agent.Options) agent
 // 血统、粗粒度的产品来源、那份必须活过持久化的递归预算、把继承来的父历史和孩子
 // 自己的活儿分开的那条种子边界，以及孩子跑在哪份组合上。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:102-120
+// 源: packages/subagent/subagent/src/child-agent.ts:121-156（childSessionMeta）
 //
 // 预设从父**活着的**那条作用域链上读，而不是从它的头上读：一个空着的时候换过
 // 预设的父跑在更新的那份组合上，而它的头还写着旧的那个。记下这件事正是孩子的
@@ -104,7 +104,7 @@ func ResolveChildAgentOptions(parent agent.Agent, requested agent.Options) agent
 // 宿主组合里，孩子透过全局层看得见它们。
 //
 // 新增: DSH 交回的是 CreateAgentOptions 里那个嵌套的 `meta` 对象。Go 这边
-// [ds-harness-go/core/agent.CreateOptions] 把那层嵌套摊平了，所以这里交回的是一份
+// [github.com/snight1983/ds-harness-go/core/agent.CreateOptions] 把那层嵌套摊平了，所以这里交回的是一份
 // **只填了血统那几项**的 CreateOptions；SessionID、Seed、AgentOptions、Setup
 // 由调用方补上。
 func ChildSessionMeta(
@@ -140,7 +140,7 @@ func scopeKeyOf(a agent.Agent) *scope.Key {
 
 // ChildComposition 是一个孩子创建窗口里要挂的那份带作用域的组合。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:123-128
+// 源: packages/subagent/subagent/src/child-agent.ts:158-164（ChildComposition）
 type ChildComposition struct {
 	// Persona 是只给这个孩子、盖掉部署人设的那份人设；空串表示不换。
 	Persona string
@@ -150,13 +150,13 @@ type ChildComposition struct {
 
 // DelegationContext 是每一个进程内孩子都看得到的那句派发范围陈述。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:135-139
+// 源: packages/subagent/subagent/src/child-agent.ts:166-172（SUBAGENT_DELEGATION_CONTEXT）
 //
 // 它是一份运行期上下文贡献、而不是一段系统提示词，于是部署那份系统提示词在父和
 // 孩子之间保持一模一样。
 //
 // 给模型看的载荷，所以保持英文，和本仓库其余面向模型的文字同一条界线
-// （成例见 [ds-harness-go/interaction/userapproval.NeverStatement]）。
+// （成例见 [github.com/snight1983/ds-harness-go/interaction/userapproval.NeverStatement]）。
 const DelegationContext = "You are a delegated subagent: your permission scope was fixed when you were started and cannot be " +
 	"widened from inside this session — operations that require approval are rejected automatically. " +
 	"When the task needs access beyond that scope, do not retry the denied operation; state the " +
@@ -195,7 +195,7 @@ type ChildCompositionServices struct {
 // 限制——全都归孩子这个作用域所有，因此它的父和它的兄弟都看不见。创建和冷恢复
 // 都从这里过。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:163-175
+// 源: packages/subagent/subagent/src/child-agent.ts:177-218（applyChildComposition）
 //
 // 认亲在前、孩子自己那几笔登记在后。这本来就是分层已经蕴含的次序——最近的那一层
 // 赢下一个名字，一份只给这个孩子的限制和它整条链准入的东西求交——但在这里把它写
@@ -209,7 +209,7 @@ type ChildCompositionServices struct {
 // 新增: DSH 那三笔登记都是 void，撤销靠 cordis 处置孩子那个上下文。Go 这边它们各自
 // 交回一个撤销函数，而这里**有意**把它们丢掉：owner 就是孩子自己那个作用域，
 // 作用域一处置这三笔就跟着没了，那正是 DSH 的语义（成例见
-// [ds-harness-go/core/systemprompt.NewRegistry] 里那几笔自己的登记）。
+// [github.com/snight1983/ds-harness-go/core/systemprompt.NewRegistry] 里那几笔自己的登记）。
 func ApplyChildComposition(
 	ctx context.Context,
 	childScope *scope.Scope,
@@ -254,21 +254,21 @@ func ApplyChildComposition(
 
 // DelegatedPolicyOverrides 是在派发这条边上种进孩子日志的那份策略。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:178-187
+// 源: packages/subagent/subagent/src/child-agent.ts:220-230（DelegatedPolicyOverrides）
 //
 // 新增: DSH 这里还有一半是 `sandboxMode`——父会话那条显式的沙箱模式覆盖。沙箱那
 // 整条线不在本次移植范围内，所以那一半连同它那次 `sandbox/mode` 追加一起去掉了，
 // 只剩审批策略这一半。
 type DelegatedPolicyOverrides struct {
 	// ApprovalPolicy 在审批能力组装进来的时候是
-	// [ds-harness-go/interaction/userapproval.PolicyNever]，否则是空串：一个被派发的
+	// [github.com/snight1983/ds-harness-go/interaction/userapproval.PolicyNever]，否则是空串：一个被派发的
 	// 孩子只在派发那一刻定下的范围里行动，所以它的询问确定地被拒。
 	ApprovalPolicy userapproval.Policy
 }
 
 // CaptureDelegatedPolicyOverrides 把要种进这一次派发的那份策略拍下来。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:199-204
+// 源: packages/subagent/subagent/src/child-agent.ts:232-247（captureDelegatedPolicyOverrides）
 //
 // 在这次孩子开工的第一个可中断点**之前**同步调它：父后来那次切换属于父的未来，
 // 不属于这个孩子。审批策略被钉成「谁都不问」，不看父自己是什么策略。
@@ -290,12 +290,12 @@ func CaptureDelegatedPolicyOverrides(approval *userapproval.Service) DelegatedPo
 // 单看它自己的日志就重建得出来。这几笔落在分叉种子之后，所以新策略压过陈旧的种子
 // 状态；孩子后来自己那些切换仍旧压过这几笔。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:215-225
+// 源: packages/subagent/subagent/src/child-agent.ts:249-268（appendDelegatedPolicyOverrides）
 //
 // 新增: DSH 调的是 `childSession.append(type, data)`。Go 的
-// [ds-harness-go/core/session.Session.Append] 收的是一条 Data 已经是
+// [github.com/snight1983/ds-harness-go/core/session.Session.Append] 收的是一条 Data 已经是
 // json.RawMessage 的事件，所以负载在这里先编一次。
-// [ds-harness-go/interaction/userapproval.SetPolicy] 那条自由函数用不上：它写的
+// [github.com/snight1983/ds-harness-go/interaction/userapproval.SetPolicy] 那条自由函数用不上：它写的
 // PolicyData 不带 Source，而 `delegation` 这个来源正是这几笔和一次运行期切换的
 // 唯一区别。
 func AppendDelegatedPolicyOverrides(
@@ -319,7 +319,7 @@ func AppendDelegatedPolicyOverrides(
 
 // ChildCreateInputs 是每一次进程内孩子创建都共有的身份与血统输入。
 //
-// 源: packages/subagent/subagent/src/child-agent.ts:228-237
+// 源: packages/subagent/subagent/src/child-agent.ts:270-280（ChildCreateInputs）
 type ChildCreateInputs struct {
 	// SessionID 是给这个孩子占下来的会话 id。
 	SessionID session.SessionID

@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 const (

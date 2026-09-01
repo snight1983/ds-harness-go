@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/fs"
-	"ds-harness-go/session"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // entityHost 是实体写入时要用到的那几件登记册自有的机械。
@@ -53,7 +53,7 @@ var errUnchanged = errors.New("workspace: 记录无需改动（内部哨兵）")
 
 // entity 是 [Workspace] 唯一的实现，只由 [Registry] 构造。
 //
-// 源: packages/workspace/workspace/src/entity.ts:69-221
+// 源: packages/workspace/workspace/src/entity.ts:68-221（WorkspaceEntity）
 //
 // 新增: DSH 那边 `record` 是一个普通的私有字段，因为 JS 是单线程的。
 // Go 里它被读方法和写路径同时碰，所以加一把 [sync.RWMutex]：

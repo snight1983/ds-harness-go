@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // openStepAt 造一段「回合 1 步骤 1 开着、请求头还没写」的日志。

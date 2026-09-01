@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // codeOf 取一条带码失败上的那个码；不是带码失败就交回空串。
@@ -22,6 +22,31 @@ func codeOf(err error) string {
 		return coded.Failure.Code
 	}
 	return ""
+}
+
+// saysAnywhere 说这条错误链上有没有哪一层的说法里带着这段话。
+//
+// 本包那些带码失败是 *llm.Error，而它的 Error() **不**把原因那一层的说法接进来。
+// 于是一条汇总失败的顶层只说得出「在几个活化上失败了」，内层那句「在几处边界上
+// 失败了」只有走一遍 Unwrap 才看得见。
+func saysAnywhere(err error, phrase string) bool {
+	if err == nil {
+		return false
+	}
+	if strings.Contains(err.Error(), phrase) {
+		return true
+	}
+	switch unwrapped := err.(type) {
+	case interface{ Unwrap() error }:
+		return saysAnywhere(unwrapped.Unwrap(), phrase)
+	case interface{ Unwrap() []error }:
+		for _, each := range unwrapped.Unwrap() {
+			if saysAnywhere(each, phrase) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestRegisterProviderKeepsRegistrationOrder(t *testing.T) {

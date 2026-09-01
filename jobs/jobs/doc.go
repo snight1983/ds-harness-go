@@ -5,7 +5,7 @@
 //
 // 源: packages/jobs/jobs/src/index.ts:1-7
 //
-// 进程内那台实现在 ds-harness-go/jobs/localjobs。
+// 进程内那台实现在 github.com/snight1983/ds-harness-go/jobs/localjobs。
 //
 // # 实现方必须守住的几条
 //
@@ -25,7 +25,7 @@
 // DSH 那两个监听器和控制器的可见范围由「登记它的那个 cordis 上下文的作用域」决定：
 // 从无作用域上下文登记的服务每一个属主，从某个 agent 组合的作用域下登记的只服务
 // 组合在它底下的那些 agent。Go 这边同一条规则由
-// [ds-harness-go/core/scope.Admits] 直接给出：登记时交进来的那个 *scope.Scope
+// [github.com/snight1983/ds-harness-go/core/scope.Admits] 直接给出：登记时交进来的那个 *scope.Scope
 // 就是标签，属主 agent 自己那把作用域钥匙就是分派键。
 //
 // # 新增: 这条缝是一个接口，不是一个抽象类

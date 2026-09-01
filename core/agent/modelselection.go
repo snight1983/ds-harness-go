@@ -11,14 +11,14 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ModelSelection 是给一个活 agent 选定的那一整份「提供方 + 模型 + 推理档位」。
 //
-// 源: packages/core/agent/src/model-selection.ts:10-17
+// 源: packages/core/agent/src/model-selection.ts:9-17（ModelSelection）
 //
 // ReasoningEffort 为空串表示没选档位，交回给提供方或者适配器自己的默认行为——这条
 // 「空串即缺失」的约定是 [llm.CallConfig].ReasoningEffort 定下的，这里照用，好让
@@ -34,7 +34,7 @@ type ModelSelection struct {
 
 // ModelSelectionRef 是那份可变的选择，外加「当下这个步骤进装配时抓下来的那一份」。
 //
-// 源: packages/core/agent/src/model-selection.ts:20-25
+// 源: packages/core/agent/src/model-selection.ts:19-25（ModelSelectionRef）
 //
 // 两个字段而不是一个，是这套东西的全部要害：装配在委托下去**之前**把当下选中的
 // 那一份抓下来，请求路由随后只认那一份抓拍。于是一次和步骤赛跑的切换要么整个落在
@@ -121,7 +121,7 @@ func (r *ModelSelectionRef) setAssembled(selection ModelSelection, present bool)
 // 上。没选中模型时两边都原样放行。
 //
 // owner 决定这两条登记落在哪一层，也就决定了它们看得见哪些 agent——按本仓库
-// [ds-harness-go/core/scope.Layers] 的一贯规矩，挂在某个 agent 作用域上的登记只
+// [github.com/snight1983/ds-harness-go/core/scope.Layers] 的一贯规矩，挂在某个 agent 作用域上的登记只
 // 服务那个 agent 和它的子孙。这就是 DSH 那个 agentCtx 参数的意思。
 //
 // 新增: DSH 拿到的是一个 cordis 上下文，两条事件都从它身上挂；Go 里两个面分属两张

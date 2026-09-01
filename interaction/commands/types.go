@@ -7,7 +7,7 @@
 package commands
 
 import (
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ID 把一次执行的 command/run 和它那条 command/done 配成一对。
@@ -23,7 +23,7 @@ type ID string
 
 // InputDescriptor 是一条命令那点可选的自由输入的元数据。
 //
-// 源: packages/interaction/commands/src/types.ts:13-24
+// 源: packages/interaction/commands/src/types.ts:12-24（CommandInputDescriptor）
 type InputDescriptor struct {
 	// Hint 是用户还没输入时显示的占位提示。
 	Hint string `json:"hint"`
@@ -52,7 +52,7 @@ const (
 
 // Result 是派发这条命令的界面直接渲染的那个结局。
 //
-// 源: packages/interaction/commands/src/types.ts:27-34
+// 源: packages/interaction/commands/src/types.ts:26-34（CommandResult）
 //
 // 新增: DSH 是一个按 kind 分叉的联合类型，两支的字段约束不同（error 那支的 text
 // 必填且非空）。Go 这边合成一个结构体，那条约束由 [normalizeResult] 在注册表边界上
@@ -92,7 +92,7 @@ type Execution struct {
 
 // Descriptor 是交给界面的那份不带处理器的命令视图。
 //
-// 源: packages/interaction/commands/src/types.ts:50-57
+// 源: packages/interaction/commands/src/types.ts:49-57（CommandDescriptor）
 type Descriptor struct {
 	// Name 是不带斜杠的小写命令名。
 	Name string `json:"name"`
@@ -139,7 +139,7 @@ const (
 
 // EventTypes 是本包往会话日志里写的那几种事件类型。
 //
-// 新增: 理由和 [ds-harness-go/compaction.EventTypes] 逐字相同——Go 没有声明合并，
+// 新增: 理由和 [github.com/snight1983/ds-harness-go/compaction.EventTypes] 逐字相同——Go 没有声明合并，
 // [session.Vocabulary] 是个闭合的值，所以由本包交出单子、装配方自己拼：
 //
 //	vocabulary := session.CoreVocabulary().With(commands.EventTypes()...)

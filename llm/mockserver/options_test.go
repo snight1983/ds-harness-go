@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm/mockserver"
+	"github.com/snight1983/ds-harness-go/llm/mockserver"
 )
 
 // TestStartRejectsInvalidOptions 是那张拒绝表。

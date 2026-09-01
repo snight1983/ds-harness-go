@@ -3,7 +3,7 @@
 //
 // 源: packages/test-support/llm-replay/src/index.ts:1-8
 //
-// 它存在的理由和 [ds-harness-go/llm/mockserver] 是一对：mockserver 演的是**线路
+// 它存在的理由和 [github.com/snight1983/ds-harness-go/llm/mockserver] 是一对：mockserver 演的是**线路
 // 怎么坏**（掉线、限流、SSE 从中间截断），本包演的是**模型说了什么**。崩溃恢复
 // 那几条路要在精确的位置断开——第 7 轮的第 3 个分块之后进程死掉——真模型给不了
 // 这个精确度，而一份录好的 JSONL 给得了。
@@ -15,7 +15,7 @@
 //
 // 推导只读两种事件。一是 assistant/chunk：按 (turn, step) 分组，每组就是一次
 // stream() 调用吐出来的那串分块，每遇到一个 finish 就收一条。二是
-// compaction/summary：它标了 [ds-harness-go/compaction.SummaryData.LLMStreamCall]
+// compaction/summary：它标了 [github.com/snight1983/ds-harness-go/compaction.SummaryData.LLMStreamCall]
 // 时表示那次总结**恰好**是一次走本上下文 LLM 接缝的调用，于是拿它那份完整的
 // RawOutput 在日志里的那个位置重造一次规范的成功流（每块一对 block-start /
 // block-end，有用量就带上，最后一个 stop）。没标记的 rawOutput 不算——模板总结器
@@ -51,7 +51,7 @@
 //
 // 一个父 agent 派给进程内子 agent 的场景会录下不止一份日志：父（session.jsonl）
 // 加每个孩子一份（session.1.jsonl、…）。每个 agent 是同一个上下文上自己那个会话，
-// 所以本包按调用方那个会话 id（[ds-harness-go/llm.GenerateOptions.SessionID]）
+// 所以本包按调用方那个会话 id（[github.com/snight1983/ds-harness-go/llm.GenerateOptions.SessionID]）
 // 分开各自的游标。
 //
 // 活会话的 id 每一跑都是新随机的，绝不等于录下来的那些，所以绑定靠**第一次调用的
@@ -64,7 +64,7 @@
 //
 // **新增: 派发不出去的那两种失败直接从第二个返回值交出去。** DSH 那边监听器必须
 // 交回一个 AsyncIterable、不能抛，所以「来了一个没录过的会话」和「剧本用完了」
-// 被推迟到生成器里才抛。Go 的 [ds-harness-go/llm.Adapter.Stream] 本来就把「派发
+// 被推迟到生成器里才抛。Go 的 [github.com/snight1983/ds-harness-go/llm.Adapter.Stream] 本来就把「派发
 // 不出去」和「流走到一半失败」分成两处（见那个接口的文档），这两件事都发生在
 // 一个分块都还没吐之前，所以它们就是第二个返回值。这不是行为差异——运行时对两处
 // 失败的归一是一样的——是把一个 TS 那边绕开语言限制的写法还原成它本来的形状。
@@ -79,7 +79,7 @@
 // 那一步：收一份 Config、把没给的字段从 DSH_SNAPSHOT_* 补上、验模态、交回补好的
 // 同一个类型。
 //
-// **新增: 头的解析直接落进 [ds-harness-go/session.SessionHeader]。** DSH 手挑
+// **新增: 头的解析直接落进 [github.com/snight1983/ds-harness-go/session.SessionHeader]。** DSH 手挑
 // id / createdAt / seedLength 三个字段并逐个 typeof 判类型，是因为它那边没有一个
 // 认得这份头的解码器；Go 这边有，读回来就是那个类型。
 //
@@ -95,7 +95,7 @@
 //
 //   - [ResolveScriptedEntry] 里排条目、排请求消息、以及在自己刚排出来的那份字节上
 //     攒语料——这三处的入参都是本包刚生成的合法 JSON，排不出去或读不回来意味着
-//     [ds-harness-go/llm] 那边的编解码坏了，而那是那个包自己的用例该管的事。
+//     [github.com/snight1983/ds-harness-go/llm] 那边的编解码坏了，而那是那个包自己的用例该管的事。
 //   - [ParseSessionLog] 把补好信封的字段表排回去：那张表是从一行合法 JSON 解出来的。
 //   - [DeriveScript] 在收到 finish 分块时的那次收尾：收尾只在最后一块不是 finish
 //     时失败，而这一处的最后一块正是那块 finish。

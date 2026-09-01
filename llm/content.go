@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/attachment"
 )
 
 // BlockType 是内容块的判别标签。
@@ -272,7 +272,7 @@ func UnmarshalContentBlock(data []byte) (ContentBlock, error) {
 
 // ContentHasImage 判断这串内容里有没有图片块，会走进工具结果的嵌套内容。
 //
-// 源: packages/llm/llm/src/content.ts:30-41
+// 源: packages/llm/llm/src/content.ts:116-127（contentHasImage）
 //
 // 这是所有图片策略（能力判定、纯文本序列化、压缩时的清点）共用的**同一趟**递归，
 // 于是没有哪个调用方会在「嵌套多深算数」上悄悄跟别人不一致。

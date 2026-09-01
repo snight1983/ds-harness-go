@@ -13,9 +13,9 @@ import (
 	"regexp"
 	"strings"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/userquestions"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/userquestions"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // reviewID 是那道评审问题的标识，答案里按它归位。

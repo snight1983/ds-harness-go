@@ -8,9 +8,9 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // selectionFixture 是这一组测试共用的那一整套接线。

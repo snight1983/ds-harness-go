@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // RegisterInvariants 把这个包登记进不变量注册表，返回注销函数。
@@ -19,7 +19,7 @@ import (
 // 面向模型的一层适配，自己不开任何独立的生命周期流；投递和活化关系都归它调的
 // 那台服务所有，也由它去验。
 //
-// 那为什么还要登记？理由和 [ds-harness-go/subagent/reporttool.RegisterInvariants]
+// 那为什么还要登记？理由和 [github.com/snight1983/ds-harness-go/subagent/reporttool.RegisterInvariants]
 // 逐字相同：占住这个包名，并且让「检查过了、结论是无需检查」和「这个包被漏掉了」
 // 区分得开。
 func RegisterInvariants(ctx context.Context, registry *invariants.Registry) (func(), error) {

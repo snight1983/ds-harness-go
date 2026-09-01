@@ -21,7 +21,7 @@ import (
 
 // Adapter 是把本装置的消息与流式词汇接到某一家提供方线上协议的那个东西。
 //
-// 源: packages/llm/llm/src/index.ts:185-260
+// 源: packages/llm/llm/src/index.ts:187-275（LlmAdapter）
 //
 // 用 [Runtime.RegisterAdapter] 把它登记到若干条提供方路由上。**每一次发往提供方
 // 的 HTTP 请求都必须带上 [AttributionHeaders] 给的那些头**；直发 HTTP 的适配器
@@ -98,7 +98,7 @@ type CallPreparer interface {
 
 // PreparedAdapterCall 是适配器某一代模型解算结果，绑着它最终那次流调用。
 //
-// 源: packages/llm/llm/src/index.ts:177-183
+// 源: packages/llm/llm/src/index.ts:179-185（PreparedAdapterCall）
 type PreparedAdapterCall struct {
 	// Model 是和 Stream 同一代的那份确切模型元数据。
 	Model ResolvedModelInfo

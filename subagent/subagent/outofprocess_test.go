@@ -14,7 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ---- 诊断截断 ----

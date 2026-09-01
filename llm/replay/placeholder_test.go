@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // requestMessages 是那份埋了两个 goal id 的请求，后一个才是活的那个。

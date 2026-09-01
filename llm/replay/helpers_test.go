@@ -15,8 +15,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // textChunks 是一次正常吐完的调用，五块，最后一块是 finish。
@@ -133,7 +133,7 @@ func drain(sequence iter.Seq2[llm.StreamChunk, error]) ([]llm.StreamChunk, error
 // streamContext 走一遍真的运行时瀑布，把那次调用的分块和错误交回来。
 //
 // 两条装法在「失败从哪儿出来」上不一样，所以这里两处都收：兜底监听器那条路
-// （没配提供方目录）的失败从 [ds-harness-go/llm.Runtime.Stream] 的第二个返回值出来，
+// （没配提供方目录）的失败从 [github.com/snight1983/ds-harness-go/llm.Runtime.Stream] 的第二个返回值出来，
 // 适配器那条路的失败被运行时归一成一个终止分块。
 func streamContext(
 	ctx context.Context,

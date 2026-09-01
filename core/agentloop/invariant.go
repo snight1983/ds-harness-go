@@ -12,16 +12,16 @@ import (
 	"fmt"
 	"iter"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/invariants"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里占的名字。
 //
-// 源: packages/core/agent-loop/src/invariant.ts:11
+// 源: packages/core/agent-loop/src/invariant.ts:13-14（name）
 //
 // 沿用 DSH 侧的包名字面量而不是换成 Go 的导入路径，理由同 llm、credentials 两个包：
 // 注册表按名字预留名额，而这条约定的拥有者在两边是同一个模块。换个名字，
@@ -40,7 +40,7 @@ const PackageName = "@deepseek-ai/dsh-agent-loop"
 // 历史不一样，而且事后从任何一侧都查不出来。
 //
 // 具体查六件事：请求带着会话身份；那个会话此刻活着；它的日志里有过 step/start；
-// 它折得出一份请求头；请求带的消息和 [ds-harness-go/core/session.Session.DeriveMessages]
+// 它折得出一份请求头；请求带的消息和 [github.com/snight1983/ds-harness-go/core/session.Session.DeriveMessages]
 // 逐字节一致；请求那几个头字段和折出来的那份头一致。
 //
 // # 只查循环自己装的请求
@@ -66,7 +66,7 @@ const PackageName = "@deepseek-ai/dsh-agent-loop"
 //
 // # 新增: DSH 那两条 Object.isFrozen 检查在这里不存在
 //
-// 源: packages/core/agent-loop/src/invariant.ts:21、25
+// 源: packages/core/agent-loop/src/invariant.ts:57-63（apply）、25
 //
 // DSH 查「请求对象和它的 messages 数组都被冻住了」，防的是下游中间件就地改掉一份
 // 已经派发出去的请求。Go 的 [llm.GenerateOptions] 是值，跨函数边界就是一次复制，

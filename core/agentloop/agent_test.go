@@ -11,11 +11,17 @@
 // 把脚本吐回去。于是 [ReactLoopAgent.buildRequest] 里那次 PrepareCall 必然报
 // NO_ADAPTER，循环走的是 prepared == nil 那条路——也就是「中间件服务一条没登记的
 // 路由」那一支。
+//
+// 默认不登记适配器是**有意的**：这一批用例验的是循环自己，而不是适配器解算。
+// 但那条岔路的另一半（prepared != nil）会往日志上写两样别处写不出来的事实
+//（适配器落实了哪几个字段、这条路由的上下文窗口多大），所以 [loopSetup].model
+// 一填就在这个舞台上登记一个最小适配器，见 [TestAResolvedAdapterStampsItsModelFactsOnTheLog]。
 
 package agentloop
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"iter"
 	"strings"
@@ -23,13 +29,13 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // loopSetup 是造一个舞台时那几处可调的地方，零值就是最平常的那一套。
@@ -40,6 +46,43 @@ type loopSetup struct {
 	options agent.Options
 	// maxParallelToolCalls 接上那个并行池上限；为 nil 时循环用自己的默认值。
 	maxParallelToolCalls func() int
+	// model 非 nil 时在这个 agent 的路由上登记一个交出这份元数据的最小适配器。
+	// 为 nil（常态）时一条路由都不登记，见本文件开头。
+	model *llm.ResolvedModelInfo
+}
+
+// scriptedAdapter 是一个只为了「让 PrepareCall 成功」而存在的最小适配器。
+//
+// 它的 Stream 永远走不到：这个舞台上那条流规则（[loopWorld.serve]）不调 next，
+// 瀑布最里面那一层根本不会被叫到。适配器在这里的全部作用是让
+// [llm.Runtime.PrepareCall] 找得到一条登记，从而交出一个非 nil 的
+// [llm.PreparedCall]——循环拿它去写日志上那两样事实。
+type scriptedAdapter struct {
+	model llm.ResolvedModelInfo
+}
+
+// Stream 走不到：瀑布最里面这一层被那条不调 next 的流规则挡住了。
+func (a *scriptedAdapter) Stream(
+	context.Context, llm.GenerateOptions,
+) (iter.Seq2[llm.StreamChunk, error], error) {
+	return func(func(llm.StreamChunk, error) bool) {}, nil
+}
+
+// ResolveModel 交出这条路由上那份确切模型元数据。
+//
+// 实现 [llm.ModelResolver] 是这个适配器唯一要紧的事：不实现的话运行时兜底成
+// 身份三件套，上下文窗口和输出上限默认都是空的，而那两样正是这批用例要验的。
+func (a *scriptedAdapter) ResolveModel(
+	_ context.Context, provider, model string,
+) (llm.ResolvedModelInfo, error) {
+	resolved := a.model.Clone()
+	resolved.Provider, resolved.ID = provider, model
+	if resolved.Name == "" {
+		// 名字空着运行时会以 INVALID_MODEL_INFO 拒绝这份元数据，而这批用例
+		// 一个都不关心名字叫什么。
+		resolved.Name = model
+	}
+	return resolved, nil
 }
 
 // loopWorld 是这一批用例的舞台：五样运行期设施、一个活会话、一个装好的循环，
@@ -135,6 +178,12 @@ func newLoopWorld(t *testing.T, setup loopSetup) *loopWorld {
 	options := setup.options
 	if options.Provider == "" && options.Model == "" {
 		options = agent.Options{Provider: "甲", Model: "m-1"}
+	}
+	if setup.model != nil {
+		if _, err := world.models.RegisterAdapter(ctx, owner,
+			[]string{options.Provider}, &scriptedAdapter{model: *setup.model}); err != nil {
+			t.Fatalf("登记适配器失败：%v", err)
+		}
 	}
 	loop, err := NewReactLoopAgent(ctx, world.deps(setup), nil, live.ID(), options, live)
 	if err != nil {
@@ -678,6 +727,284 @@ func TestPrependReportsWhatTheInboxRefused(t *testing.T) {
 	}
 }
 
+// TestRemoveTakesOneQueuedMessageAndLeavesTheRestAlone 钉住 Remove 只拿掉指名的
+// 那一条，而且指了一个不在队里的身份是**静默的无事发生**。
+//
+// 新增: DSH 没有这个方法（它那些插件直接调 `agent.inbox.remove(...)`）。它存在的
+// 理由和 [ReactLoopAgent.Prepend] 一样——收件箱在这边只当只读投影，所有改动都得
+// 从这把锁里走一遍。
+//
+// 不在队里就静默返回，是 [github.com/snight1983/ds-harness-go/core/agent.Inbox.Remove] 那边定的
+//（找不到时交回 false 而不是错）。这条得在这一层也钉住：使用者按下取消的那一刻，
+// 那条消息完全可能刚好被一个步骤认领走，而那不是任何人的错，不该走出错那条边。
+//
+// 断言从一件维护活儿**里面**做，理由见 [TestSendTargetsTheRightInboxBoundary]。
+func TestRemoveTakesOneQueuedMessageAndLeavesTheRestAlone(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	kept, dropped := userMessage("留下的"), userMessage("要拿掉的")
+	err := world.loop.RunMaintenance(context.Background(), func(context.Context) error {
+		world.loop.Steer(kept)
+		world.loop.Steer(dropped)
+
+		world.loop.Remove(dropped.ID)
+		nextStep := world.loop.Inbox().NextStep()
+		if len(nextStep) != 1 || textOf(t, nextStep[0]) != "留下的" {
+			t.Errorf("该只拿掉指名那一条，实际 %#v", nextStep)
+		}
+
+		// 同一个身份再拿一次：它已经不在队里了。
+		world.loop.Remove(dropped.ID)
+		if got := len(world.loop.Inbox().NextStep()); got != 1 {
+			t.Errorf("拿一条不在队里的不该动别人，实际队里 %d 条", got)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("维护活儿不该失败：%v", err)
+	}
+	world.settle(t)
+
+	if failures := world.reportedFailures(); len(failures) != 0 {
+		t.Errorf("这一路一次都不该走出错那条边，实际报了 %#v", failures)
+	}
+}
+
+// TestReplaceSwapsTheMessageInPlaceKeepingItsPosition 钉住 Replace 换内容不换位置。
+//
+// 新增: 理由同 [TestRemoveTakesOneQueuedMessageAndLeavesTheRestAlone]。
+//
+// 「原地」是这个方法的全部意义：它的用途是一条排队的输入在跑之前被改写
+//（比如插件把一句话补全）。做成「删掉再放到队尾」的话，改一个字就会把它挪到
+// 后来那些消息的后面，模型看见的先后跟人写的先后对不上。
+func TestReplaceSwapsTheMessageInPlaceKeepingItsPosition(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	original, tail := userMessage("原来的"), userMessage("排在后面的")
+	err := world.loop.RunMaintenance(context.Background(), func(context.Context) error {
+		world.loop.Steer(original)
+		world.loop.Steer(tail)
+
+		world.loop.Replace(original.ID, userMessage("改过的"))
+		nextStep := world.loop.Inbox().NextStep()
+		if len(nextStep) != 2 ||
+			textOf(t, nextStep[0]) != "改过的" || textOf(t, nextStep[1]) != "排在后面的" {
+			t.Errorf("该原地换掉队首那一条，实际 %#v", nextStep)
+		}
+
+		// 老身份已经不在队里了：再换一次是无事发生。
+		world.loop.Replace(original.ID, userMessage("不该出现"))
+		if got := len(world.loop.Inbox().NextStep()); got != 2 {
+			t.Errorf("换一条不在队里的不该往队里加东西，实际队里 %d 条", got)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("维护活儿不该失败：%v", err)
+	}
+	world.settle(t)
+
+	if failures := world.reportedFailures(); len(failures) != 0 {
+		t.Errorf("这一路一次都不该走出错那条边，实际报了 %#v", failures)
+	}
+}
+
+// TestStatusReadsThePhaseThatIsLiveRightNow 钉住 Status 读的是**此刻**那一相。
+//
+// 源: packages/core/agent-loop/src/agent.ts:99-101
+//
+// [statusOf] 那条映射另有用例（[TestStatusOfProjectsTheRunningPhaseOnly]），
+// 这一条验的是它上面那层：Status 拿着锁去读活的那一相，而不是读一个被缓存下来的
+// 副本。缓存的话，问它状态的人会在一个回合已经跑起来之后仍然得到 idle——
+// 而外面判「能不能再送一条进去」全靠这个答案。
+//
+// 中间那次从 onRequest 里读：那时驱动正在派发这次请求，是这个 agent 确凿在跑的
+// 一刻，而那条钩子不持这把锁（同一处已有用例从这里调 Cancel）。
+func TestStatusReadsThePhaseThatIsLiveRightNow(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	if got := world.loop.Status(); got != agent.StatusIdle {
+		t.Errorf("一个回合都还没跑，该是 idle，实际 %q", got)
+	}
+
+	var duringTurn agent.Status
+	world.onRequest = func(int) {
+		status := world.loop.Status()
+		world.mutex.Lock()
+		duringTurn = status
+		world.mutex.Unlock()
+	}
+	world.run(t, "在么")
+
+	world.mutex.Lock()
+	got := duringTurn
+	world.mutex.Unlock()
+	if got != agent.StatusRunning {
+		t.Errorf("回合跑到派发那一刻该是 running，实际 %q", got)
+	}
+	if after := world.loop.Status(); after != agent.StatusIdle {
+		t.Errorf("回合收尾之后该回到 idle，实际 %q", after)
+	}
+}
+
+// TestAToolsDeferredContextReachesTheNextStep 钉住一个工具捎回来的上下文真的
+// 走到了下一步的模型手里。
+//
+// 源: packages/core/agent-loop/src/agent.ts:416
+//
+// [ExecuteToolCalls] 那边只验到「交给了接收方」
+//（[TestExecuteToolCallsHandsCommittedContextsToTheSink] 用的是一个桩接收方），
+// 而循环自己那个接收方 acceptToolContext 把它排进 next-step 队尾——**这段接线
+// 从来没有被验过**。断在这里的话，一个靠捎话传指令的工具（「接下来请只读不写」）
+// 会静默失效，而两头的用例都还是绿的。
+//
+// 所以这一条从整条链验：走真的循环，断言那句话出现在**第二次**请求的消息里。
+// 队尾这个位置也一并钉住了——它得排在这一步那些工具结果的后面。
+func TestAToolsDeferredContextReachesTheNextStep(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	if _, err := world.tools.Register(context.Background(), world.owner,
+		namedTool("捎话", true, func(_ context.Context, exec *tools.RunContext) error {
+			exec.DeferContext(llm.NewUserMessage(
+				llm.Content{llm.TextBlock{Text: "接下来请只读不写"}}, llm.UserSource{}))
+			return nil
+		})); err != nil {
+		t.Fatalf("注册工具失败：%v", err)
+	}
+	world.setScript(toolReply("c1", "捎话"), textReply("收到"))
+	world.run(t, "调个工具")
+
+	requests := world.requestsSent()
+	if len(requests) != 2 {
+		t.Fatalf("该跑两步，实际 %d 次请求", len(requests))
+	}
+	messages := requests[1].Messages
+	if len(messages) == 0 {
+		t.Fatal("第二次请求一条消息都没带")
+	}
+	if got := textOf(t, messages[len(messages)-1]); got != "接下来请只读不写" {
+		t.Errorf("捎回来的上下文该排在第二次请求的末尾，实际那条是 %q", got)
+	}
+}
+
+// TestAToolThatConcludesTheTurnStopsTheLoop 钉住一个宣布「到此为止」的工具真的
+// 把这个回合关掉了。
+//
+// 源: packages/core/agent-loop/src/agent.ts:418-421
+//
+// 和 [TestAToolsDeferredContextReachesTheNextStep] 同一个毛病的另一半：
+// [ExecuteToolCalls] 那边只验到「这一位报上来了」
+//（[TestExecuteToolCallsReportsAResultThatConcludesTheTurn]），而循环拿它去停
+//**从来没有被验过**。断在这里的话，一个把答复交回给用户的收尾工具跑完之后，
+// 循环会接着发下一次请求——而那个工具说的正是「别再发了」。多出来的那一次是
+// 真花钱的，而且模型会对着一份已经了结的对话再说一遍。
+func TestAToolThatConcludesTheTurnStopsTheLoop(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	if _, err := world.tools.Register(context.Background(), world.owner,
+		namedTool("收尾", true, func(_ context.Context, exec *tools.RunContext) error {
+			exec.ConcludeTurn()
+			return nil
+		})); err != nil {
+		t.Fatalf("注册工具失败：%v", err)
+	}
+	// 脚本里备了第二段。循环真去发第二次请求的话，这一段就会被取走，
+	// 请求计数也就不是 1 了。
+	world.setScript(toolReply("c1", "收尾"), textReply("不该说出口"))
+	world.run(t, "调个收尾工具")
+
+	if got := len(world.requestsSent()); got != 1 {
+		t.Errorf("工具宣布回合结束之后不该再发请求，实际发了 %d 次", got)
+	}
+	if kind := onlyTurnEndKind(t, world.live); kind != sessionlog.ReasonCompleted {
+		t.Errorf("该以 completed 收场，实际 %q", kind)
+	}
+}
+
+// TestADeniedToolCallStillGetsItsResultOnTheLog 钉住一次被执行前规则拒掉的调用
+// 照样在日志上配齐了它那份结果。
+//
+// 源: packages/core/agent-loop/src/tool-calls.ts:120-137
+//
+// 拒绝走的是分段调度里 post-result 那一档（[tools.StagePostResult]）：这次调用
+// 一行代码都没跑过，但它已经进过策略管线，所以执行后瀑布也得看见它。循环这边
+// 要紧的是**那份合成结果照样落进日志**——派生历史要求每一条 tool/call 都配得上
+// 一条 tool/result，少一条这段会话就带着一次悬空调用，大多数提供方会直接拒收，
+// 于是这个会话再也发不出请求。
+//
+// 拒绝理由要到得了模型手里：模型得知道自己为什么被挡，才有可能换一条路走。
+func TestADeniedToolCallStillGetsItsResultOnTheLog(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	ctx := context.Background()
+	if _, err := world.tools.Register(ctx, world.owner, namedTool("危险", true, nil)); err != nil {
+		t.Fatalf("注册工具失败：%v", err)
+	}
+	undo, err := world.tools.PreExecute(ctx, world.owner,
+		func(tools.Execution, func() (tools.PreDecision, error)) (tools.PreDecision, error) {
+			return tools.PreDecision{Kind: tools.PreDeny, Reason: "这台机器上不许跑"}, nil
+		})
+	if err != nil {
+		t.Fatalf("装执行前规则失败：%v", err)
+	}
+	t.Cleanup(func() { _ = undo(ctx) })
+
+	world.setScript(toolReply("c1", "危险"), textReply("那我换一条路"))
+	world.run(t, "试试被拒的工具")
+
+	if got := countEvents(world.live, sessionlog.EventToolCall); got != 1 {
+		t.Errorf("该记下那一次调用，实际 %d 条", got)
+	}
+	texts := resultTexts(t, world.live)
+	if len(texts) != 1 {
+		t.Fatalf("被拒的调用也该配齐一份结果，实际 %d 份", len(texts))
+	}
+	if !strings.Contains(texts[0], "这台机器上不许跑") {
+		t.Errorf("拒绝理由该到得了模型手里，实际 %q", texts[0])
+	}
+	if got := len(world.requestsSent()); got != 2 {
+		t.Errorf("被拒不是回合结束，该接着跑下一步，实际 %d 次请求", got)
+	}
+}
+
+// TestACallToAToolThatDoesNotExistComesBackAsAResult 钉住模型点了一个不存在的
+// 工具时，回到它手里的是一份结果，而不是一次回合失败。
+//
+// 源: packages/core/agent-loop/src/tool-calls.ts:120-137
+//
+// 这是分段调度里第三档（[tools.StageFinalResult]）在循环这边的样子：连执行前
+// 瀑布都没进过，当场就是一份失败结果。
+//
+// 模型编一个不存在的工具名是**常态**，不是异常。把它变成一次回合失败，等于让
+// 模型的一次口误终止整段会话；变成一份结果，模型下一步就看得见「没有这个工具」
+// 并且改口。这一条和被拒那一条走的是不同的档，所以各验各的。
+func TestACallToAToolThatDoesNotExistComesBackAsAResult(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	world.setScript(toolReply("c1", "查无此工具"), textReply("那我不调了"))
+	world.run(t, "点一个不存在的")
+
+	for _, failure := range world.reportedFailures() {
+		t.Fatalf("点错工具名不是回合失败，实际报了 %v", failure.Err)
+	}
+	if got := len(resultTexts(t, world.live)); got != 1 {
+		t.Errorf("该配齐一份结果，实际 %d 份", got)
+	}
+	if got := len(world.requestsSent()); got != 2 {
+		t.Errorf("该把这份结果带回给模型再跑一步，实际 %d 次请求", got)
+	}
+	if kind := onlyTurnEndKind(t, world.live); kind != sessionlog.ReasonCompleted {
+		t.Errorf("该以 completed 收场，实际 %q", kind)
+	}
+}
+
 // TestSendAfterAnAbortRetargetsToTheNextTurn 钉住一次送进已被取消的活动的唤醒
 // 改排到下一个回合。
 //
@@ -1204,6 +1531,92 @@ func TestARetryingObserverGetsASecondAttempt(t *testing.T) {
 	}
 }
 
+// TestTheAdaptersOwnRetryPolicyReachesTheRecoveryWaterfall 钉住路由上真有适配器时，
+// 它自己那份重试策略递到了恢复瀑布手里。
+//
+// 源: packages/core/agent-loop/src/agent.ts:371-390
+//
+// 这一位（[agent.RequestFailure].HasRetryPolicy）说的是「这条路由的主人对重试有没有
+// 意见」。没有适配器时它是假的，恢复策略只能按普通默认办；有适配器时它是真的，而那份
+// 策略是提供方自己知道的事实——哪些失败码值得再试、退避多久。丢了它，一个把
+// 429 归到「不必重试」的提供方会被照着通用默认反复重试，而那正是它在限流的时候。
+//
+// [TestARetryingObserverGetsASecondAttempt] 验的是没有适配器那一半，这一条补另一半。
+func TestTheAdaptersOwnRetryPolicyReachesTheRecoveryWaterfall(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{model: &llm.ResolvedModelInfo{}})
+	world.setScript(errorReply("炸了"))
+
+	var seen []agent.RequestFailure
+	detach, err := world.agents.OnRequestError(context.Background(), world.owner,
+		func(_ context.Context, failure agent.RequestFailure, _ func(context.Context) (agent.RequestErrorAction, error)) (agent.RequestErrorAction, error) {
+			seen = append(seen, failure)
+			return agent.RequestErrorAction{}, nil
+		})
+	if err != nil {
+		t.Fatalf("装请求错误观察者失败：%v", err)
+	}
+	t.Cleanup(func() { _ = detach(context.Background()) })
+
+	world.run(t, "让它炸")
+
+	if len(seen) != 1 {
+		t.Fatalf("该走一次恢复瀑布，实际 %d 次", len(seen))
+	}
+	if !seen[0].HasRetryPolicy {
+		t.Fatal("这条路由上有适配器，该带上它那份重试策略")
+	}
+	if seen[0].RetryPolicy.Mode == "" {
+		t.Errorf("带上的该是一份解算好的策略，实际 %#v", seen[0].RetryPolicy)
+	}
+}
+
+// TestAnAbortedFinishFromTheModelEndsTheTurnAsAFailure 钉住模型自己报 aborted 时，
+// 这个回合按失败收场。
+//
+// 源: packages/core/agent-loop/src/agent.ts:371-390
+//
+// 这条和「使用者按了取消」不是一回事，两者只是名字像：那一种是本地 ctx 被取消，
+// 走的是安全前缀那条路，日志上记 aborted 且**不**广播失败（见
+// [TestAnInterruptedStreamKeepsTheSafePrefix]）；这一种是**提供方**在流的终止分块
+// 里说「我这边中断了」，它和 error 一样是一次请求失败，得进恢复瀑布、拿得到重试
+// 的机会。混为一谈的话，提供方那边的一次可重试中断会被当成使用者的意图，
+// 静悄悄地把回合停在半路上。
+func TestAnAbortedFinishFromTheModelEndsTheTurnAsAFailure(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	world.setScript([]llm.StreamChunk{
+		llm.FinishChunk{Reason: llm.AbortedFinish{
+			Failure: llm.Failure{Message: "上游断了", Code: "UPSTREAM_ABORTED"},
+		}},
+	})
+
+	var seen []agent.RequestFailure
+	detach, err := world.agents.OnRequestError(context.Background(), world.owner,
+		func(_ context.Context, failure agent.RequestFailure, _ func(context.Context) (agent.RequestErrorAction, error)) (agent.RequestErrorAction, error) {
+			seen = append(seen, failure)
+			return agent.RequestErrorAction{}, nil
+		})
+	if err != nil {
+		t.Fatalf("装请求错误观察者失败：%v", err)
+	}
+	t.Cleanup(func() { _ = detach(context.Background()) })
+
+	world.run(t, "让上游断")
+
+	if len(seen) != 1 {
+		t.Fatalf("提供方报的中断该进恢复瀑布，实际 %d 次", len(seen))
+	}
+	if got := seen[0].Failure.Code; got != "UPSTREAM_ABORTED" {
+		t.Errorf("该原样带上提供方那份失败事实，实际 %q", got)
+	}
+	if kind := onlyTurnEndKind(t, world.live); kind != sessionlog.ReasonError {
+		t.Errorf("没人认领恢复时该以 error 收场，实际 %q", kind)
+	}
+}
+
 // TestARouteWithoutAProviderOrModelFailsTheTurn 钉住路由不全时这个回合当场失败。
 //
 // 源: packages/core/agent-loop/src/agent.ts:466-471
@@ -1314,6 +1727,95 @@ func TestAnInterruptedStreamKeepsTheSafePrefix(t *testing.T) {
 	}
 }
 
+// TestUsageAndReplayStateRideAlongTheAssistantMessage 钉住装配器攒下的那两样
+// 适配器事实跟着助手消息一起落进日志。
+//
+// 源: packages/core/agent-loop/src/agent.ts:392-399
+//
+// 两样都是**只有这一刻记得下来**的东西，日志上别处补不出来：
+//
+//   - **usage**：这次调用的 token 记账。丢了它，整段会话的用量统计和按预算触发
+//     压缩的那条线索一起没了，而模型那边不会再报第二遍。
+//   - **replayState**：适配器私有的、用来无损重放这次响应的元数据。丢了它，
+//     这条消息重放回去就只剩本运行时看得懂的那一半。
+func TestUsageAndReplayStateRideAlongTheAssistantMessage(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	world.setScript([]llm.StreamChunk{
+		llm.TextDeltaChunk{Index: 0, Text: "说完了"},
+		llm.UsageChunk{Usage: llm.TokenUsage{InputTokens: 12, OutputTokens: 34}},
+		llm.FinishChunk{
+			Reason:      llm.StopFinish{},
+			ReplayState: &llm.ReplayEnvelope{Response: json.RawMessage(`{"id":"r-1"}`)},
+		},
+	})
+	world.run(t, "在么")
+
+	messages := assistantMessages(t, world.live)
+	if len(messages) != 1 {
+		t.Fatalf("该定稿一条助手消息，实际 %d 条", len(messages))
+	}
+	if messages[0].Usage == nil {
+		t.Fatal("这次调用报了用量，该跟着消息记下来")
+	}
+	if got := *messages[0].Usage; got.InputTokens != 12 || got.OutputTokens != 34 {
+		t.Errorf("该原样记下那份记账，实际 %#v", got)
+	}
+	source, ok := messages[0].Message.Source.(llm.ModelSource)
+	if !ok {
+		t.Fatalf("助手消息的来路该是 model，实际 %#v", messages[0].Message.Source)
+	}
+	replay := source.ReplayState
+	if len(replay) == 0 {
+		t.Fatal("适配器给了重放状态，该存在这条消息的来路上")
+	}
+	if !strings.Contains(string(replay), `"r-1"`) {
+		t.Errorf("该原样带上适配器那份私有元数据，实际 %s", replay)
+	}
+}
+
+// TestAnInterruptedMessageKeepsTheUsageAlreadyReported 钉住流被打断时，**已经报
+// 过的**那份用量跟着那个安全前缀一起定稿。
+//
+// 源: packages/core/agent-loop/src/agent.ts:355-369
+//
+// 打断这条路上单独写了一次定稿（[ReactLoopAgent.appendInterrupted]），所以
+// 「记不记用量」在这里是另一次判断，和正常收尾那次互不担保。丢了的话，一段被
+// 使用者按停过几次的会话，用量统计会系统性地偏低——而那些 token 是真烧了的。
+func TestAnInterruptedMessageKeepsTheUsageAlreadyReported(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	world.setScript([]llm.StreamChunk{
+		llm.TextDeltaChunk{Index: 0, Text: "说到一半"},
+		llm.UsageChunk{Usage: llm.TokenUsage{InputTokens: 7, OutputTokens: 3}},
+		llm.TextDeltaChunk{Index: 0, Text: "就被打断了"},
+		llm.FinishChunk{Reason: llm.StopFinish{}},
+	})
+	// 在用量那一块**之后**才取消：验的正是「已经报过的那份留得下来」。
+	world.onChunk = func(position int) {
+		if position == 1 {
+			world.loop.Cancel(sessionlog.UserCancel{}, agent.CancelOptions{})
+		}
+	}
+	world.run(t, "打断我")
+
+	messages := assistantMessages(t, world.live)
+	if len(messages) != 1 {
+		t.Fatalf("该定稿一条被打断的消息，实际 %d 条", len(messages))
+	}
+	if !messages[0].Interrupted {
+		t.Error("该标成 interrupted")
+	}
+	if messages[0].Usage == nil {
+		t.Fatal("用量在被打断之前就报过了，该跟着这条消息记下来")
+	}
+	if got := *messages[0].Usage; got.InputTokens != 7 || got.OutputTokens != 3 {
+		t.Errorf("该原样记下那份记账，实际 %#v", got)
+	}
+}
+
 // TestAnInterruptedStreamWithNothingYetWritesNoMessage 钉住一个字都没吐出来时
 // 不写任何助手消息。
 //
@@ -1408,5 +1910,73 @@ func TestTheFirstHeaderOnAnExistingLogIsAResume(t *testing.T) {
 	}
 	if reasons[1] != sessionlog.HeaderResume {
 		t.Errorf("这一程的锚点该记成 resume，实际 %q", reasons[1])
+	}
+}
+
+// TestAResolvedAdapterStampsItsModelFactsOnTheLog 钉住路由上真有适配器时，
+// 它解算出来的那两样事实落到了日志上。
+//
+// 源: packages/core/agent-loop/src/agent.ts:436-460
+//
+// 这一条是本文件开头那句话的另一半：整批用例跑在「没有适配器」那条岔路上，
+// 于是 [ReactLoopAgent.buildRequest] 里 prepared != nil 的那几支从来没被走过。
+// 而那几支写下的两样东西，日志上别处补不出来：
+//
+//   - **AdapterDefaults**：生效配置里哪几个字段是适配器落实的、不是调用方点的。
+//     丢了它，一段日志读起来像是使用者自己点了 4096 的输出上限——重放的时候
+//     换一个默认不同的适配器，那个数会被当成使用者的意图钉死。
+//   - **ContextWindow**：这条路由的上下文容量。丢了它就是 0，而下游按预算裁剪
+//     历史的那些活儿（压缩、统计）拿 0 当上限只能什么都不裁。
+//
+// 顺带也验到了派发确实走的是 prepared.Stream：[llm.PreparedCall.Stream] 会核对
+// 请求里那份调用配置和准备时那份一致，对不上就以 INVALID_PREPARED_CALL 失败，
+// 所以这个回合能正常收场本身就是那道核对通过了。
+func TestAResolvedAdapterStampsItsModelFactsOnTheLog(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{model: &llm.ResolvedModelInfo{
+		Context:          &llm.ModelContext{ContextWindow: 128000},
+		DefaultMaxTokens: 4096,
+	}})
+	world.run(t, "在么")
+
+	for _, failure := range world.reportedFailures() {
+		t.Fatalf("这一路不该出错，实际报了 %v", failure.Err)
+	}
+
+	var headers []sessionlog.EpochHeader
+	var contexts []sessionlog.RequestContext
+	for _, event := range world.live.Events() {
+		switch event.Type {
+		case sessionlog.EventRequestHeader:
+			data, err := sessionlog.DecodeData(event)
+			if err != nil {
+				t.Fatalf("request/header 读不回来：%v", err)
+			}
+			headers = append(headers, data.(sessionlog.RequestHeaderData).Header)
+		case sessionlog.EventRequestContext:
+			data, err := sessionlog.DecodeData(event)
+			if err != nil {
+				t.Fatalf("request/context 读不回来：%v", err)
+			}
+			contexts = append(contexts, data.(sessionlog.RequestContextData).RequestContext)
+		}
+	}
+
+	if len(headers) != 1 {
+		t.Fatalf("该写下一份请求头，实际 %d 份", len(headers))
+	}
+	if !headers[0].AdapterDefaults.MaxTokens {
+		t.Error("输出上限是适配器落实的，该在请求头上标出来")
+	}
+	if got := headers[0].Config.MaxTokens; got != 4096 {
+		t.Errorf("生效配置里的输出上限该是适配器那个默认，实际 %d", got)
+	}
+
+	if len(contexts) != 1 {
+		t.Fatalf("该写下一份路由元数据，实际 %d 份", len(contexts))
+	}
+	if got := contexts[0].ContextWindow; got != 128000 {
+		t.Errorf("上下文窗口该是适配器解算出来的那个，实际 %d", got)
 	}
 }

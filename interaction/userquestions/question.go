@@ -7,7 +7,7 @@ package userquestions
 
 // Option 是摆给用户的一个可选项。
 //
-// 源: packages/interaction/user-questions/src/types.ts:9-14
+// 源: packages/interaction/user-questions/src/types.ts:6-12（AskUserQuestionOption）
 type Option struct {
 	// Label 是给用户看的文字，同时也是答案里回传的那个标识。
 	//
@@ -22,7 +22,7 @@ type Option struct {
 // Intent 是提问方声明的呈现意图：这个问题**就是**某一类裁决，认得这个标记的界面
 // 可以把它画成那类裁决，而不是一串通用选项。
 //
-// 源: packages/interaction/user-questions/src/types.ts:16-32
+// 源: packages/interaction/user-questions/src/types.ts:14-30（AskUserQuestionIntent）
 //
 // 它只改呈现，永远不改协议：不认识这个标记的界面走通用问答那条路，两边回来的
 // 答案编码一模一样。
@@ -59,7 +59,7 @@ func (PlanReviewIntent) sealedIntent() {}
 
 // Item 是一次请求里的一个问题。
 //
-// 源: packages/interaction/user-questions/src/types.ts:34-50
+// 源: packages/interaction/user-questions/src/types.ts:32-48（AskUserQuestionItem）
 type Item struct {
 	// ID 是提问方给的稳定标识，答案里原样回来。
 	ID string `json:"id"`
@@ -79,7 +79,7 @@ type Item struct {
 
 // AnswerItem 是对一个问题的回答。
 //
-// 源: packages/interaction/user-questions/src/types.ts:52-60
+// 源: packages/interaction/user-questions/src/types.ts:50-58（AskUserQuestionAnswerItem）
 type AnswerItem struct {
 	// ID 是被回答的那个问题的标识。
 	ID string `json:"id"`
@@ -91,7 +91,7 @@ type AnswerItem struct {
 
 // Answer 是人给出的那份答案。
 //
-// 源: packages/interaction/user-questions/src/types.ts:62-66
+// 源: packages/interaction/user-questions/src/types.ts:60-64（AskUserQuestionAnswer）
 type Answer struct {
 	// Answers 是按问题标识归位的那些回答。
 	Answers []AnswerItem `json:"answers"`

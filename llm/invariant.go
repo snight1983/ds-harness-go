@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"iter"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // PackageName 是这个包在不变量注册表里占的名字。

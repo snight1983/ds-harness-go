@@ -27,11 +27,11 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/interaction/commands"
-	"ds-harness-go/invariants"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // errAppend 是那条假日志被要求失败时报的错。

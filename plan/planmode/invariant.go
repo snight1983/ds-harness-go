@@ -10,13 +10,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
 //
-// 源: packages/plan/plan-mode/src/invariant.ts:7
+// 源: packages/plan/plan-mode/src/invariant.ts:9-10（name）
 const PackageName = "@deepseek-ai/dsh-plan-mode"
 
 // ValidateEvent 验一条事件里本包拥有的那些字段；不是 [EventMode] 就什么都不做。
@@ -28,7 +28,7 @@ const PackageName = "@deepseek-ai/dsh-plan-mode"
 // 任何包含关系可查。
 //
 // 新增: DSH 那边这个函数收一个 `fail` 回调、违例时直接抛。Go 这边返回**第一条**
-// 违例，和 [ds-harness-go/todo.ValidateEvent] 一致：它因此可以脱离不变量注册表
+// 违例，和 [github.com/snight1983/ds-harness-go/todo.ValidateEvent] 一致：它因此可以脱离不变量注册表
 // 单独用（离线校验一份日志、或者在写之前自己先验一遍），而 [RegisterInvariants]
 // 只是把这个错误接到 [invariants.Fail] 上。
 func ValidateEvent(event session.Event) error {
@@ -59,7 +59,7 @@ func ValidateEvent(event session.Event) error {
 //
 // 新增: 字段缺席时 DSH 那条模板串里的 JSON.stringify(undefined) 求出 undefined，
 // 拼进去就是字面的 "undefined"。Go 这边写成 null，和
-// [ds-harness-go/todo] 那份同名帮手一致——"undefined" 是一句只有 JS 读者才认得的话。
+// [github.com/snight1983/ds-harness-go/todo] 那份同名帮手一致——"undefined" 是一句只有 JS 读者才认得的话。
 func quoteRaw(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return "null"
@@ -77,7 +77,7 @@ func quoteRaw(raw json.RawMessage) string {
 // 新增: DSH 那两条胳膊都从 cordis 上拿——ctx.sessions.list() 取历史，
 // ctx.on('internal/dispatch') 截住后来的。Go 里活会话服务是循环那一块的东西，
 // 本包拿不到它，所以这两条胳膊由装配方以函数交进来，做法和
-// [ds-harness-go/todo.RegisterInvariants] 逐字相同。
+// [github.com/snight1983/ds-harness-go/todo.RegisterInvariants] 逐字相同。
 //
 // subscribe 交回来的退订函数会登记进这次注册的 scope：注销之后，一条不该再查的
 // 检查绝不许继续在别人的写路径上抛。

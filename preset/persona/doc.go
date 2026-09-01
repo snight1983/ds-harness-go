@@ -6,7 +6,7 @@
 //
 // # 这一行只在作用域里成立
 //
-// 人设那个槽位是**提示词注册表自己**的配置：[ds-harness-go/core/systemprompt.NewRegistry]
+// 人设那个槽位是**提示词注册表自己**的配置：[github.com/snight1983/ds-harness-go/core/systemprompt.NewRegistry]
 // 无条件把 `deployment:persona` 登记在它持有者那一层。所以这一行装到一个有身份的
 // agent 作用域上，是**遮蔽**掉部署方那份人设；装到注册表持有的那一层上，就是同一层
 // 里重名——当场报错，而不是悄悄并存。
@@ -18,7 +18,7 @@
 //
 // 新增: DSH 那两个从注册表转发出来的 `PERSONA_SECTION` / `PERSONA_ORDER` 导出不移。
 // 它们在 TS 那边是为了让预算作者不必把字面量再抄一遍；Go 里 import 一次
-// [ds-harness-go/core/systemprompt] 就拿到同一个常量，转发一层只会让同一个东西多出
+// [github.com/snight1983/ds-harness-go/core/systemprompt] 就拿到同一个常量，转发一层只会让同一个东西多出
 // 第二个名字。
 //
 // 新增: cordis 的插件名 / inject 声明 / schemastery 运行期 schema 全部不移。配置就是

@@ -14,14 +14,14 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // testAbsolutePath 是一条在本机上确实绝对的路径。
@@ -73,7 +73,7 @@ func event(t *testing.T, kind session.EventType, payload any) session.Event {
 
 // steppedTurn 造一个「进过模型步骤、然后按 reason 收尾」的完整回合。
 //
-// [ds-harness-go/core/agent.FoldConsumedWork] 只把这样的回合认成「交代得了消耗」，
+// [github.com/snight1983/ds-harness-go/core/agent.FoldConsumedWork] 只把这样的回合认成「交代得了消耗」，
 // 所以本包每一处要 HasEnd 为真的用例都从这里取事件。
 func steppedTurn(t *testing.T, turn int, reason session.TurnEndReason) []session.Event {
 	t.Helper()
@@ -125,7 +125,7 @@ func newFreeSession(t *testing.T, id session.SessionID) *coresession.Session {
 
 // ---- 假 agent ----
 
-// fakeAgent 是一个只为满足 [ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
+// fakeAgent 是一个只为满足 [github.com/snight1983/ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
 type fakeAgent struct {
 	id      session.SessionID
 	scope   *scope.Scope
@@ -501,3 +501,7 @@ func completedTurn(t *testing.T, answer string) func(*childAgent) {
 		child.settle()
 	}
 }
+
+func (a *fakeAgent) Remove(llm.MessageID) {}
+
+func (a *fakeAgent) Replace(llm.MessageID, llm.Message) {}

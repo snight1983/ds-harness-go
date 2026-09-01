@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // RegisterInvariants 把这个包登记进不变量注册表，返回注销函数。

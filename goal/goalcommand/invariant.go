@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // RegisterInvariants 把这个包登记进不变量注册表，返回注销函数。
@@ -19,7 +19,7 @@ import (
 // adapter owns no event stream or state projection; accepted mutations are checked by
 // the goal domain and command dispatch behavior is covered by package tests」——本包
 // 不拥有任何事件流，也不折任何状态投影；准入的每一次改动由
-// [ds-harness-go/goal/goal] 那边验，而这一层的断句和分流由本包的测试盯着。
+// [github.com/snight1983/ds-harness-go/goal/goal] 那边验，而这一层的断句和分流由本包的测试盯着。
 //
 // 那为什么还要登记？占住这个包名，并且让「检查过了、结论是无需检查」和「这个包
 // 被漏掉了」区分得开。

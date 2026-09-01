@@ -47,6 +47,7 @@
 
 - 设计与移植
   - [详细设计](DESIGN.md)
+  - [性能与压力基线](performance-baseline.md)
   - [包级移植裁决](portmap/rulings.md)
   - [符号级裁决](portmap/decisions.md)
   - [能力覆盖表](portmap/capabilities.md)

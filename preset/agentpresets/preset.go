@@ -48,7 +48,7 @@ func IsPresetID(id string) bool { return presetID.MatchString(id) }
 
 // Preset 是一个带着可装载组合的预设目录。
 //
-// 源: packages/preset/agent-presets/src/preset.ts:21-41
+// 源: packages/preset/agent-presets/src/preset.ts:20-41（AgentPreset）
 type Preset struct {
 	// ID 是稳定标识，也就是这个预设目录的名字。
 	ID string
@@ -83,7 +83,7 @@ func (p Preset) DisplayName() string {
 
 // Root 是一个会被扫出预设子目录的目录。
 //
-// 源: packages/preset/agent-presets/src/preset.ts:44-49
+// 源: packages/preset/agent-presets/src/preset.ts:43-49（PresetRoot）
 type Root struct {
 	// Path 是一个绝对目录，里面一个子目录一份预设。
 	//
@@ -134,7 +134,12 @@ func (c Config) resolvedRoots() []Root {
 
 // ErrUnknownPreset 是「配置里没有一个根供得出这个 id」。
 //
-// 源: packages/preset/agent-presets/src/preset.ts:71-80
+// 源: packages/preset/agent-presets/src/index.ts:333-356（Roster.resolve）
+//
+// 上移: 上游没有这个词汇里的错误类型，它把「点了个不存在的名字」表达成 resolve()
+// 里现场抛的一个带 `agent-preset/not-found` 码的 RemoteError。Go 没有那套跨进程
+// 错误码，分类只能靠哨兵，所以它连同下面那个 [ErrPresetMount] 一起落在本文件的
+// 词汇里——错误消息文本逐字照抄上游那一条。
 //
 // 和装载失败分开，因为这两件事对调用方意思不同：一个不认识的 id 是一次坏请求，
 // 而一份用不了的组合是一份部署必须去修的坏预设。
@@ -160,7 +165,12 @@ func (e *UnknownPresetError) Unwrap() error { return ErrUnknownPreset }
 
 // ErrPresetMount 是「预设在，但它那份组合装不起来」。
 //
-// 源: packages/preset/agent-presets/src/preset.ts:83-93
+// 源: packages/preset/agent-presets/src/mount.ts:425-431
+//
+// 上移: 同 [ErrUnknownPreset]，上游是抛 `agent-preset/invalid` 码的 RemoteError，
+// 没有一个具名类型。上面引的是带 cause 的那一处（对应 [PresetMountError.Cause]）；
+// 另一处在 index.ts:358-378（Roster.resolveMountable），那里拿发现阶段报的
+// broken 理由提前拒掉，不带 cause。两处共用同一个码，Go 这边也共用这一个哨兵。
 var ErrPresetMount = errors.New("agent-presets: 这份预设装不起来")
 
 // PresetMountError 带上是哪一份、为什么，以及底下那个错。

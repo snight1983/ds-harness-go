@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // coreConfig 是贯穿本文件的夹具类型。
@@ -883,8 +883,14 @@ func TestMutateReadsTheSectionAtTheFrontOfTheQueue(t *testing.T) {
 	t.Parallel()
 
 	backend, provider := boot(t, nil)
+	// 靠握手把「先写的那次已经占住队头」变成被等到的事实。原先是 sleep 2ms 去赌
+	// 那个 goroutine 已经跑起来了——机器跑满时它可能还没被调度，mutate 就插到了
+	// 前面，而那时这个用例问的问题已经不成立了。
+	entered := make(chan struct{})
+	gate := make(chan struct{})
 	backend.mutex.Lock()
-	backend.persistDelay = 10 * time.Millisecond
+	backend.persistEntered = entered
+	backend.persistGate = gate
 	backend.mutex.Unlock()
 
 	scope := register(t, provider, "core", coreConfig{}, nil)
@@ -898,12 +904,16 @@ func TestMutateReadsTheSectionAtTheFrontOfTheQueue(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(2 * time.Millisecond)
-	err := provider.Mutate(t.Context(), "core",
-		[]PathOp{{Kind: PathOpSet, Path: []string{"timeout"}, Value: 90}}, nil)
-	if err != nil {
-		t.Fatalf("mutate 失败了：%v", err)
-	}
+	<-entered
+	group.Add(1)
+	go func() {
+		defer group.Done()
+		if err := provider.Mutate(t.Context(), "core",
+			[]PathOp{{Kind: PathOpSet, Path: []string{"timeout"}, Value: 90}}, nil); err != nil {
+			t.Errorf("mutate 失败了：%v", err)
+		}
+	}()
+	close(gate)
 	group.Wait()
 
 	stored := backend.stored("core")
@@ -1053,8 +1063,14 @@ func TestCloseDrainsInFlightWritesAndRejectsLaterOnes(t *testing.T) {
 	t.Parallel()
 
 	backend, provider := boot(t, nil)
+	// 握手保证关闭发生在这次写的落盘中途。原先靠 sleep 2ms 去赌那个 goroutine
+	// 已经起来了——赌输的时候关闭先到，在途那次写会被 ErrStopped 挡掉，用例红在
+	// 一个它没打算问的问题上。
+	entered := make(chan struct{})
+	gate := make(chan struct{})
 	backend.mutex.Lock()
-	backend.persistDelay = 10 * time.Millisecond
+	backend.persistEntered = entered
+	backend.persistGate = gate
 	backend.mutex.Unlock()
 
 	scope := register(t, provider, "core", coreConfig{}, nil)
@@ -1068,7 +1084,8 @@ func TestCloseDrainsInFlightWritesAndRejectsLaterOnes(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(2 * time.Millisecond)
+	<-entered
+	close(gate)
 	provider.Close()
 	provider.Close() // 幂等
 	inFlight.Wait()
@@ -1094,8 +1111,14 @@ func TestAWriteQueuedBehindAnUnregistrationIsRejected(t *testing.T) {
 	t.Parallel()
 
 	backend, provider := boot(t, nil)
+	// 用握手而不是 sleep 去摆这个时序。早先这里是「落盘停 10ms、注销方 sleep 2ms」，
+	// 在跑满的机器上这 8ms 余量会翻过来：第一次写连通知一起走完了，注销才发生，
+	// 于是 notified 是 1，用例红在一个根本没成立的前提上。
+	entered := make(chan struct{})
+	gate := make(chan struct{})
 	backend.mutex.Lock()
-	backend.persistDelay = 10 * time.Millisecond
+	backend.persistEntered = entered
+	backend.persistGate = gate
 	backend.mutex.Unlock()
 
 	scope, dispose, err := Register(provider, "core", coreConfig{}, nil)
@@ -1107,21 +1130,28 @@ func TestAWriteQueuedBehindAnUnregistrationIsRejected(t *testing.T) {
 	scope.Watch(func(coreConfig, coreConfig) { notified.Add(1) })
 
 	var group sync.WaitGroup
-	group.Add(2)
+	group.Add(1)
 	go func() {
 		defer group.Done()
-		// 这次写会拿到写锁并在落盘上停 10ms；期间拥有者被注销。
+		// 这次写拿到写锁之后会停在落盘里，等下面放行。
 		_ = scope.Update(t.Context(), map[string]any{"label": "在途"})
 	}()
+
+	// 等到第一次写确实停在落盘里，再注销。这一步之后，「拥有者是在这次写落盘的
+	// 中途走掉的」就是被保证的事实，不是赛出来的。
+	<-entered
+	dispose()
+
+	group.Add(1)
 	go func() {
 		defer group.Done()
-		time.Sleep(2 * time.Millisecond)
-		dispose()
 		// 注销之后排进来的这次写必须被拒。
 		if err := scope.Update(t.Context(), map[string]any{"label": "太晚了"}); !errors.Is(err, ErrNotRegistered) {
 			t.Errorf("注销之后该报 ErrNotRegistered，实际 %v", err)
 		}
 	}()
+
+	close(gate)
 	group.Wait()
 
 	if notified.Load() != 0 {

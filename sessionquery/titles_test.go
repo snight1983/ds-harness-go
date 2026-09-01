@@ -16,8 +16,8 @@ package sessionquery
 import (
 	"testing"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/sessiontitle"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/sessiontitle"
 )
 
 // titleEvent 排一条合法的 session/title。

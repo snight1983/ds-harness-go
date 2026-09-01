@@ -14,7 +14,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // errNotUTF8 是解码器内部的哨兵，走到调用点会被换成一条带 [fs.CodeNotText] 的

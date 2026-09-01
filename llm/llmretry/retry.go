@@ -3,8 +3,9 @@
 //
 // 源: packages/llm/llm-retry/src/index.ts
 //
-// 这个包只认 [ds-harness-go/core/agent.Registry] 一个宿主：策略是适配器在登记路由
+// 这个包只认 [github.com/snight1983/ds-harness-go/core/agent.Registry] 一个宿主：策略是适配器在登记路由
 // 那一刻定下来的（[llm.ResolveRetryPolicy]），本包只负责执行它。
+
 package llmretry
 
 import (
@@ -20,15 +21,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Options 是装这个包时要给的东西。
 //
-// 源: packages/llm/llm-retry/src/index.ts:24-41
+// 源: packages/llm/llm-retry/src/index.ts:39-43（RetryInternals）
 //
 // 新增: DSH 那个 Config 是 `Readonly<Record<string, never>>`——一个**只能是空对象**
 // 的配置，配上一个 validateConfig 专门拒掉误写进来的 retryPolicy 键（那份策略属于
@@ -54,7 +55,7 @@ type Options struct {
 	// NewID 发一条新重试链的身份；nil 取 [github.com/google/uuid.NewString]。
 	//
 	// 新增: DSH 直接调 randomUUID()。抽成一个口子的理由和
-	// [ds-harness-go/interaction/userapproval] 上那条一样——不变量要验「链身份一路
+	// [github.com/snight1983/ds-harness-go/interaction/userapproval] 上那条一样——不变量要验「链身份一路
 	// 不变」，测试得排得出一串认得出来的身份。
 	NewID func() string
 	// Logger 是诊断日志；nil 取 [log/slog.Default]。
@@ -99,7 +100,7 @@ func (i *installation) enter() bool {
 
 // Install 把重试装到 agent 的请求失败瀑布上，返回拆除函数。
 //
-// 源: packages/llm/llm-retry/src/index.ts:99-226
+// 源: packages/llm/llm-retry/src/index.ts:123-259（apply）
 //
 // 拆除按 DSH 的顺序来：先摘掉观察者（不再接新的失败），再取消 lifetime（打断所有
 // 还在等的退避），最后等在跑的那几次恢复自己收尾。反过来的话，一次刚熬过退避的重试

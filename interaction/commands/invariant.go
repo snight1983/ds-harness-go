@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -23,7 +23,7 @@ const PackageName = "@deepseek-ai/dsh-commands"
 
 // Transition 是一条被接受的事件对配对状态的那一点改动。
 //
-// 验和改分成两步，和 [ds-harness-go/interaction/userapproval.Trace] 的做法一致：
+// 验和改分成两步，和 [github.com/snight1983/ds-harness-go/interaction/userapproval.Trace] 的做法一致：
 // 验的那一步是纯的，可以在事件真的提交之前先跑一遍，提交了才改状态。
 type Transition struct {
 	// ID 非空表示这条 command/run 要把这个号记成已经跑过。
@@ -144,7 +144,7 @@ func ValidateLog(events []session.Event) (*Trace, error) {
 //
 // 新增: DSH 那两条胳膊都从 cordis 上拿。Go 里活会话服务是循环那一块的东西，本包在
 // 第 4 块，所以这两条胳膊由装配方以函数交进来，做法和
-// [ds-harness-go/todo.RegisterInvariants] 逐字相同。
+// [github.com/snight1983/ds-harness-go/todo.RegisterInvariants] 逐字相同。
 func RegisterInvariants(
 	ctx context.Context,
 	registry *invariants.Registry,

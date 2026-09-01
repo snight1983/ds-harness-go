@@ -18,8 +18,8 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/storage"
-	"ds-harness-go/storage/storagetest"
+	"github.com/snight1983/ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )
 
 // note 是用例里那张表的记录类型。

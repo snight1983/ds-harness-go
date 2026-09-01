@@ -26,8 +26,8 @@ import (
 	// 驱动只在测试里挂上来。库本身只用 database/sql，理由见包文档。
 	_ "github.com/lib/pq"
 
-	"ds-harness-go/storage"
-	"ds-harness-go/storage/storagetest"
+	"github.com/snight1983/ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )
 
 // dsnEnv 是指向一个可用 Postgres 的连接串所在的环境变量。

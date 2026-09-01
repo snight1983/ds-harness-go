@@ -7,17 +7,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/userapproval"
-	"ds-harness-go/llm"
-	"ds-harness-go/preset/agentpresets"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/userapproval"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/preset/agentpresets"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ---- 深度 ----
@@ -265,6 +267,93 @@ func TestApplyChildCompositionJoinsTheParentPresetWhenThereIsARoster(t *testing.
 }
 
 // 要设工具范围就必须有工具运行时——绝不「先收下再忽略」。
+// mountedRoster 造一份**真的装了一份预设**的名册，并把 parentKey 认进那份常驻装载。
+func mountedRoster(t *testing.T, parentKey *scope.Key) *agentpresets.Roster {
+	t.Helper()
+
+	root := t.TempDir()
+	dir := filepath.Join(root, "demo")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("建不出预设目录：%v", err)
+	}
+	path := filepath.Join(dir, agentpresets.CompositionFile)
+	if err := os.WriteFile(path, []byte("- name: alpha\n"), 0o600); err != nil {
+		t.Fatalf("写不了组合文件：%v", err)
+	}
+	roster, err := agentpresets.New(agentpresets.Config{
+		Default: "demo",
+		Roots:   []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
+		Composers: agentpresets.ComposerSet{
+			"alpha": func(context.Context, *scope.Scope, json.RawMessage) (func(context.Context) error, error) {
+				return nil, nil
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("造预设名册失败：%v", err)
+	}
+	t.Cleanup(func() { _ = roster.Close(context.Background()) })
+	if _, err := roster.Mount(context.Background(), parentKey, "demo"); err != nil {
+		t.Fatalf("把父认进预设失败：%v", err)
+	}
+	return roster
+}
+
+// 认亲失败是这次组装的结论，不是可以咽下去的东西：一个没认亲就组装好的孩子会看到
+// 一个空的工具注册表、以及它父亲那些提示词段落一段都没有。
+func TestApplyChildCompositionSurfacesARefusedPresetJoin(t *testing.T) {
+	parent := agentAtDepth(t, "parent", 0)
+	roster := mountedRoster(t, parent.Scope().Key())
+	// 这个孩子的钥匙已经认过一个父了，再认进那份常驻装载会撞上「一把钥匙只认一个父」。
+	child := keyedScope(t, "child", parent.Scope().Key())
+
+	err := ApplyChildComposition(t.Context(), child, parent, ChildComposition{},
+		ChildCompositionServices{SystemPrompt: promptRegistry(t, ""), Presets: roster})
+	if err == nil {
+		t.Fatal("认亲失败该被抛上来")
+	}
+}
+
+// 那句派发范围陈述登记不上去时同样要报出来：这个孩子会以为自己没有被派发的边界。
+func TestApplyChildCompositionSurfacesARefusedDelegationStatement(t *testing.T) {
+	registry := promptRegistry(t, "")
+	child := keyedScope(t, "child", nil)
+	// 先把那个名字占掉，于是下面那笔登记撞上重名。
+	if _, err := registry.Context(t.Context(), child, systemprompt.PromptContext{
+		Name:  delegationContextName,
+		Order: delegationContextOrder,
+		Text:  systemprompt.StaticText("先占着"),
+	}); err != nil {
+		t.Fatalf("占名失败：%v", err)
+	}
+
+	err := ApplyChildComposition(t.Context(), child, agentAtDepth(t, "parent", 0),
+		ChildComposition{}, ChildCompositionServices{SystemPrompt: registry})
+	if err == nil {
+		t.Fatal("那句陈述登记不上去该被抛上来")
+	}
+}
+
+// 只给这个孩子的那份人设登记不上去时也一样：孩子会跑在部署人设上，而不是派发方
+// 指定的那一份。
+func TestApplyChildCompositionSurfacesARefusedPersona(t *testing.T) {
+	registry := promptRegistry(t, "部署人设")
+	child := keyedScope(t, "child", nil)
+	if _, err := registry.Section(t.Context(), child, systemprompt.PromptSection{
+		Name:  systemprompt.PersonaSection,
+		Order: systemprompt.PersonaOrder,
+		Text:  systemprompt.StaticText("先占着"),
+	}); err != nil {
+		t.Fatalf("占名失败：%v", err)
+	}
+
+	err := ApplyChildComposition(t.Context(), child, agentAtDepth(t, "parent", 0),
+		ChildComposition{Persona: "只给这个孩子"}, ChildCompositionServices{SystemPrompt: registry})
+	if err == nil {
+		t.Fatal("那份人设登记不上去该被抛上来")
+	}
+}
+
 func TestApplyChildCompositionNeedsTheToolRuntimeForAFilter(t *testing.T) {
 	err := ApplyChildComposition(
 		t.Context(), keyedScope(t, "child", nil), agentAtDepth(t, "parent", 0),

@@ -13,7 +13,7 @@ import (
 
 	"github.com/minio/minio-go/v7"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // translate 把底层错误翻成一个 *[fs.Error]。

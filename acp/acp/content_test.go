@@ -11,9 +11,9 @@ import (
 
 	wire "github.com/coder/acp-go-sdk"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // # 这些测试防的是什么错

@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // DomainName 是这个缓存在存储上占的那个域名。
@@ -34,7 +34,7 @@ const TableName = "sessions"
 
 // Identity 是一条记录绑定的那段日志的身份。
 //
-// 源: packages/session/session-projection-cache/src/spec.ts:39-42
+// 源: packages/session/session-projection-cache/src/spec.ts:45-46（CheckpointIdentity）
 //
 // 会话 id 是一个**槽位**不是一段生命。删掉再重建同一个 id、或者在缓存还活着的
 // 时候把持久化根目录换到另一份存储上，都会让一条旧记录通过所有的版本和水位检查，
@@ -60,7 +60,7 @@ func IdentityOf(header session.SessionHeader) Identity {
 
 // Record 是一个会话在介质上那条记录：它折自哪一段日志，加上每个单元的检查点行。
 //
-// 源: packages/session/session-projection-cache/src/spec.ts:47-56
+// 源: packages/session/session-projection-cache/src/spec.ts:59-60（CheckpointRecord）
 //
 // 每次写都**整条替换**。[projection.Registry.Checkpoint] 交出来的本来就是一个
 // 会话上的完整切面，没有「只更新其中一个键」这种写法——那样会写出一条各个键停在

@@ -13,8 +13,8 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/settings"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/settings"
 )
 
 // memoryBackend 是一份可写的、只活在内存里的设置后端。

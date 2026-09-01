@@ -7,11 +7,11 @@
 
 package persistence
 
-import "ds-harness-go/session"
+import "github.com/snight1983/ds-harness-go/session"
 
 // Location 是一个会话在某个后端里那份独立存档的位置。
 //
-// 源: packages/session/session-persistence/src/index.ts:66-75
+// 源: packages/session/session-persistence/src/index.ts:87-97（SessionLocation）
 //
 // 它是一个**位置提示**，不是授权凭据：拿到它不代表有权读那个文件。
 // 路径是绝对的，而且可以指向一份还没落地的存档。
@@ -24,7 +24,7 @@ type Location struct {
 
 // RawArtifact 是一个后端为某个会话写下的那份存档，逐字节原样。
 //
-// 源: packages/session/session-persistence/src/index.ts:33-41
+// 源: packages/session/session-persistence/src/index.ts:54-62（SessionRawArtifact）
 //
 // Content 是**原始文本**，不是从解出来的事件重新拼的，所以它保留了后端自己的
 // 序列化选择（分块压行、键的顺序、换行方式）。要的就是这个保真度：
@@ -40,7 +40,7 @@ type RawArtifact struct {
 
 // Inspection 是一个会话不可变的逻辑视图。
 //
-// 源: packages/session/session-persistence/src/index.ts:25-31
+// 源: packages/session/session-persistence/src/index.ts:26-32（SessionInspection）
 //
 // 「逻辑」的意思是它已经过了校验、已经在内存里补齐了中途断掉的尾巴。
 // 它可能和活着的、或者已经准备好的状态**共享**同一份底层数据，所以拿到它的
@@ -54,7 +54,7 @@ type Inspection struct {
 
 // Snapshot 是一个会话的轻量身份：不读整份日志就能拿到的头加变更令牌。
 //
-// 源: packages/session/session-persistence/src/index.ts:17-23
+// 源: packages/session/session-persistence/src/index.ts:18-24（SessionPersistenceSnapshot）
 type Snapshot struct {
 	// Header 是这个已落地会话的元数据。
 	Header session.SessionHeader
@@ -65,7 +65,7 @@ type Snapshot struct {
 // StoredPrefix 是一个后端交出来的物理前缀：头、连续的合法事件、
 // 这一份前缀的变更令牌，以及一个可选的断尾标记。
 //
-// 源: packages/session/session-persistence/src/coordinator.ts:86-101
+// 源: packages/session/session-persistence/src/coordinator.ts:92-105（StoredPrefix）
 //
 // Revision 标识的是**恰好这一份**脱离出来的前缀，必须和
 // [Backend.ReadStoredRevision] 用同一套表示，否则「读一遍、再核对一遍令牌
@@ -88,7 +88,7 @@ type StoredPrefix struct {
 
 // StoredSuffix 是一个后端交出来的物理后缀：头，加上 seq 不小于某个水位的那些事件。
 //
-// 源: packages/session/session-persistence/src/coordinator.ts:103-110
+// 源: packages/session/session-persistence/src/coordinator.ts:107-116（StoredSuffix）
 //
 // 这是**不改动**存储的读：没有截断、没有补写收尾，所以它不带断尾标记
 // ——没有要修的东西。

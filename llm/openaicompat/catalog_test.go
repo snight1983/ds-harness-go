@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // withModels 造一条只换了模型清单的最小路由。

@@ -13,12 +13,12 @@ package tokenmeter
 import (
 	"fmt"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // surfaceTokenFold 是折进一条表面事件之后的结果。
 //
-// 源: packages/llm/token-meter/src/surface-fold.ts:20-27
+// 源: packages/llm/token-meter/src/surface-fold.ts:37-47（SurfaceTokenPlan）
 type surfaceTokenFold struct {
 	// tokens 是这条事件自己派生出的那条消息的估价。
 	tokens int
@@ -30,7 +30,7 @@ type surfaceTokenFold struct {
 
 // foldSurfaceTokens 把一条表面事件折进当前的节点表。
 //
-// 源: packages/llm/token-meter/src/surface-fold.ts:29-65
+// 源: packages/llm/token-meter/src/surface-fold.ts:77-107（planSurfaceTokens）
 //
 // 它是**全的**，并且交出来的一定是一份新分配的节点表：出错时调用方手上那份
 // 一个字节都没被动过。DSH 那边靠 `[...nodes]` 加 splice 做到这件事，理由一样

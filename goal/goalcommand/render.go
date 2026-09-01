@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
 )
 
 // renderGoal 把一份目标排成一段人读的文字，**不**把 CAS 修订号露出去。
@@ -55,7 +55,7 @@ func renderGoal(title string, view *goal.View) (commands.Result, error) {
 // pause 什么都不会发生，而人会以为自己按上了。
 //
 // 新增: 最后那个 default 是 DSH 没有的（那边是 assertNever）。
-// [ds-harness-go/goal/goal.Phase] 是具名字符串类型，挡不住一个认不出的阶段；而在
+// [github.com/snight1983/ds-harness-go/goal/goal.Phase] 是具名字符串类型，挡不住一个认不出的阶段；而在
 // 一条面向人的命令里，为了一个仅仅是标不出名字的阶段就把整条命令炸掉，比告诉他
 // 那两条永远成立的命令更糟。
 func commandHint(view *goal.View) string {

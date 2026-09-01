@@ -8,8 +8,8 @@ package goal
 import (
 	"errors"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // ProjectionKey 是这个单元占的投影键。
@@ -28,12 +28,12 @@ const projectionStateVersion = 4
 
 // RegisterProjection 把 goal 这个单元登进投影注册表，返回注销它的函数。
 //
-// 源: packages/goal/goal/src/index.ts:204-213
+// 源: packages/goal/goal/src/index.ts:160-168（goalProjectionDefinition）
 //
 // 新增: DSH 那边这是构造函数里的一个 ctx.inject(['sessionProjections'], ...)
 // 子节点——投影服务在场它就装，不在场整个装配不受影响。Go 里没有那个容器，
 // 「在不在场」就是装配方手上有没有这个注册表，所以它是一个显式的函数（成例见
-// [ds-harness-go/plan/planmode.RegisterProjection]）。
+// [github.com/snight1983/ds-harness-go/plan/planmode.RegisterProjection]）。
 func RegisterProjection(registry *projection.Registry) (func(), error) {
 	if registry == nil {
 		return nil, errors.New("goal: 需要一个投影注册表")
@@ -50,7 +50,7 @@ func RegisterProjection(registry *projection.Registry) (func(), error) {
 
 // ApplyProjection 是这个单元那个「最后写的赢」的纯转移。
 //
-// 源: packages/goal/goal/src/index.ts:96-113
+// 源: packages/goal/goal/src/index.ts:136-158（applyGoalProjection）
 //
 // # 它为什么可以比 [ApplyEvent] 松这么多
 //

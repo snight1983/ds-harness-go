@@ -5,9 +5,13 @@
 package sdkprotocol
 
 import (
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"encoding/json"
+	"fmt"
+
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // ServerName 是线上稳定的服务端身份，握手时原样交回去。
@@ -50,7 +54,7 @@ const (
 
 // InitializeParams 是进程级那次握手的入参。
 //
-// 源: packages/sdk/protocol/src/types.ts:16-25
+// 源: packages/sdk/protocol/src/types.ts:16-27
 type InitializeParams struct {
 	// Cwd 记在每一个 SDK 建出来的会话头上。
 	Cwd string `json:"cwd"`
@@ -58,6 +62,15 @@ type InitializeParams struct {
 	Provider string `json:"provider"`
 	// Model 是 SDK 建出来的每个 agent 跑哪个模型。
 	Model string `json:"model"`
+	// ReasoningEffort 是这条 provider/model 路由上可选的推理档位，SDK 建出来的
+	// 每个 agent 都照它跑。
+	//
+	// 源: packages/sdk/protocol/src/types.ts:23-24
+	//
+	// 指针的理由和下面 MaxTokens 那条一样：DSH 拿「给了空串」当坏输入当场拒
+	// （server.ts:136-139），而运行时内部「空串即没选」——两者只有靠「这个字段
+	// 出现过没有」才分得开。收进一个具名字符串就把前者悄悄变成了后者。
+	ReasoningEffort *llm.ReasoningEffortID `json:"reasoningEffort,omitempty"`
 	// MaxTokens 是可选的输出上限，SDK 建出来的 agent 和它们进程内的后代都继承它。
 	//
 	// 指针是必需的：「没给这个字段」和「给了 0」在这里是两回事，后者是坏输入
@@ -67,7 +80,7 @@ type InitializeParams struct {
 
 // InitializeResult 是握手交回去的那份线上稳定的身份。
 //
-// 源: packages/sdk/protocol/src/types.ts:28-31
+// 源: packages/sdk/protocol/src/types.ts:29-33（InitializeResult）
 type InitializeResult struct {
 	// ServerInfo 是服务端的名字和版本。
 	ServerInfo ServerInfo `json:"serverInfo"`
@@ -88,17 +101,137 @@ type ServerInfo struct {
 
 // SessionPromptParams 是一个 SDK 会话上的一轮用户输入。
 //
-// 源: packages/sdk/protocol/src/types.ts:34-39
+// 源: packages/sdk/protocol/src/types.ts:35-41（SessionPromptParams）
 type SessionPromptParams struct {
 	// SessionID 是 SDK 那侧的会话标识；一个没见过的标识会当场把 agent 和会话一起建出来。
 	SessionID string `json:"sessionId"`
-	// ContentBlocks 是这一轮的内容块，原样成为那条用户消息。
-	ContentBlocks llm.Content `json:"contentBlocks"`
+	// ContentBlocks 是这一轮的内容块。已经耐久的那些原样成为用户消息，内联图片
+	// 先走一次附件准入，见 [PromptContent]。
+	ContentBlocks PromptContent `json:"contentBlocks"`
+}
+
+// EncodedImageBlock 是一张跟着请求内联送进来、还没进附件库的栅格图。
+//
+// 源: packages/sdk/protocol/src/types.ts:43-50（SdkEncodedImageBlock）
+//
+// 它**只**存在于线上这一侧：服务端在把这一轮交给 agent 之前把它准入成一条
+// [llm.ImageBlock]，会话日志里落下的永远是那条引用，不是这些字节。
+type EncodedImageBlock struct {
+	// Data 是栅格字节的规范 base64 编码。
+	Data string `json:"data"`
+	// MimeType 是调用方声称的栅格媒体类型，准入时拿解码后的字节核对。
+	//
+	// 线上的字段名是 mimeType 而不是 mediaType：DSH 这么写的，改一个字两侧就读不通。
+	MimeType attachment.MediaType `json:"mimeType"`
+}
+
+// PromptBlock 是一轮 SDK 输入里的一块：要么已经耐久，要么是一张等着准入的内联图。
+//
+// 源: packages/sdk/protocol/src/types.ts:52-53（SdkPromptContentBlock）
+//
+// 新增: DSH 是 `ContentBlock | SdkEncodedImageBlock` 一个联合，判别式是那个
+// 类型守卫——`type === 'image' && 'data' in block`（server.ts:35-37）。注意它**不是**
+// 光看 type：两支的 type 都是 `image`，分开它们的是带 data 还是带 attachment。
+// Go 没有联合，所以做成一个恰好带一支的结构体。
+type PromptBlock struct {
+	// Durable 是一个已经耐久的内容块；Encoded 为 nil 时它有效。
+	Durable llm.ContentBlock
+	// Encoded 是一张等着准入的内联图；非 nil 时 Durable 为 nil。
+	Encoded *EncodedImageBlock
+}
+
+// PromptContent 是一轮 SDK 输入的那串块。
+//
+// 源: packages/sdk/protocol/src/types.ts:40（contentBlocks: SdkPromptContentBlock[]）
+type PromptContent []PromptBlock
+
+// UnmarshalJSON 按 DSH 那个类型守卫把每一块分到两支里去。
+func (c *PromptContent) UnmarshalJSON(data []byte) error {
+	var raws []json.RawMessage
+	if err := json.Unmarshal(data, &raws); err != nil {
+		return fmt.Errorf("sdkprotocol: contentBlocks 解不动：%w", err)
+	}
+	if raws == nil {
+		*c = nil
+		return nil
+	}
+	blocks := make(PromptContent, len(raws))
+	for index, raw := range raws {
+		block, err := unmarshalPromptBlock(raw)
+		if err != nil {
+			return err
+		}
+		blocks[index] = block
+	}
+	*c = blocks
+	return nil
+}
+
+// unmarshalPromptBlock 读一块。
+//
+// 源: packages/sdk/server/src/server.ts:35-37（encodedImage）
+//
+// data 用 [json.RawMessage] 接是为了对准 DSH 那句 `'data' in block`——它判的是
+// **这个键出现过没有**。换成 string 的话 `{"type":"image"}` 和
+// `{"type":"image","data":""}` 会长得一样，而后者是一张空图，该被准入那一层拒掉，
+// 不该在这里被当成一条耐久引用悄悄放过去。
+func unmarshalPromptBlock(raw json.RawMessage) (PromptBlock, error) {
+	var probe struct {
+		Type llm.BlockType   `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return PromptBlock{}, fmt.Errorf("sdkprotocol: 一块 contentBlocks 解不动：%w", err)
+	}
+	if probe.Type == llm.BlockImage && probe.Data != nil {
+		var encoded EncodedImageBlock
+		if err := json.Unmarshal(raw, &encoded); err != nil {
+			return PromptBlock{}, fmt.Errorf("sdkprotocol: 一块内联图解不动：%w", err)
+		}
+		return PromptBlock{Encoded: &encoded}, nil
+	}
+	durable, err := llm.UnmarshalContentBlock(raw)
+	if err != nil {
+		return PromptBlock{}, err
+	}
+	return PromptBlock{Durable: durable}, nil
+}
+
+// MarshalJSON 把两支各自排回线上。
+//
+// 客户端那一侧要它：这条协议的请求是 SDK 发的，本包同时是那一侧的类型来源。
+func (c PromptContent) MarshalJSON() ([]byte, error) {
+	if c == nil {
+		return []byte("null"), nil
+	}
+	raws := make([]json.RawMessage, len(c))
+	for index, block := range c {
+		encoded, err := block.marshal()
+		if err != nil {
+			return nil, err
+		}
+		raws[index] = encoded
+	}
+	return json.Marshal(raws)
+}
+
+// marshal 把一块排回线上；两支都没有是坏值，当场说出来。
+func (b PromptBlock) marshal() (json.RawMessage, error) {
+	if b.Encoded != nil {
+		return json.Marshal(struct {
+			Type llm.BlockType `json:"type"`
+			EncodedImageBlock
+		}{Type: llm.BlockImage, EncodedImageBlock: *b.Encoded})
+	}
+	if b.Durable == nil {
+		return nil, fmt.Errorf("sdkprotocol: 一块 contentBlocks 两支都是空的")
+	}
+	return json.Marshal(b.Durable)
 }
 
 // SessionPromptResult 是一轮输入的入队回执。
 //
-// 源: packages/sdk/protocol/src/types.ts:42-45
+// 源: packages/sdk/protocol/src/types.ts:55-59（SessionPromptResult）
 //
 // 它只说明「这条消息已经进了队列、身份是这个」，**不**说明这一轮跑出了什么——
 // 之后的动静从 [MethodSessionEvent] 那条通知流里看。
@@ -109,7 +242,7 @@ type SessionPromptResult struct {
 
 // RunStatus 是按部署口径映射出来的 SDK 结果：接受了是 ok，别的都是 error。
 //
-// 源: packages/sdk/protocol/src/types.ts:48
+// 源: packages/sdk/protocol/src/types.ts:61-62（SdkRunStatus）
 type RunStatus string
 
 const (
@@ -136,7 +269,7 @@ const (
 
 // SessionEventNotification 是 [MethodSessionEvent] 的负载：一条会话日志事件。
 //
-// 源: packages/sdk/protocol/src/types.ts:51-56
+// 源: packages/sdk/protocol/src/types.ts:64-70（SessionEventNotification）
 //
 // 它覆盖运行时里的**每一个**会话，不只是 SDK 建出来的那些。
 type SessionEventNotification struct {
@@ -148,7 +281,7 @@ type SessionEventNotification struct {
 
 // SessionStatusNotification 是 [MethodSessionStatus] 的负载。
 //
-// 源: packages/sdk/protocol/src/types.ts:59-64
+// 源: packages/sdk/protocol/src/types.ts:72-78（SessionStatusNotification）
 type SessionStatusNotification struct {
 	// SessionID 是哪个会话上的活 agent 变了状态。
 	SessionID string `json:"sessionId"`
@@ -158,7 +291,7 @@ type SessionStatusNotification struct {
 
 // SubagentStartedNotification 是 [MethodSubagentStarted] 的负载：运行时内部建了一个子会话。
 //
-// 源: packages/sdk/protocol/src/types.ts:67-72
+// 源: packages/sdk/protocol/src/types.ts:80-86（SubagentStartedNotification）
 type SubagentStartedNotification struct {
 	// ParentSessionID 是派活的那个会话。
 	ParentSessionID string `json:"parentSessionId"`
@@ -169,7 +302,7 @@ type SubagentStartedNotification struct {
 // SubagentFinishedNotification 是 [MethodSubagentFinished] 的负载：一次**进程内**的
 // 子 agent 跑完了。
 //
-// 源: packages/sdk/protocol/src/types.ts:75-90
+// 源: packages/sdk/protocol/src/types.ts:88-104（SubagentFinishedNotification）
 //
 // 远端跑的那些一律不报：这条协议只说得清自己这个进程里发生的事。
 type SubagentFinishedNotification struct {

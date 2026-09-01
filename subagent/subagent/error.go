@@ -7,7 +7,7 @@ package subagent
 import (
 	"errors"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ErrInvalidRequest 是「调用方给的东西本身不成立」。
@@ -19,13 +19,13 @@ var ErrInvalidRequest = errors.New("subagent: 请求不成立")
 
 // NewError 造一条子 agent 接缝的带码失败。cause 可以为 nil。
 //
-// 源: packages/subagent/subagent/src/error.ts:10-15
+// 源: packages/subagent/subagent/src/error.ts:9-15（SubagentError）
 //
 // 新增: DSH 那边 SubagentError 是 HarnessError 的子类，只为把 `name` 改成
 // 'SubagentError'——那个字段在 JS 里是用来认错误来源的。Go 认错误靠
 // [errors.Is] / [errors.As] 和那个码，多派生一个类型只会让上游那句
 // `errors.As(err, &target)`（target 是 *llm.Error）失效。所以这里不新造类型，
-// 直接交 [ds-harness-go/llm.Error]，身份由码承担。
+// 直接交 [github.com/snight1983/ds-harness-go/llm.Error]，身份由码承担。
 func NewError(message, code string, cause error) *llm.Error {
 	return llm.NewError(message, code, cause)
 }

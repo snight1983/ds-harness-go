@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -57,7 +57,7 @@ type attemptKey struct {
 // （findLast、findLastIndex、some 各扫一趟）。Go 这边全部化成增量状态，一条事件
 // 只走一次。这不只是快慢的事：DSH 交给不变量的那段历史**不含**正在验的这条事件
 // （collectSessionCallbacks 在 this.log.push 之前跑），而 Go 的
-// [ds-harness-go/core/session.Session.Events] 在观察者里**已经含着**它
+// [github.com/snight1983/ds-harness-go/core/session.Session.Events] 在观察者里**已经含着**它
 // （commit 先 append、再叫观察者）。照抄那几句 findLast 会整整差一条——每一次
 // 重试都会因为「翻到了自己」而把 retry 算成 prior+1 的下一个。验和改分成两步之后，
 // 这个不对称就不存在了：验的那一刻这条事件还没进 Trace。
@@ -124,9 +124,9 @@ const (
 //
 // 源: packages/llm/llm-retry/src/invariant.ts:52-56
 //
-// 分成「验」和「落」两步，理由和 [ds-harness-go/compaction.Transition] 逐字相同。
+// 分成「验」和「落」两步，理由和 [github.com/snight1983/ds-harness-go/compaction.Transition] 逐字相同。
 //
-// 新增: 字段全不导出。[ds-harness-go/interaction/userapproval.Transition] 那边导出了
+// 新增: 字段全不导出。[github.com/snight1983/ds-harness-go/interaction/userapproval.Transition] 那边导出了
 // 两个字段，因为它落下去的就是「哪次询问、开还是关」这两件人看得懂的事；这里要落的
 // 是四张表上的五处改动，导出它们只会把本包的内部记账变成外部可以依赖的东西。
 type Transition struct {
@@ -143,7 +143,7 @@ type Transition struct {
 // 源: packages/llm/llm-retry/src/invariant.ts:26-171
 //
 // 新增: DSH 那边收一个 fail 回调、一条事件里能报几条就报几条。Go 这边返回**第一条**
-// 违例，和 [ds-harness-go/session.Trace.Validate] 一致——它因此可以脱离不变量注册表
+// 违例，和 [github.com/snight1983/ds-harness-go/session.Trace.Validate] 一致——它因此可以脱离不变量注册表
 // 单独用，而 [RegisterInvariants] 只是把这个错误接到 [invariants.Fail] 上。
 func (t *Trace) Validate(event session.Event) (Transition, error) {
 	route, err := routeTransition(event)
@@ -238,7 +238,7 @@ func (t *Trace) validateRetry(seq int, data RetryData) (chainKey, chainState, er
 	}
 
 	// 新增: DSH 那条查的是 `delayMs` 落在 0..MAX_TIMER_DELAY_MS 之间且是有限数。
-	// 上界在 Go 这边整条去掉了，理由见 [ds-harness-go/llm.ResolveRetryPolicy] 那段
+	// 上界在 Go 这边整条去掉了，理由见 [github.com/snight1983/ds-harness-go/llm.ResolveRetryPolicy] 那段
 	// 说明：MAX_TIMER_DELAY_MS 只是 JS setTimeout 把超过 32 位的延迟截成 1 毫秒
 	// 这个实现缺陷的护栏，[time.Timer] 没有那个缺陷。「有限数」也一并去掉——
 	// [time.Duration] 是整数，没有 NaN 和 Inf 这两种取值。剩下的就是负数这一条，
@@ -419,7 +419,7 @@ func ValidateLog(events []session.Event) (*Trace, error) {
 // 新增: DSH 那两条胳膊都从 cordis 上拿——ctx.sessions.list() 取历史，
 // ctx.on('internal/dispatch') 截住后来的。Go 里活会话服务是循环那一块的东西，
 // 本包在它下面，所以这两条胳膊由装配方以函数交进来，做法和
-// [ds-harness-go/interaction/userapproval.RegisterInvariants] 逐字相同。
+// [github.com/snight1983/ds-harness-go/interaction/userapproval.RegisterInvariants] 逐字相同。
 func RegisterInvariants(
 	ctx context.Context,
 	registry *invariants.Registry,

@@ -7,7 +7,7 @@ package acp
 import (
 	wire "github.com/coder/acp-go-sdk"
 
-	sessionlog "ds-harness-go/session"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // TurnEndToStopReason 把一次回合结束翻成 ACP 那套停止原因里最贴近的那一个。
@@ -19,8 +19,8 @@ import (
 // 报 `end_turn`。
 //
 // 新增: DSH 那个 switch 末尾有一条兜底的 default。Go 这边
-// [ds-harness-go/session.TurnEndReason] 是**开放**联合（读到本构建不认识的标签会落进
-// [ds-harness-go/session.UnknownTurnEnd]），所以这条兜底在这里不是死代码而是真会走到的
+// [github.com/snight1983/ds-harness-go/session.TurnEndReason] 是**开放**联合（读到本构建不认识的标签会落进
+// [github.com/snight1983/ds-harness-go/session.UnknownTurnEnd]），所以这条兜底在这里不是死代码而是真会走到的
 // 一条路：一个说不出名字的结束理由不能报成取消——取消是一句确切的话，客户端会据此
 // 认定"这一轮是我停的"。
 func TurnEndToStopReason(reason sessionlog.TurnEndReason) wire.StopReason {

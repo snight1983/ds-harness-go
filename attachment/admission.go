@@ -54,7 +54,7 @@ func decodeBase64(data string) ([]byte, error) {
 // AdmitEncodedImages 准入一批线上图片：先把每一条的 base64 校验并解码，
 // 再把整批交给 [SaveImages] 去走张数、字节总和、媒体类型和逐张校验，最后有序提交。
 //
-// 源: packages/attachment/attachment/src/admission.ts:26-41
+// 源: packages/attachment/attachment/src/admission.ts:32-47（admitEncodedImages）
 //
 // 它是每一个接受浏览器上传的 RPC 端点共用的入口。
 //

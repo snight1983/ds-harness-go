@@ -15,8 +15,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // intPtr 造一个整数指针，给行号和退出码用。

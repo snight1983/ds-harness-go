@@ -5,7 +5,7 @@
 
 package goaltool
 
-import "ds-harness-go/llm"
+import "github.com/snight1983/ds-harness-go/llm"
 
 // grounding 是两段收尾指令共用的那句「只说日志里立得住的事」。
 //
@@ -43,7 +43,7 @@ const blockedInstruction = "The goal is marked blocked and this autonomous run i
 // [encoding/json.Marshal] 默认转。目标描述和阻塞原因都是人和模型写的自由文本，
 // 里面出现尖括号一点都不稀奇——而这段字节是直接摆进模型上下文里给它读的，多出来
 // 的转义只会让它看见一句和原文长得不一样的话。理由同
-// [ds-harness-go/goal/goal] 里那个同名的辅助函数。
+// [github.com/snight1983/ds-harness-go/goal/goal] 里那个同名的辅助函数。
 //
 // 排不出去是不可能的：入参是一个 Go 字符串，[encoding/json] 对任何字节序列都排
 // 得出来（非法 UTF-8 会被换成替换字符，不会失败）。所以这里吞掉那个错误而不是

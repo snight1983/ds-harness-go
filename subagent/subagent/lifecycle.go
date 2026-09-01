@@ -20,10 +20,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // StartObserver 是 `subagent/start` 那条边的观察者。
@@ -67,8 +67,8 @@ type ProviderRemovedObserver func(provider string)
 // lifecycleLayer 是一个作用域在这四张观察者表里的全部贡献。
 //
 // 新增: DSH 靠 cordis 的作用域派发过滤监听器，本仓库统一换成
-// [ds-harness-go/core/scope.Layers]——全局层加各作用域的覆盖层，派发时按载体作用域的
-// 父链取并集（成例见 [ds-harness-go/core/agent] 那十二个事件）。
+// [github.com/snight1983/ds-harness-go/core/scope.Layers]——全局层加各作用域的覆盖层，派发时按载体作用域的
+// 父链取并集（成例见 [github.com/snight1983/ds-harness-go/core/agent] 那十二个事件）。
 type lifecycleLayer struct {
 	start           *scope.AnonymousEntries[StartObserver]
 	end             *scope.AnonymousEntries[EndObserver]
@@ -94,7 +94,7 @@ func (l *lifecycleLayer) IsEmpty() bool {
 
 // lifecycleEmitter 是这条接缝每一条边都经由它发出去的那个兜住异常的发射器。
 //
-// 源: packages/subagent/subagent/src/lifecycle.ts:78-124
+// 源: packages/subagent/subagent/src/lifecycle.ts:76-89（LifecycleEmitter）
 //
 // 每一个观察者各自被兜住：一次 panic 被记下来，既不会饿着同侪观察者、不会改变
 // 那次运行，也不会——对于从处置器里发出的「提供方被摘掉」——把拆解打断。
@@ -113,13 +113,13 @@ type lifecycleEmitter struct {
 	// 监听器**之外**，所以它抛出来的东西不会被这里的兜底吃掉。Go 这边给它一个
 	// 专门的位置而不是让它去当一个普通观察者，正是为了保住这一点——一条被
 	// [lifecycleEmitter.contain] 吞成一行日志的不变量检查等于没有检查。
-	// 这和 [ds-harness-go/llm.Runtime] 攥着一个 fail 字段是同一个搬法。
+	// 这和 [github.com/snight1983/ds-harness-go/llm.Runtime] 攥着一个 fail 字段是同一个搬法。
 	check atomic.Pointer[lifecycleInvariant]
 }
 
 // newLifecycleEmitter 造一个发射器，观察者的 panic 记到 logger 上。
 //
-// 源: packages/subagent/subagent/src/lifecycle.ts:126-131
+// 源: packages/subagent/subagent/src/lifecycle.ts:91-123（createLifecycleEmitter）
 //
 // 新增: DSH 那个工厂收的是 cordis 上下文和一个「把某个父折成派发载体」的函数，
 // 两样都是它那套事件系统的东西。本仓库的作用域分层自带载体解算（见 carrierKey），
@@ -407,7 +407,7 @@ func (o *activationObserver) settle(failure error) {
 // **孩子自己的日志说了算**：拆解成功了，一个字都没说模型有没有出错、有没有撞上
 // token 天花板、有没有被取消，所以从处置结果反推原因会把失败的活儿报成完成。
 //
-// [ds-harness-go/core/agent.FoldConsumedWork] 补上光看回合序列拿不到的那两半：
+// [github.com/snight1983/ds-harness-go/core/agent.FoldConsumedWork] 补上光看回合序列拿不到的那两半：
 // 哪个回合交代得了这一轮消耗掉的活儿，以及被接受的活儿有没有在那之后被取消、
 // 且中间没有任何一个回合开在它上面。一次**记下来的失败**仍旧压过一次取消——
 // 停掉一个本来就已经失败的孩子，不会把它的失败变成一次取消。
@@ -423,6 +423,8 @@ func epochStopReason(events []session.Event) StopReason {
 	}
 	var data session.TurnEndData
 	if err := json.Unmarshal(work.End.Data, &data); err != nil {
+		// 走不到：FoldConsumedWork 只在自己已经解开这同一段负载之后才把 HasEnd
+		// 立起来。当成 StopError 是有意的兜底：读不出结局，就别把它说成做完了。
 		return StopError
 	}
 	switch data.Reason.TurnEndReasonKind() {

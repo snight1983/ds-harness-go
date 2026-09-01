@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // Origin 是一个会话的粗粒度出身分类。
@@ -26,7 +26,7 @@ const OriginSubagent Origin = "subagent"
 
 // SessionHeader 是一个会话不可变的存储元数据，放在对话事件日志之外。
 //
-// 源: packages/core/session/src/types.ts:58-99
+// 源: packages/core/session/src/types.ts:53-94（SessionHeader）
 type SessionHeader struct {
 	// Version 是落盘格式版本，建会话时从 [FormatVersion] 盖上去。
 	//
@@ -92,7 +92,7 @@ type TodoItem struct {
 
 // EpochHeader 是派生历史之外的请求状态：调用配置、系统提示、工具表。
 //
-// 源: packages/core/session/src/types.ts:196-210
+// 源: packages/core/session/src/types.ts:174-188（EpochHeader）
 //
 // 日志里最新的那份完整 [EventRequestHeader] 快照就是它。
 // 规范形式下空的可选字段是缺失的，见 [CanonicalHeader]。
@@ -228,7 +228,7 @@ func FoldRequestHeader(events []Event, from EpochHeader, hasFrom bool) (EpochHea
 
 // RequestContext 是一条已解析模型路由的注册期元数据。
 //
-// 源: packages/core/session/src/types.ts:212-220
+// 源: packages/core/session/src/types.ts:190-198（RequestContext）
 //
 // 它不参与请求重建，也不参与请求头的相等判断，只在路由或容量变了时记一条。
 type RequestContext struct {
@@ -242,7 +242,7 @@ type RequestContext struct {
 
 // RequestHeaderReason 说明一份请求头快照为什么被追加。
 //
-// 源: packages/core/session/src/types.ts:222-228
+// 源: packages/core/session/src/types.ts:200-208（RequestHeaderReason）
 type RequestHeaderReason string
 
 const (

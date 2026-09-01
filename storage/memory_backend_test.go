@@ -5,7 +5,7 @@
 // 这里留两个短名字，是为了让本包用例里那几十处调用保持读起来像本地的东西。
 package storage_test
 
-import "ds-harness-go/storage/storagetest"
+import "github.com/snight1983/ds-harness-go/storage/storagetest"
 
 func newMemoryMedium() *storagetest.MemoryMedium { return storagetest.NewMemoryMedium() }
 

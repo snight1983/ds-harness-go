@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"slices"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ReplayKind 是本适配器写下的重放状态的种别标记。
@@ -31,7 +31,7 @@ const ReplayVersion = 1
 
 // ReplayResponse 是重放信封里带版本的那半边：整条响应级别的元数据。
 //
-// 源: packages/llm/llm-pi-ai/src/replay.ts:22-31
+// 源: packages/llm/llm-pi-ai/src/replay.ts:21-31（PiAiReplayResponse）
 //
 // 新增: DSH 那份多一个 api 字段（这条消息是哪条协议产出的）。只有一条协议之后
 // 它恒等于一个常量，不写。

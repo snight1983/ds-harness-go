@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 var (
@@ -58,7 +58,7 @@ var (
 
 // CorruptionError 是一份读回来之后没通过校验的存档。
 //
-// 源: packages/session/session-persistence/src/coordinator.ts:34-45
+// 源: packages/session/session-persistence/src/coordinator.ts:36-46（SessionPersistenceCorruptionError）
 //
 // 和 [FormatUnsupportedError] 分开：那一个是「完好但本构建读不了」，
 // 这一个是「真的坏了」。两者给使用者的下一步动作不一样，所以不能并成一条。
@@ -85,7 +85,7 @@ func (e *CorruptionError) Unwrap() []error {
 
 // FormatUnsupportedError 是一份完好但本运行时解释不了的日志。
 //
-// 源: packages/session/session-persistence/src/coordinator.ts:47-64
+// 源: packages/session/session-persistence/src/coordinator.ts:48-66（SessionFormatUnsupportedError）
 type FormatUnsupportedError struct {
 	// ID 是这份日志属于的会话。
 	ID session.SessionID
@@ -124,7 +124,7 @@ func (e *FormatUnsupportedError) WithLocation(location Location) *FormatUnsuppor
 
 // FormatVersionRefusal 给出一份格式版本本构建不读的存档的拒绝理由。
 //
-// 源: packages/session/session-persistence/src/coordinator.ts:66-79
+// 源: packages/session/session-persistence/src/coordinator.ts:68-82（sessionFormatVersionRefusal）
 //
 // 措辞**分方向**，这是它单独立成一个函数的全部理由：比本构建新说的是
 // 「升级运行时」，比本构建旧说的是「本构建不带这条升级路径」。两句话对应的

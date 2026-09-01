@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // fakeEntry 是假文件系统里的一个项。
@@ -47,6 +47,12 @@ type fakeFS struct {
 	// 一次流式读的**中途**，而那一刻和「读到一半失败」长得很像却必须分开处理，
 	// 从外面注入 ctx 观察不到这个时刻。
 	cancelDuringStream map[string]context.CancelFunc
+	// gates 让一次流式读在开吐之前先停下来等放行。
+	//
+	// 用来把一次异步投影**稳稳地**停在半路上：几条用例要的是「投影还在飞的那一刻，
+	// 别的事情正好走过来」，而那个时刻靠 sleep 撞不准。这道闸不看 ctx——
+	// 「被取消的投影自己会收摊」正是其中一条用例要排除掉的干扰。
+	gates map[string]<-chan struct{}
 
 	// resolveCalls 记每条路径被 Resolve 了几次，用来钉「有没有白花一次 I/O」。
 	resolveCalls map[string]int
@@ -63,6 +69,7 @@ func newFakeFS() *fakeFS {
 		resolveCalls:    map[string]int{},
 
 		cancelDuringStream: map[string]context.CancelFunc{},
+		gates:              map[string]<-chan struct{}{},
 	}
 }
 
@@ -136,6 +143,12 @@ func (f *fakeFS) failStream(p string, err error) *fakeFS {
 // cancelAfterFirstChunk 让一次流式读吐出第一块之后调用方的 ctx 就被取消了。
 func (f *fakeFS) cancelAfterFirstChunk(p string, cancel context.CancelFunc) *fakeFS {
 	f.cancelDuringStream[path.Clean(p)] = cancel
+	return f
+}
+
+// gateStream 让一条路径的流式读在开吐之前先等这道闸放行。
+func (f *fakeFS) gateStream(p string, gate <-chan struct{}) *fakeFS {
+	f.gates[path.Clean(p)] = gate
 	return f
 }
 
@@ -213,7 +226,11 @@ func (f *fakeFS) StreamText(ctx context.Context, target fs.Target) (iter.Seq2[st
 	failErr := f.streamErr[p]
 	size := f.chunkSize
 	cancel := f.cancelDuringStream[p]
+	gate := f.gates[p]
 	return func(yield func(string, error) bool) {
+		if gate != nil {
+			<-gate
+		}
 		emitted := 0
 		for chunk := range chunksOf(entry.content, size) {
 			if delayed && emitted == failAfter {

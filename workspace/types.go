@@ -9,8 +9,8 @@ import (
 	"context"
 	"time"
 
-	"ds-harness-go/fs"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // WorkspaceID 标识一条工作区记录。
@@ -41,7 +41,7 @@ const (
 
 // Workspace 是一个工作区：一个目录上的稳定 id、一个展示标题、一串有序的会话候选账目。
 //
-// 源: packages/workspace/workspace/src/types.ts:23-104
+// 源: packages/workspace/workspace/src/types.ts:25-112（Workspace）
 //
 // 归属要同时满足「id 在账目里」和「会话头的工作目录解析到同一个目标」两件事，
 // 见包文档。消费方只看见这个接口，实现是包私有的。

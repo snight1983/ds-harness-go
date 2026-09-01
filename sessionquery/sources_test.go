@@ -7,7 +7,7 @@ package sessionquery
 import (
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestAssertHeadersCompatibleComparesTheIdentityFields(t *testing.T) {

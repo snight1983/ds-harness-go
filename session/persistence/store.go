@@ -8,12 +8,12 @@ package persistence
 import (
 	"context"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Store 是持久的、只追加的会话存储。
 //
-// 源: packages/session/session-persistence/src/index.ts:77-233
+// 源: packages/session/session-persistence/src/index.ts:99-283（SessionPersistence）
 //
 // 实现方保管 seq 连续、能无损排成 JSON 的事件：[Store.Append] 只在真的落盘
 // 之后才返回，[Store.Load] 会把一条中途断掉的尾巴补平而**不重写**任何
@@ -103,14 +103,15 @@ type Store interface {
 	ListSnapshots(ctx context.Context) ([]Snapshot, error)
 }
 
-// 这里没有 Prepare。
+// 这个接口里没有 Prepare。
 //
 // 源: packages/session/session-persistence/src/index.ts:141-159
 //
 // DSH 的 SessionPersistence.prepare 返回的是一个**未发布的活会话**
-// （SessionPreparation），它要先从 cordis 上取出 SessionStore、再让它按 seed
-// 造一个 Session 出来。活会话和 SessionStore 按 DESIGN.md 第八节落在第 6 块，
-// 所以这个方法和它整条链一起留在那里。
+// （SessionPreparation），它要先取出 SessionStore、再让它按 seed 造一个
+// Session 出来。这件事本包做了，但落在 [Coordinator.Prepare] 上而不是这个
+// 接口上：它要一个活的会话存储，而这个接口是照着**后端**去实现的，
+// 一个只想把日志写进 SQLite 的人不该被迫先立起一整套会话存储。
 //
-// 它不影响本接口的其余部分：prepare 在 DSH 那边本来就是一个**带默认实现**的
-// 方法，实现方不必写它，它只是 Load 之上的一层薄壳。
+// 这个位置的取舍在 DSH 那边也是一样的：prepare 是一个**带默认实现**的方法，
+// 实现方不必写它，它只是 Load 之上的一层薄壳。

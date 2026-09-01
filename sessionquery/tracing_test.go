@@ -7,7 +7,7 @@ package sessionquery
 import (
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // lineageRecord 排一条只关心 id、父会话、建会话时间的记录。

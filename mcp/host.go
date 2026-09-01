@@ -10,9 +10,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
 )
 
 // ImageAdmission 回答「这次工具执行能不能收图，收的话存到哪」。
@@ -81,7 +81,7 @@ func NewHost(options Options) (*Host, error) {
 
 // Connection 是一台 MCP 服务器那条活着的连接。
 //
-// 源: packages/mcp/mcp-client/src/connection.ts:99-112（ConnectionHandle）
+// 源: packages/mcp/mcp-client/src/connection.ts:98-112（ConnectionHandle）
 type Connection struct {
 	// host 是发出这条连接的宿主。
 	host *Host

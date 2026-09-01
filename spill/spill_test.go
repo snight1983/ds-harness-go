@@ -13,8 +13,8 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // stubStore 是一个把请求原样记下来的最小实现，用来观察这条接缝的过手。

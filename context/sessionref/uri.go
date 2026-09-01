@@ -11,17 +11,17 @@ import (
 	"regexp"
 	"strings"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Scheme 是留给会话快照的 URI 方案，冒号包含在内。
 //
-// 源: packages/context/session-reference/src/uri.ts:7-8
+// 源: packages/context/session-reference/src/uri.ts:8-9（SESSION_REFERENCE_SCHEME）
 const Scheme = "dsh-session:"
 
 // EncodeURI 把一个会话 id 编成规范 URI。
 //
-// 源: packages/context/session-reference/src/uri.ts:10-18
+// 源: packages/context/session-reference/src/uri.ts:11-19（encodeSessionReferenceUri）
 //
 // 先 JSON 再 base64url 而不是直接 base64url 那个字符串：会话 id 是不透明的，
 // 里面可以有任何字节；JSON 那一层保证解回来的一定是一个字符串，
@@ -43,7 +43,7 @@ var base64URLPayload = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // DecodeURI 解一条规范 URI，并顺带确认它**就是**规范写法。
 //
-// 源: packages/context/session-reference/src/uri.ts:20-40
+// 源: packages/context/session-reference/src/uri.ts:21-41（decodeSessionReferenceUri）
 //
 // 最后那一步「重新编一遍看是不是同一条」不是多余的：base64 有一批
 // 非规范写法（补位、字母表混用）解出来是同一段字节。不钉死规范写法的话，
@@ -77,7 +77,7 @@ func DecodeURI(uri string) (session.SessionID, error) {
 
 // FormatMention 渲染一段与主机无关的 Markdown 提及，里面带着规范 URI。
 //
-// 源: packages/context/session-reference/src/uri.ts:42-50
+// 源: packages/context/session-reference/src/uri.ts:43-51（formatSessionReferenceMention）
 func FormatMention(reference Input) string {
 	label := reference.Label
 	if label == "" {
@@ -88,7 +88,7 @@ func FormatMention(reference Input) string {
 
 // ParsedText 是从一段纯文本里抽提及的结果。
 //
-// 源: packages/context/session-reference/src/uri.ts:52-58
+// 源: packages/context/session-reference/src/uri.ts:53-59（ParsedSessionReferenceText）
 type ParsedText struct {
 	// Text 是把那些不透明记号换成可读的 `@label` 之后的文本。
 	Text string

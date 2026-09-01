@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
-	"ds-harness-go/session/projection"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // LiveSession 是这个缓存从一个活会话身上要看的全部东西。

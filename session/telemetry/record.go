@@ -52,7 +52,7 @@ func (s Severity) Valid() bool {
 // SharingStatus 是部署方选定的会话共享政策，由挂上来的接收器向面向真人的
 // 告知界面披露。
 //
-// 源: packages/session/session-telemetry/src/index.ts:130-137
+// 源: packages/session/session-telemetry/src/index.ts:133-139（SessionTelemetrySharingStatus）
 //
 // 这套词汇归本包所有，正是为了让任何一个接收器都能披露一份政策，而不必
 // 反过来依赖某个具体的上报实现。**没有任何接收器挂着**和「挂着但设成

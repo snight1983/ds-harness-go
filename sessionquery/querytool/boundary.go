@@ -10,7 +10,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/sessionquery"
 )
 
 // safeFailure 是一条引擎失败对外的样子。
@@ -106,7 +106,7 @@ func call[V any](ctx context.Context, c *Controller, operation string, invoke fu
 
 // sanitize 把一条引擎失败翻译成模型能看的一句话，原始那条只进日志。
 //
-// 源: packages/session-query/tool-session-query/src/service-boundary.ts:114-136
+// 源: packages/session-query/tool-session-query/src/service-boundary.ts:174-179（serviceBoundary）
 //
 // 三条出路，按 DSH 的顺序：查得到安全说法的引擎错误换成那句；本包自己那条
 // 「越界」原样保留（它本来就是安全的）；其余一律是通用失败。

@@ -14,12 +14,13 @@
 // 注册的工具只有它自己看得见，并且**盖住**同名的继承项。这条链由
 // [scope.Layers] 提供，本包只是它的一个消费方。
 //
-// # 没有 Code Mode
+// # 没有 PTC
 //
-// DSH 这个包有一大块是 Code Mode：把所有工具收拢成一个 `run_code` 工具，
-// 模型写一段 TypeScript 或 Python 程序，程序在 Node 的 worker thread 里跑，
-// 通过生成的 SDK 反过来调那些工具。整块不移，理由见
-// docs/portmap/decisions.md 的「core/tools —— Code Mode 整块不移」。
+// DSH 这个包有一大块是 PTC（alpha.3 之前叫 Code Mode）：把所有工具收拢成一个
+// `run_code` 工具，模型写一段 TypeScript 或 Python 程序，程序在 Node 的
+// worker thread 里跑，通过生成的 SDK 反过来调那些工具。整块不移，理由见
+// docs/portmap/decisions.md 的「core/tools —— PTC（run_code）整块不移」。
+
 package tools
 
 import (
@@ -31,13 +32,13 @@ import (
 	"slices"
 	"strings"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // Guard 是一道单调的执行守卫：返回非空字符串就是拒绝，返回空串表示不表态。
 //
-// 源: packages/core/tools/src/index.ts:703-711
+// 源: packages/core/tools/src/index.ts:696-704（ToolGuard）
 //
 // 「单调」是这个类型唯一的设计点：守卫**只能拒绝，不能放行**。所以注册顺序
 // 影响不了结果——先跑的守卫拒了，后跑的守卫没有任何办法把它改回允许。
@@ -46,7 +47,7 @@ type Guard func(exec Execution) string
 
 // Restriction 是一个作用域对**继承来的**全局工具的过滤。
 //
-// 源: packages/core/tools/src/index.ts:674-681
+// 源: packages/core/tools/src/index.ts:669-678（ToolRestriction）
 //
 // 多条限制取交集，并且都不影响这个作用域**自己**注册的工具——见 [Runtime.view]
 // 里那段说明，那条豁免是「按子 agent 发能力清单」这件事能成立的前提。
@@ -326,7 +327,7 @@ func (r *Runtime) Restrict(ctx context.Context, owner *scope.Scope, filter Restr
 
 // Guard 注册一道单调守卫，返回撤销它的函数。
 //
-// 源: packages/core/tools/src/index.ts:1108-1114
+// 源: packages/core/tools/src/index.ts:696-704（ToolGuard）
 //
 // 落在全局层的守卫管所有 agent，落在某个作用域的只管那条链下面的。
 // 这次登记不发变更通知——守卫不改变工具的可见性，系统提示不用因此重算。

@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // testAbsolutePath 是一条在本机上确实绝对的路径。
@@ -30,7 +30,7 @@ func fixedClock() func() int64 {
 }
 
 // rootScope 造一个没有身份的作用域（落全局层），用完自动释放。
-func rootScope(t *testing.T) *scope.Scope {
+func rootScope(t testing.TB) *scope.Scope {
 	t.Helper()
 	owner := scope.NewRoot()
 	t.Cleanup(func() { _ = owner.Dispose(context.Background()) })
@@ -38,7 +38,7 @@ func rootScope(t *testing.T) *scope.Scope {
 }
 
 // keyedScope 造一个有身份的作用域，用完自动释放。parent 为 nil 表示它自己是顶层。
-func keyedScope(t *testing.T, label string, parent *scope.Key) *scope.Scope {
+func keyedScope(t testing.TB, label string, parent *scope.Key) *scope.Scope {
 	t.Helper()
 	owner, err := scope.New(scope.NewKey(label), scope.Options{Parent: parent})
 	if err != nil {
@@ -49,7 +49,7 @@ func keyedScope(t *testing.T, label string, parent *scope.Key) *scope.Scope {
 }
 
 // newFreeSession 造一个游离会话，seed 由调用方给（nil 表示不给）。
-func newFreeSession(t *testing.T, id sessionlog.SessionID, seed []sessionlog.Event) *session.Session {
+func newFreeSession(t testing.TB, id sessionlog.SessionID, seed []sessionlog.Event) *session.Session {
 	t.Helper()
 	header := sessionlog.SessionHeader{ID: id, Cwd: testAbsolutePath, SeedLength: len(seed)}
 	live, err := session.NewSession(id, session.Options{
@@ -69,11 +69,11 @@ const pokeEventType = "test/poke"
 // busyInbox 造一个挂在存储上的收件箱，外加一个「趁这个会话正在发布事件的那一瞬
 // 跑一段代码」的钩子。
 //
-// 会话不许在发布窗口里重入追加（见 [ds-harness-go/core/session.Session.Append]），
+// 会话不许在发布窗口里重入追加（见 [github.com/snight1983/ds-harness-go/core/session.Session.Append]），
 // 所以那一瞬里**每一次**收件箱改动都写不进日志。[Inbox] 那几条「日志写不下去就
 // 把错误原样往上交」的路径是真错误路径而不是防御性分支，这是本包够得着它们的
 // 唯一办法。
-func busyInbox(t *testing.T) (*Inbox, func(body func())) {
+func busyInbox(t testing.TB) (*Inbox, func(body func())) {
 	t.Helper()
 	ctx := context.Background()
 	owner := rootScope(t)
@@ -127,7 +127,7 @@ func text(body string) llm.Message {
 }
 
 // data 把一份负载排成字节，排不出去当场失败。
-func data(t *testing.T, payload any) json.RawMessage {
+func data(t testing.TB, payload any) json.RawMessage {
 	t.Helper()
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -151,7 +151,7 @@ type fakeAgent struct {
 }
 
 // newFakeAgent 造一个挂在自己那把作用域钥匙上的假 agent。
-func newFakeAgent(t *testing.T, id string, parent *scope.Key) *fakeAgent {
+func newFakeAgent(t testing.TB, id string, parent *scope.Key) *fakeAgent {
 	t.Helper()
 	sessionID := sessionlog.SessionID(id)
 	return &fakeAgent{
@@ -182,7 +182,7 @@ func (a *fakeAgent) Inject(llm.Message)                  {}
 func (a *fakeAgent) Prepend(llm.Message, InboxTarget)    {}
 
 // newRegistry 造一张空表，造不出来当场失败。
-func newRegistry(t *testing.T) *Registry {
+func newRegistry(t testing.TB) *Registry {
 	t.Helper()
 	registry, err := NewRegistry(RegistryOptions{})
 	if err != nil {
@@ -192,7 +192,7 @@ func newRegistry(t *testing.T) *Registry {
 }
 
 // live 把一个假 agent 登记进表里并公布出去，返回摘除它的函数。
-func live(t *testing.T, registry *Registry, agent Agent, owner Agent) func(context.Context) error {
+func live(t testing.TB, registry *Registry, agent Agent, owner Agent) func(context.Context) error {
 	t.Helper()
 	detach, err := registry.Register(context.Background(), agent, owner)
 	if err != nil {
@@ -201,3 +201,7 @@ func live(t *testing.T, registry *Registry, agent Agent, owner Agent) func(conte
 	t.Cleanup(func() { _ = detach(context.Background()) })
 	return detach
 }
+
+func (a *fakeAgent) Remove(llm.MessageID) {}
+
+func (a *fakeAgent) Replace(llm.MessageID, llm.Message) {}

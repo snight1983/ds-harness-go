@@ -13,8 +13,8 @@ import (
 	"sort"
 	"strings"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // ErrInvalidConfig 是造这个注册表时配置就不成立。
@@ -107,7 +107,7 @@ func (l *promptLayer) IsEmpty() bool {
 
 // Options 是部署方自己写的那一小块系统提示词，加上装配的几条策略。
 //
-// 源: packages/core/system-prompt/src/index.ts:186-202、339-345
+// 源: packages/core/system-prompt/src/index.ts:236-253（Config）、339-345
 type Options struct {
 	// OmitHarnessIdentity 表示不要在人设前面放那句宿主身份声明。
 	//
@@ -145,7 +145,7 @@ type Options struct {
 
 // Registry 是每一步模型请求之前那些提示词输入的注册表。
 //
-// 源: packages/core/system-prompt/src/index.ts:338-544
+// 源: packages/core/system-prompt/src/index.ts:388-612（SystemPrompt）
 //
 // 新增: cordis 的 Service / ctx.systemPrompt / 插件名 / inject 全部不移，装配方
 // 自己造一个拿着。分层和遮蔽是 [scope.Layers] 提供的，本包只是它的一个消费方。

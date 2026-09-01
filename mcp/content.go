@@ -14,15 +14,15 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // Result 是一次 MCP 工具调用那份**权威的**值：既是给程序化调用方的原件，
 // 也是本包按输出契约验过、据以渲染的那个东西。
 //
-// 源: packages/mcp/mcp-client/src/tools.ts:24-27
+// 源: packages/mcp/mcp-client/src/tools.ts:40-44（McpResult）
 //
 // Content 里每一项是一块 MCP 内容原样序列化回去的 JSON。留着这一份的理由是
 // 「图这一路」：一次结果里的图降级成文本之后，原始的图片字节仍然在这里，

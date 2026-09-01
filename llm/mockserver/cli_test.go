@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm/mockserver"
+	"github.com/snight1983/ds-harness-go/llm/mockserver"
 )
 
 // TestCLIHelpNeedsNoSequence 验 --help 不受必填项牵连。

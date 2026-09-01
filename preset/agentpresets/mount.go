@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 
 	yaml "go.yaml.in/yaml/v3"
 )
@@ -38,7 +38,7 @@ type Composer func(ctx context.Context, owner *scope.Scope, config json.RawMessa
 //
 // 新增: 一张普通的 map，不是一台带锁的全局注册表——「谁先注册」不该决定一份组合
 // 装不装得起来。装配方把它当值组装好填进 [Config.Composers]，理由与
-// [ds-harness-go/session.Vocabulary] 那处相同。
+// [github.com/snight1983/ds-harness-go/session.Vocabulary] 那处相同。
 type ComposerSet map[string]Composer
 
 // ErrUnknownComposer 是「组合里有一行点了一个这套部署没登记的组装器」。
@@ -203,7 +203,7 @@ func mountComposition(
 
 // Mount 是一份此刻还装着的常驻组合。
 //
-// 源: packages/preset/agent-presets/src/mount.ts:115-122
+// 源: packages/preset/agent-presets/src/mount.ts:126-136（PresetMount）
 //
 // 新增: DSH 那边它带一个 Fiber，本包带的是常驻作用域和它的钥匙——agent 正是被认到
 // 那把钥匙下面去的。

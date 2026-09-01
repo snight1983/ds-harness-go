@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"sync"
 
-	"ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/scope"
 )
 
 // 这条能力的错误代号。它们是**上线的**分类：跨包的调用方按代号分流，不解析错误文本。
@@ -43,10 +43,10 @@ const (
 
 // Error 是这条能力的错误。
 //
-// 源: packages/interaction/user-questions/src/index.ts:42-48
+// 源: packages/interaction/user-questions/src/index.ts:33-39（UserQuestionError）
 //
 // 新增: DSH 那边它继承 HarnessError，靠 instanceof 认。Go 里靠 errors.As 认这个
-// 具体类型；ErrorName 和 ErrorCode 两个方法让 [ds-harness-go/core/tools] 那道
+// 具体类型；ErrorName 和 ErrorCode 两个方法让 [github.com/snight1983/ds-harness-go/core/tools] 那道
 // 结果收敛能把它的身份原样抄进 Failure.Info。
 type Error struct {
 	// Code 是机器可读代号，取上面那几个常量之一。
@@ -123,7 +123,7 @@ type Config struct {
 
 // Service 是这条能力的接缝：一个活着的界面提供方，加上一个 Ask。
 //
-// 源: packages/interaction/user-questions/src/index.ts:50-141
+// 源: packages/interaction/user-questions/src/index.ts:64-152（UserQuestionService）
 type Service struct {
 	callerStatus func(*scope.Key) CallerStatus
 

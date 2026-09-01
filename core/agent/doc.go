@@ -10,7 +10,7 @@
 // 源: packages/core/agent/src/index.ts:177-214
 //
 // 造一个 agent、驱动它跑回合，是循环那一层的事（DSH 的 @deepseek-ai/dsh-agent-loop，
-// 本仓库的 ds-harness-go/core/agentloop）。本包只定义：
+// 本仓库的 github.com/snight1983/ds-harness-go/core/agentloop）。本包只定义：
 //
 //   - [Agent]：一个活 agent 对外的样子。
 //   - [Factory]：循环实现的那个造法，由 [Registry.SetFactory] 登记进来。
@@ -38,7 +38,7 @@
 //
 // created 是唯一有否决权的：一个观察者返回错误（或者 panic）会让
 // [Registry.Announce] 失败，调用方交出去的那个摘除函数随即把这次登记回滚掉，
-// 并配对地发出一次 disposed。这条和 [ds-harness-go/core/session.Store] 上的
+// 并配对地发出一次 disposed。这条和 [github.com/snight1983/ds-harness-go/core/session.Store] 上的
 // session/created 逐字相同，实现也是同一套。
 //
 // 派发按作用域过滤，规矩和本仓库其他几处一样：登记在全局层的看得见全部，
@@ -91,7 +91,7 @@
 //
 // 新增: DSH 是单线程 JS。Go 里 [Registry] 会被循环、ACP 桥、子 agent 多个
 // goroutine 同时碰到，所以它有自己的互斥锁，规矩和
-// [ds-harness-go/core/session.Store] 逐字相同：**观察者一律在锁外调用**，
+// [github.com/snight1983/ds-harness-go/core/session.Store] 逐字相同：**观察者一律在锁外调用**，
 // 于是一个观察者回头读同一张表不会自锁。
 //
 // [Inbox] 不加锁。它是一个 agent 自己那份投影，只该被那个 agent 的循环碰——

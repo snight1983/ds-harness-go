@@ -19,14 +19,14 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
-	"ds-harness-go/settings"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/settings"
 )
 
 // ---- 舞台 ----
@@ -127,6 +127,7 @@ type fakePersistence struct {
 	prepare  func(ctx context.Context, id sessionlog.SessionID) (*session.Session, error)
 	listErr  error
 	listed   int
+	released int
 }
 
 // newPersistence 造一份持久化，archived 是那些「已经落过地」的身份。
@@ -134,18 +135,45 @@ func newPersistence(store *session.Store, archived ...sessionlog.SessionID) *fak
 	return &fakePersistence{store: store, archived: archived}
 }
 
-func (p *fakePersistence) Prepare(ctx context.Context, id sessionlog.SessionID) (*session.Session, error) {
+func (p *fakePersistence) Prepare(
+	ctx context.Context,
+	id sessionlog.SessionID,
+) (*session.Preparation, error) {
 	p.mutex.Lock()
 	prepare, archived := p.prepare, slices.Contains(p.archived, id)
 	p.mutex.Unlock()
 
-	if prepare != nil {
-		return prepare(ctx, id)
+	var (
+		live *session.Session
+		err  error
+	)
+	switch {
+	case prepare != nil:
+		live, err = prepare(ctx, id)
+	case !archived:
+		err = fmt.Errorf("存档里没有会话 %q", string(id))
+	default:
+		live, err = p.store.Prepare(id, session.CreateOptions{})
 	}
-	if !archived {
-		return nil, fmt.Errorf("存档里没有会话 %q", string(id))
+	if err != nil {
+		return nil, err
 	}
-	return p.store.Prepare(id, session.CreateOptions{})
+	// 真的持久化编排器在准备期里攥着一份预留，这里拿一个计数器替它：
+	// 「释放到底有没有被调」是这个接缝上唯一测得到的东西。
+	return session.NewPreparation(live, session.PreparationOptions{
+		Release: func() {
+			p.mutex.Lock()
+			defer p.mutex.Unlock()
+			p.released++
+		},
+	}), nil
+}
+
+// releaseCount 报这份持久化交出去的准备期被释放过几次。
+func (p *fakePersistence) releaseCount() int {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+	return p.released
 }
 
 func (p *fakePersistence) List(context.Context) ([]sessionlog.SessionHeader, error) {
@@ -486,7 +514,7 @@ func TestRaceAbortRefusesBeforeStartingWorkOnADeadContext(t *testing.T) {
 // TestRaceAbortHandsALateResultToTheReleaser 钉住竞速输掉之后才到的那份结果
 // 交给了收尾函数。
 //
-// 源: packages/core/agent-loop/src/index.ts:110-117（releaseAbandoned）
+// 源: packages/core/agent-loop/src/index.ts:169-186（releaseAbandoned）
 //
 // 这条路上那份结果是一个**备好但没公布**的会话。没人收的话它就是一次静默的泄漏；
 // 而且那个 goroutine 会一直挂在发送上，连同它扣着的东西一起留下。
@@ -1287,6 +1315,82 @@ func TestResumeRebuildsTheAgentOnThePersistedSession(t *testing.T) {
 	if _, live := world.store.Get("存过的"); !live {
 		t.Error("读回来的那个会话该公布进存储")
 	}
+	// 公布成了也要释放：提供方那份预留在公布那一步已经被接手，这一次是空操作,
+	// 但它必须发生——DSH 那句 `using ownedPreparation = preparation` 说的就是
+	// 「离开这个函数就结束这段准备期」，不分成没成。
+	if got := persistence.releaseCount(); got != 1 {
+		t.Errorf("公布成功之后该释放一次准备期，实际释放了 %d 次", got)
+	}
+}
+
+// TestResumeReleasesThePreparationWhenSetupFails 钉住半路失败也要还回预留。
+//
+// 源: packages/core/agent-loop/src/index.ts:697-708
+//
+// 不还，提供方那边的准备池就一直扣着这个身份：之后任何一次同名的续跑都会撞上
+// 「会话还活着」或者一直等下去，而现场只看得到「卡住了」。
+func TestResumeReleasesThePreparationWhenSetupFails(t *testing.T) {
+	t.Parallel()
+
+	world := newFactoryWorld(t)
+	persistence := newPersistence(world.store, "装不起来的")
+	loop := world.install(t, Config{Persistence: persistence})
+
+	boom := errors.New("setup 自己炸了")
+	_, err := loop.Resume(context.Background(), world.owner, agent.ResumeOptions{
+		ResumeSessionID: "装不起来的",
+		Setup: func(context.Context, *scope.Scope) (func() error, error) {
+			return nil, boom
+		},
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("该把 setup 那个错带回来，实际 %v", err)
+	}
+	if got := persistence.releaseCount(); got != 1 {
+		t.Errorf("setup 失败之后该释放一次准备期，实际释放了 %d 次", got)
+	}
+}
+
+// TestResumeReleasesAPreparationThatArrivesAfterTheCallerGaveUp 钉住迟到值也要还。
+//
+// 源: packages/core/agent-loop/src/index.ts:747-753（那个 abandoned 回调）
+//
+// 这是这条路上最容易漏的一支：调用方已经拿着错误走了，而后端那次读还在跑。
+// 它落定的时候没有任何调用栈在等它，如果这时候不还预留，这个身份就被一份
+// **谁也拿不到**的准备期永久扣住了。
+func TestResumeReleasesAPreparationThatArrivesAfterTheCallerGaveUp(t *testing.T) {
+	t.Parallel()
+
+	world := newFactoryWorld(t)
+	gate := make(chan struct{})
+	persistence := newPersistence(world.store, "迟到的")
+	persistence.prepare = func(_ context.Context, id sessionlog.SessionID) (*session.Session, error) {
+		<-gate
+		return world.store.Prepare(id, session.CreateOptions{})
+	}
+	loop := world.install(t, Config{Persistence: persistence})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	failed := make(chan error, 1)
+	go func() {
+		_, err := loop.Resume(ctx, world.owner, agent.ResumeOptions{ResumeSessionID: "迟到的"})
+		failed <- err
+	}()
+	cancel()
+	if err := <-failed; err == nil {
+		t.Fatal("取消之后该报错回来")
+	}
+
+	// 调用方已经走了，现在才让那次读落定。
+	close(gate)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for persistence.releaseCount() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("迟到的准备期一直没被释放，这个会话身份被永久扣住了")
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // TestResumeNeedsAnOwner 钉住续跑也要有一个持有它的作用域。
@@ -1533,6 +1637,153 @@ func TestAResumingEntryWithoutPersistenceIsReportedNotHung(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("该当场通报，而不是等下去")
+	}
+}
+
+// TestAConfiguredResumingEntryRebuildsOnTheArchivedSession 钉住配置里写了续跑身份的
+// 那一项真的在那份存档上起了步。
+//
+// 源: packages/core/agent-loop/src/index.ts:405-410
+//
+// 这是 [ConfiguredAgent.ResumeSessionID] 存在的全部理由。断在这里的话，一份写着
+// 「开机就把上次那个会话接着跑」的配置会静悄悄地什么都不做——注册表上空空如也，
+// 而没有任何一条错误被报出来。
+func TestAConfiguredResumingEntryRebuildsOnTheArchivedSession(t *testing.T) {
+	t.Parallel()
+
+	world := newFactoryWorld(t)
+	persistence := newPersistence(world.store, "上次那个")
+	world.install(t, Config{
+		Persistence: persistence,
+		Agents:      []ConfiguredAgent{{ID: "记事本", ResumeSessionID: "上次那个"}},
+	})
+	waitForAgent(t, world, "上次那个")
+
+	// 续跑走的是 Prepare 那条路，不该回落到「列一次存档看看在不在」——那是
+	// restore 那一支（写 SessionID 的那种）才有的动作。
+	if got := persistence.listCount(); got != 0 {
+		t.Errorf("续跑不该去列存档，实际列了 %d 次", got)
+	}
+}
+
+// TestAConfiguredResumeThatFailsIsReported 钉住续跑失败通报出去，而不是咽下去。
+//
+// 源: packages/core/agent-loop/src/index.ts:405-410
+//
+// 这一支和 restore 那一支有一处关键的不同：restore 读不回来时会**回落到新建**
+//（见 [AgentLoop.restoreOrCreateConfigured]），而续跑没有回落——配置说的是
+// 「接着上次跑」，凭空造一个空会话不是它要的东西。所以这里除了通报之外什么都
+// 不做，而那条通报就是消费方唯一的信号。
+//
+// 观察者得在这一项起步之前挂上，所以不走 world.install，自己拼一遍装配次序
+//（同 [TestAResumingEntryWithoutPersistenceIsReportedNotHung]）。
+func TestAConfiguredResumeThatFailsIsReported(t *testing.T) {
+	t.Parallel()
+
+	world := newFactoryWorld(t)
+	reported := make(chan error, 1)
+
+	// 存档里一个身份都没有：Prepare 会说「存档里没有会话」。
+	loop, unwind, err := New(context.Background(), world.deps, world.owner, Config{
+		Logger:      quietLogger(),
+		Persistence: newPersistence(world.store),
+	})
+	if err != nil {
+		t.Fatalf("装工厂失败：%v", err)
+	}
+	t.Cleanup(func() { _ = unwind(context.Background()) })
+
+	undo, err := loop.OnConfigStartFailed(func(id sessionlog.SessionID, failure error) {
+		if id != "没存过" {
+			t.Errorf("该带上续不了的那个身份，实际 %q", string(id))
+		}
+		select {
+		case reported <- failure:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatalf("挂观察者失败：%v", err)
+	}
+	defer undo()
+
+	loop.startResumingConfigured(context.Background(),
+		ConfiguredAgent{ID: "记事本", ResumeSessionID: "没存过"})
+
+	select {
+	case failure := <-reported:
+		if !strings.Contains(failure.Error(), "没存过") {
+			t.Errorf("该说清是哪个身份续不了，实际 %v", failure)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("续跑失败该通报出去")
+	}
+	if _, live := world.agents.Get("没存过"); live {
+		t.Error("续不回来就不该凭空造一个同名的空会话")
+	}
+}
+
+// TestARestoringConfiguredIdentityWaitsForTheDrainingOccupant 钉住一个还占着注册表的
+// 同名身份会把这次启动挡在门外，直到它摘干净。
+//
+// 源: packages/core/agent-loop/src/index.ts:430-451
+//
+// 这一步存在的理由是重挂：旧的那份还在排干（它的拆除是异步的），新的一份已经
+// 开始起步了。不等的话，那次创建撞在一个还没摘掉的登记上，报出来的是一句
+// 「这个身份已经有人了」——而真相只是「再等一会儿就没人了」。
+//
+// 直接调这个不导出的函数，因为它要的那个时序（先占住、等着、再放开）从配置那条
+// 启动路上摆不出来：配置项在 [New] 里就起步了，用例根本来不及在那之前占住身份。
+func TestARestoringConfiguredIdentityWaitsForTheDrainingOccupant(t *testing.T) {
+	t.Parallel()
+
+	world := newFactoryWorld(t)
+	loop := world.install(t, Config{})
+	ctx := context.Background()
+
+	handle, err := loop.CreateAgent(ctx, world.owner, agent.CreateOptions{
+		SessionID:    "抢手的",
+		AgentOptions: agent.Options{Provider: "甲", Model: "m-1"},
+	})
+	if err != nil {
+		t.Fatalf("造占用者失败：%v", err)
+	}
+
+	waited := make(chan error, 1)
+	go func() { waited <- loop.waitForDrainingConfiguredIdentity(ctx, "抢手的") }()
+
+	select {
+	case err := <-waited:
+		t.Fatalf("身份还占着就不该放行：%v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	if err := handle.Dispose(ctx); err != nil {
+		t.Fatalf("拆占用者失败：%v", err)
+	}
+	select {
+	case err := <-waited:
+		if err != nil {
+			t.Errorf("占用者走干净了该正常放行，实际 %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("占用者一摘干净该醒过来")
+	}
+}
+
+// TestAFreeConfiguredIdentityIsNotWaitedOn 钉住没人占着的身份一步都不等。
+//
+// 源: packages/core/agent-loop/src/index.ts:430-433
+//
+// 开机那一次是常态，而那时注册表本来就是空的。这里要是挂上观察者去等一次通知，
+// 每一个配置项的启动都会白等到超时——而开机路径是串着走的。
+func TestAFreeConfiguredIdentityIsNotWaitedOn(t *testing.T) {
+	t.Parallel()
+
+	world := newFactoryWorld(t)
+	loop := world.install(t, Config{})
+	if err := loop.waitForDrainingConfiguredIdentity(context.Background(), "没人要的"); err != nil {
+		t.Errorf("没人占着该当场放行，实际 %v", err)
 	}
 }
 

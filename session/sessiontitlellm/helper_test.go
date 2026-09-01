@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/sessiontitle"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/sessiontitle"
 )
 
 // fakeSession 只做两件事：报自己的 id，以及把追加下来的事件记着。

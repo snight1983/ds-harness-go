@@ -12,7 +12,7 @@ import (
 	"slices"
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // mustWorkspace 建一个工作区并把它当实体用，实体这一层的用例都从这里起步。

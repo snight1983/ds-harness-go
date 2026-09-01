@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/util/outputretention"
+	"github.com/snight1983/ds-harness-go/util/outputretention"
 )
 
 // wantExact 断言丢弃元数据是「确切丢了 count 个」。

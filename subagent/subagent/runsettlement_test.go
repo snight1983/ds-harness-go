@@ -19,8 +19,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 func TestSettleRunMapsEveryStopReasonToAnOutcome(t *testing.T) {

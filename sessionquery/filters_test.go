@@ -7,7 +7,7 @@ package sessionquery
 import (
 	"testing"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // bound 取一个 int64 的地址，给区间过滤器用。

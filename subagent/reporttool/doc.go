@@ -19,9 +19,10 @@
 // DSH 从 cordis 上下文上直接取 `childCtx.tools`、`childCtx.systemPrompt` 和
 // `ctx.subagents`，执行体里的 `exec.agent` 也直接就是那个 Agent 对象。Go 这两样
 // 都没有：服务经 [Config] 显式交进来，而
-// [ds-harness-go/core/tools.ExecutionInput.Agent] 是一把不透明的作用域钥匙，
+// [github.com/snight1983/ds-harness-go/core/tools.ExecutionInput.Agent] 是一把不透明的作用域钥匙，
 // 所以由装配方经 [Config.AgentOf] 交一条查回去的路（做法和
-// ds-harness-go/sessionquery/querytool、ds-harness-go/plan/planmode 逐字相同）。
+// github.com/snight1983/ds-harness-go/sessionquery/querytool、
+// github.com/snight1983/ds-harness-go/plan/planmode 逐字相同）。
 //
 // # 面向模型的文字保持英文
 //

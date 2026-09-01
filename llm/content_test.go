@@ -11,7 +11,7 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/attachment"
 )
 
 // sampleRef 是测试里反复用的那张图，字段填满好让往返有东西可比。

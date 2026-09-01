@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ErrInvalidConfig 是「配置本身不成立」。
@@ -27,7 +27,7 @@ var ErrFixtureNotFound = errors.New("llm-replay: 夹具不在")
 
 // ModelConfig 是一条只为回放存在的提供方目录里的一个模型。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:47-71
+// 源: packages/test-support/llm-replay/src/index.ts:49-82（ReplayModelConfig）
 type ModelConfig struct {
 	// ID 是回放请求用的那个模型 id。
 	ID string
@@ -52,7 +52,7 @@ type ModelConfig struct {
 
 // ProviderConfig 是回放适配器发布的一条提供方路线。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:73-83
+// 源: packages/test-support/llm-replay/src/index.ts:84-94（ReplayProviderConfig）
 type ProviderConfig struct {
 	// ID 是回放请求用的那条提供方路由。
 	ID string
@@ -67,7 +67,7 @@ type ProviderConfig struct {
 
 // Config 是解算好的回放配置。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:85-122, 809-822
+// 源: packages/test-support/llm-replay/src/index.ts:918-934（Config）, 809-822
 //
 // 新增: DSH 分成插件的 Config 和解算好的 ReplayConfig 两个类型，因为 cordis 交进来
 // 的是一份 schemastery 验过的插件配置，`apply` 再把环境变量的默认补进去。Go 没有
@@ -100,7 +100,7 @@ type Config struct {
 
 // SessionScript 是一份录好的会话：那些调用，加上给父子排队用的头字段。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:145-160
+// 源: packages/test-support/llm-replay/src/index.ts:153-169（SessionScript）
 //
 // 录下来的 id 只进诊断；活会话拿的是新铸的 id，靠**第一次调用的次序**绑。
 type SessionScript struct {
@@ -117,7 +117,7 @@ type SessionScript struct {
 
 // LoadScript 读主会话那份剧本。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:509-537
+// 源: packages/test-support/llm-replay/src/index.ts:566-597（loadReplayScript）
 //
 // 有旁挂文件就用旁挂文件（整份替换，或者拿 `{patches}` 盖在推导出来的剧本上），
 // 否则用从会话 JSONL 推出来的那一份（夹具不在就当场失败）。
@@ -186,7 +186,7 @@ func deriveScriptFromFile(file string) ([]Entry, error) {
 
 // LoadSessionScripts 按绑定次序读出主剧本和那些子剧本。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:549-580
+// 源: packages/test-support/llm-replay/src/index.ts:607-646（loadSessionScripts）
 //
 // 子会话的推导从 seedLength 开始，于是继承过来的父分块绝不会被当成孩子自己的调用
 // 回放一遍。
@@ -270,7 +270,7 @@ const (
 
 // ResolveFromEnv 把一份配置里没给的字段从 DSH_SNAPSHOT_* 补上，并验一遍模态。
 //
-// 源: packages/test-support/llm-replay/src/index.ts:842-859
+// 源: packages/test-support/llm-replay/src/index.ts:968-985（apply）
 //
 // 新增: DSH 那边这一步是 cordis 插件的 `apply`——它拿到 schemastery 验过的插件配置、
 // 补上环境变量的默认、然后自己调 installLlmReplay。Go 没有装载器，所以补默认这件事

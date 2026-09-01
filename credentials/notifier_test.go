@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // quiet 是一个把日志全丢掉的记录器，给不检查日志的用例用。
@@ -262,7 +262,7 @@ func TestAnInvariantFailureIsRethrownAfterEveryListenerRan(t *testing.T) {
 
 // TestListenerFailuresAreLoggedWithEventAndSubject 钉住那条警告说得清是哪一次分发。
 //
-// 源: packages/credentials/credentials/src/index.ts:316-320
+// 源: packages/credentials/credentials/src/index.ts:309-313
 //
 // 事件名加主体是这条诊断的全部内容，也是它能带的上限：主体是引用名或记录地址，
 // 两者都不是秘密；再多就有把密钥写进日志的风险（见 [Notifier.warnListenerFailure]）。

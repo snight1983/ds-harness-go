@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"ds-harness-go/compaction"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/compaction"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // fakeSession 是一个只把日志摆在那儿的会话，满足 projection.SessionView。

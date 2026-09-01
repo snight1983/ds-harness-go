@@ -14,11 +14,11 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/skill"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/skill"
 )
 
 // toolArgs 是 skill 工具收的那一个参数。
@@ -290,7 +290,7 @@ func presentSkillCall(rawArgs json.RawMessage) tools.CallView {
 // Deps 是装这三条通路要用到的协作者。
 //
 // 新增: DSH 那边它们从 cordis 容器里按 inject 取。Go 里没有那个容器，所以摊成
-// 一个结构体，做法和 [ds-harness-go/sessionquery/querytool.Deps] 相同。
+// 一个结构体，做法和 [github.com/snight1983/ds-harness-go/sessionquery/querytool.Deps] 相同。
 type Deps struct {
 	// Tools 是工具注册表，必填。
 	Tools *tools.Runtime

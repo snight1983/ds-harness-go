@@ -17,7 +17,7 @@ type TimingActive struct {
 
 // TimingProjection 是一个有描述符的孩子会话那份耐久的活跃回合计时。
 //
-// 源: packages/subagent/subagent/src/projection-types.ts:8-19
+// 源: packages/subagent/subagent/src/projection-types.ts:7-18（SubagentTimingProjection）
 type TimingProjection struct {
 	// SettledMs 是这个孩子**自己**那条描述符之后、那些已完成回合累起来的毫秒数。
 	SettledMs int64 `json:"settledMs"`
@@ -28,7 +28,7 @@ type TimingProjection struct {
 // IdentityProjection 是一个有描述符的子 agent 会话那份耐久身份：生命周期模式
 // 加创建名，从那些 [EventDescriptor] 事件里按「最后一条算数」折出来。
 //
-// 源: packages/subagent/subagent/src/projection-types.ts:26-51
+// 源: packages/subagent/subagent/src/projection-types.ts:20-47（SubagentIdentityProjection）
 //
 // 新增: DSH 是一个按 mode 判别的联合，两支的唯一差别是「一次性那支的 label 可选、
 // 可续那支必须有」——那正是 [DescriptorData] 的那条 label 强度规矩。Go 这边和

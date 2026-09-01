@@ -14,11 +14,11 @@ import (
 	"slices"
 	"sync"
 
-	"ds-harness-go/core/agent"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // attemptPhase 是一次预定走到了哪一道边界。
@@ -75,7 +75,7 @@ type driverDeps struct {
 // 新增: DSH 那份 DriverState 是裸字段加一条 promise 链——单线程事件循环保证了
 // 处理器和 drive() 不会交错。Go 这边观察者跑在追加方那条协程上、驱动自己是另一条，
 // 所以状态由 mutex 罩住，而重复触发靠一个容量为一的信号 channel 合并（成例见
-// [ds-harness-go/schedule/schedule.Runtime]）。
+// [github.com/snight1983/ds-harness-go/schedule/schedule.Runtime]）。
 type driver struct {
 	agent agent.Agent
 	deps  driverDeps
@@ -521,7 +521,7 @@ func (d *driver) pauseUnfinished() {
 //
 // 源: packages/goal/goal-round-driver/src/index.ts:253-258
 //
-// 清的只是进程本地那点账。目标本身归 [ds-harness-go/goal/goal] 那台服务管，
+// 清的只是进程本地那点账。目标本身归 [github.com/snight1983/ds-harness-go/goal/goal] 那台服务管，
 // 它在同一条边上把活化打回未活化——所以这里清完之后本包不会立刻推什么。
 func (d *driver) onSessionStart() {
 	d.mutex.Lock()

@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // ProjectionKey 是这个单元占的投影键。

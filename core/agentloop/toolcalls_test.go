@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // fakeAgent 是一个只回答三件事的发起者：身份、日志、作用域钥匙。
@@ -645,3 +645,7 @@ func TestExecuteToolCallsRecordsTheModelArgumentsVerbatim(t *testing.T) {
 	}
 	t.Fatal("日志里没有 tool/call")
 }
+
+func (a *fakeAgent) Remove(llm.MessageID) {}
+
+func (a *fakeAgent) Replace(llm.MessageID, llm.Message) {}

@@ -27,8 +27,8 @@
 //
 //   - 一份预设一个常驻装载，被点了它名字的每个 agent 共享（单飞 + 文件戳换代）；
 //   - 任何一行装不起来（名字不认识、安装函数报错），整份装载回滚，一行都不留；
-//   - agent 靠 [ds-harness-go/core/scope.BindParent] 加入，靠
-//     [ds-harness-go/core/scope.ParentBinding.Rebind] 改嫁。
+//   - agent 靠 [github.com/snight1983/ds-harness-go/core/scope.BindParent] 加入，靠
+//     [github.com/snight1983/ds-harness-go/core/scope.ParentBinding.Rebind] 改嫁。
 //
 // **新增: DSH 的 leakedServices / inactiveRows / serviceForAgent 不移。** 它们审计的是
 // cordis 的服务领域（realm）：一行插件把服务发布进**根领域**就变成了进程级的，
@@ -37,7 +37,7 @@
 // 所以一个装在常驻作用域上的组装器**在结构上够不着根**。那条不变量在这个设计里
 // 违反不了，于是它在 [RegisterInvariants] 里是一条写明了理由的空检查，而不是漏掉的。
 //
-// **新增: 文件系统直接走 os，不走 [ds-harness-go/fs] 那道接缝。** 那道接缝建模的是
+// **新增: 文件系统直接走 os，不走 [github.com/snight1983/ds-harness-go/fs] 那道接缝。** 那道接缝建模的是
 // **执行世界**——模型看得见、可能是个远端容器的那个文件系统。预设根不是执行世界，
 // 它是这台 harness 自己的部署配置。把两者混起来，等于让一个被沙箱关着的会话去决定
 // 这台 harness 组装哪些插件。DSH 在这个包里也是直接用 node:fs 的，同一个理由。

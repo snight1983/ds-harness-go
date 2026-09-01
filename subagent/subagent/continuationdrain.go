@@ -10,8 +10,8 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Drain 关掉准入、等每一次已经被准入的物化走到公布或者回滚，然后**孩子优先**地
@@ -23,7 +23,7 @@ import (
 // 而那份汇总的失败要等每一条分支都有结局之后才报。
 //
 // 新增: 它的签名**恰好**是本仓库 disposer 的形状（收 ctx、交 error），所以可以
-// 直接当 [ds-harness-go/core/scope.Scope.Defer] 的清理交出去，见
+// 直接当 [github.com/snight1983/ds-harness-go/core/scope.Scope.Defer] 的清理交出去，见
 // [NewContinuationManager]。
 func (m *ContinuationManager) Drain(ctx context.Context) error {
 	// 在第一个可中断点**之前**同步关掉准入。已经过了那道闸的物化仍旧跟着，
@@ -353,7 +353,7 @@ func (m *ContinuationManager) assertAdmitting(subject agent.Agent) error {
 //
 // 源: packages/subagent/subagent/src/continuation.ts:923-936
 //
-// 光看 [ds-harness-go/core/agent.Agent.Status] 不够：在「一次唤醒投递被接受」和
+// 光看 [github.com/snight1983/ds-harness-go/core/agent.Agent.Status] 不够：在「一次唤醒投递被接受」和
 // 「准入它的那一跳」之间它一直是 idle，于是一个同步的收件箱观察者会在回合已经排上
 // 的时候看到 settled。accepted 装的正是这个管理器已经准入、却还没看着它离场的那些 id。
 func (m *ContinuationManager) stateOfLocked(target *activation) activationState {

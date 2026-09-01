@@ -13,17 +13,17 @@ import (
 	"strconv"
 	"strings"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // ListAgentsTool 是那件列举工具在模型那边的名字。
 //
-// 源: packages/subagent/tool-subagent-control/src/list-agents.ts:93
+// 源: packages/subagent/tool-subagent-control/src/list-agents.ts:17（name）
 const ListAgentsTool = "list_agents"
 
 // 这两个是 scope 参数认得的取值。
@@ -100,7 +100,7 @@ type ListingService interface {
 // Agents 是那份活 agent 登记里本包用得到的那一格。
 //
 // 新增: DSH 注入整个 `ctx.agents`。这里只写出 get 那一个，装配方交进来的
-// [ds-harness-go/core/agent.Registry] 自然满足它。
+// [github.com/snight1983/ds-harness-go/core/agent.Registry] 自然满足它。
 type Agents interface {
 	// Get 按会话 id 找那个活着的 agent；第二个返回值是在不在。
 	Get(id session.SessionID) (agent.Agent, bool)
@@ -173,7 +173,7 @@ func resolveScope(scope string) string {
 // 源: packages/subagent/tool-subagent-control/src/list-agents.ts:30-45
 //
 // 新增: DSH 是 `{kind:'child',...} | {kind:'diagnostic',...}` 两支按 kind 判别的
-// 联合。Go 没有判别联合，和 [ds-harness-go/subagent/subagent.ListEntry] 是同一种
+// 联合。Go 没有判别联合，和 [github.com/snight1983/ds-harness-go/subagent/subagent.ListEntry] 是同一种
 // 做法：**一个**结构体加一个 Kind 字段。那份 schema 仍旧是两支封闭的 oneOf，所以
 // 不属于本支的字段一律 omitempty——少一个键就是那一支该有的形状。
 type listedEntry struct {
@@ -185,7 +185,7 @@ type listedEntry struct {
 	// Label 是描述符上那个耐久的创建名。只有 child 有。
 	//
 	// 这里不带 omitempty：一个可续孩子的 label 必然非空（见
-	// [ds-harness-go/subagent/subagent.ListEntry.Label]），而 child 那一支
+	// [github.com/snight1983/ds-harness-go/subagent/subagent.ListEntry.Label]），而 child 那一支
 	// 要求它在场。diagnostic 那一支走的是 [diagnosticEntry]，压根没有这个字段。
 	Label string `json:"label"`
 	// Status 是活登记这一刻给出的状态。只有 child 有。
@@ -356,7 +356,7 @@ func (c *ListController) newDefinition() *tools.Definition {
 
 // jsonOf 把一个字符串排成一段 JSON 字面量，给 schema 的 enum 用。
 //
-// 新增: [ds-harness-go/core/tools.Node.Enum] 是一串 [encoding/json.RawMessage]，
+// 新增: [github.com/snight1983/ds-harness-go/core/tools.Node.Enum] 是一串 [encoding/json.RawMessage]，
 // 因为这个子集允许的取值不止字符串。这里的取值全是字符串常量，排不失败。
 func jsonOf(value string) json.RawMessage {
 	encoded, _ := json.Marshal(value) //nolint:errchkjson // 字符串常量排不出错

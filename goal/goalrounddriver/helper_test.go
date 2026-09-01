@@ -6,7 +6,7 @@
 //
 //   - **拿一台假目标服务糊弄过去**。本包所有分支的判定依据都是「此刻这份目标状态
 //     长什么样」——阶段、修订号、活化、已开轮数。这四样的演化规则写在
-//     [ds-harness-go/goal/goal] 里，不在本包。用替身就等于把那份规则重抄一遍，
+//     [github.com/snight1983/ds-harness-go/goal/goal] 里，不在本包。用替身就等于把那份规则重抄一遍，
 //     然后测的是抄件而不是本包。所以台架接的是真的 [goal.Service]。
 //   - **拿一个假收件箱糊弄过去**。本包那三条收件箱观察者上判定的是「这条消息是不是
 //     我发出去的那一条」，而 [driver.restoreOtherClaimed] 还会真的往队里 prepend。
@@ -27,12 +27,12 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // errTestRegister 是那些「这条观察者装不上」的用例摆出来的失败。
@@ -717,3 +717,7 @@ func turnEndEvent(t *testing.T, reason session.TurnEndReason) session.Event {
 	}
 	return session.Event{Type: session.EventTurnEnd, Data: encoded}
 }
+
+func (a *testAgent) Remove(llm.MessageID) {}
+
+func (a *testAgent) Replace(llm.MessageID, llm.Message) {}

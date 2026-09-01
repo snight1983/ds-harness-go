@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // event 造一条带着这份负载的事件。

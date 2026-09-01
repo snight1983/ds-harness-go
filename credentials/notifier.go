@@ -1,6 +1,6 @@
 // 本文件的作用：把「某个凭据提交了一次变更」这件事发给订阅者，并且**兜住**订阅者的失败。
 //
-// 源: packages/credentials/credentials/src/index.ts:265-320
+// 源: packages/credentials/credentials/src/index.ts:258-313
 
 package credentials
 
@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // RefListener 观察一个引用的提交变更。
@@ -26,7 +26,7 @@ type RecordListener func(key Key)
 
 // Notifier 是那张订阅表加上它的分发规则，也就是 DSH 抽象基类里已经写好的那三个成员。
 //
-// 源: packages/credentials/credentials/src/index.ts:265-320
+// 源: packages/credentials/credentials/src/index.ts:258-307
 //
 // 提供方**内嵌**它就同时拿到 [Observer]（给消费方订阅）和两个 Notify 方法
 // （给自己在提交之后调）。哪一半该由谁调，见包文档里「内嵌把 protected 变成了公开」。
@@ -214,7 +214,7 @@ func (n *Notifier) fanOut(event, subject string, dispatch func(deliver func(func
 
 // warnListenerFailure 是订阅者失败时留下的那条诊断。
 //
-// 源: packages/credentials/credentials/src/index.ts:316-320
+// 源: packages/credentials/credentials/src/index.ts:309-313
 //
 // **不记 subject 之外的任何内容**这一点是有意的：subject 是引用名或记录地址，
 // 两者都不是秘密；而订阅者手上可能正拿着刚解析出来的值，把 panic 的值原样打进日志

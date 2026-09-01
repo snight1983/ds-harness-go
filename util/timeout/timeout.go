@@ -160,7 +160,7 @@ func OfContext(ctx context.Context, code string) *Reason {
 
 // Watchdog 是一条流的**空闲**超时：只在等下一个值的时候计时。
 //
-// 源: packages/util/timeout/src/index.ts:126-173
+// 源: packages/util/timeout/src/index.ts:65-79（IdleWatchdog）
 //
 // 和 Deadline 的区别是它管的不是「这件事总共花了多久」，而是「上游多久没吐东西了」。
 // 一条正常但很长的流不该被总时长打断，一条卡死的流必须被打断——两者的差别只有

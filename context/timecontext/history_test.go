@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func Test上一条模型可见消息认三种事件(t *testing.T) {

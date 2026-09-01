@@ -14,11 +14,11 @@ import (
 	"errors"
 	"fmt"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/sessionquery"
 )
 
 // SectionName 是这五件工具那段共用指引在提示词注册表里的名字。
@@ -164,7 +164,7 @@ func enumArray(description string, values ...string) tools.Node {
 
 // sessionSearchParameters 是 session_search 的参数 schema。
 //
-// 源: packages/session-query/tool-session-query/src/input.ts:45-67
+// 源: packages/session-query/tool-session-query/src/input.ts:296-307（toolInput）
 //
 // 属性顺序照抄 DSH：[tools.Property] 是有序切片，因为这个顺序会进提示词缓存的
 // 键（见 [tools.Node] 的注释）。换个顺序不改语义，但会把整份缓存作废。
@@ -354,7 +354,7 @@ func execute[A any](
 // Deps 是装这五件工具要用到的协作者。
 //
 // 新增: DSH 那边它们从 cordis 容器里按 inject 取。Go 里没有那个容器，
-// 所以摊成一个结构体，做法和 [ds-harness-go/plan/planmode.Deps] 相同。
+// 所以摊成一个结构体，做法和 [github.com/snight1983/ds-harness-go/plan/planmode.Deps] 相同。
 type Deps struct {
 	// Tools 是工具注册表，必填。
 	Tools *tools.Runtime
@@ -364,7 +364,7 @@ type Deps struct {
 
 // Install 把五件工具和那段指引一次装齐，返回把它们一起摘下来的函数。
 //
-// 源: packages/session-query/tool-session-query/src/index.ts:58-123
+// 源: packages/session-query/tool-session-query/src/index.ts:56-122（apply）
 //
 // 中途装不上就把已经装上的按反序摘干净再报错：半装上去意味着模型手上有一件
 // 检索工具、却没有那段告诉它「找到之后该跟进」的指引，它会拿摘录当全部事实。

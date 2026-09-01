@@ -113,7 +113,7 @@ const (
 
 // PathOp 是对一个命名空间用户段的一次**按路径**编辑。
 //
-// 源: packages/settings/settings/src/index.ts:192-202
+// 源: packages/settings/settings/src/index.ts:182-192（SettingsPathOp）
 //
 // # 它为什么存在
 //

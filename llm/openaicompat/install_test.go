@@ -16,10 +16,10 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/credentials"
-	"ds-harness-go/llm"
-	"ds-harness-go/settings"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/credentials"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/settings"
 )
 
 // memorySettings 是一个把整份文档记在内存里的设置后端。

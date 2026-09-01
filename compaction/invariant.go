@@ -8,7 +8,7 @@ package compaction
 import (
 	"fmt"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -346,7 +346,7 @@ func (t *Trace) Apply(transition Transition) {
 
 // ValidateLog 把一整段日志按本包的不变量走一遍，返回走完之后的那份账。
 //
-// 源: packages/compaction/compaction/src/invariant.ts:243-259（install 里的 seed）
+// 源: packages/compaction/compaction/src/invariant.ts:300-306（install 里的 seed）
 //
 // # 为什么要先算一遍作废的括号
 //

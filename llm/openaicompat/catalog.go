@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"slices"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // 推理档位。
@@ -53,7 +53,7 @@ func isThinkingLevel(level llm.ReasoningEffortID) bool {
 
 // ModelProfile 是配置里写下来的一条模型。
 //
-// 源: packages/llm/llm-pi-ai/src/catalog.ts:533-568
+// 源: packages/llm/llm-pi-ai/src/catalog.ts:548-585（PiAiModelProfile）
 //
 // 新增: DSH 那份的每个字段都能不填、由内置目录里同 id 的那条兜底。这个重写没有
 // 内置目录（见包注释），所以「不填」兜的是路由自己那几个 default*，兜不到别处去。
@@ -61,7 +61,7 @@ func isThinkingLevel(level llm.ReasoningEffortID) bool {
 //
 // 新增: 每个字段都带 json 标签，键名逐字照 DSH 的 schema（catalog.ts:533-568）。
 // 这不是为了兼容一份 DSH 写下的配置，而是因为 [Config] 会原样登记成一个设置命名
-// 空间，而 [ds-harness-go/settings.Register] 是拿 encoding/json 把这个类型来回
+// 空间，而 [github.com/snight1983/ds-harness-go/settings.Register] 是拿 encoding/json 把这个类型来回
 // 过一遍的——没有标签的话，写配置的人在 settings.yaml 里要写的是 Go 的字段名
 // （`ContextWindow`），而界面和文档里说的是另一套拼法。
 type ModelProfile struct {
@@ -173,7 +173,7 @@ func invalidRoute(provider, detail string) error {
 
 // routeCatalogRequest 是落一条路由的模型清单要读的那几件事。
 //
-// 源: packages/llm/llm-pi-ai/src/catalog.ts:578-596
+// 源: packages/llm/llm-pi-ai/src/catalog.ts:596-616（RouteCatalogRequest）
 type routeCatalogRequest struct {
 	provider             string
 	models               []ModelProfile
@@ -184,7 +184,7 @@ type routeCatalogRequest struct {
 
 // routeCatalog 是一条路由落完的模型清单，加上这份配置显式选下来的那些请求上限。
 //
-// 源: packages/llm/llm-pi-ai/src/catalog.ts:757-772
+// 源: packages/llm/llm-pi-ai/src/catalog.ts:772-787（RouteCatalog）
 type routeCatalog struct {
 	// models 按配置里的书写次序排着。
 	models []ResolvedModel
@@ -199,7 +199,7 @@ type routeCatalog struct {
 
 // resolveRouteModels 把一条路由写下来的模型清单落成模型记录。
 //
-// 源: packages/llm/llm-pi-ai/src/catalog.ts:781-893
+// 源: packages/llm/llm-pi-ai/src/catalog.ts:789-908（resolveRouteModels）
 //
 // 新增: DSH 头一段处理 modelOverrides（按 id 定制内置目录里的某一条）。没有内置
 // 目录之后，那张表**每一条**都会撞上 DSH 自己那句「内置目录不描述这条路由」的

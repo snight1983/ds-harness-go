@@ -8,8 +8,8 @@ package basic
 import (
 	"fmt"
 
-	"ds-harness-go/compaction"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/compaction"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // PricedNode 是表面上一个节点和它在计量器那把固定尺子下的估价。
@@ -165,7 +165,7 @@ func InspectEntryState(events []session.Event) (EntryState, error) {
 
 // CheckNoActiveCompaction 拒掉一次「上一个压缩括号还开着」的开工。
 //
-// 源: packages/compaction/compaction-basic/src/region.ts:286-312
+// 源: packages/compaction/compaction-basic/src/region.ts:302-314（assertNoActiveCompaction）
 //
 // 例外是那个开着的括号排在最近一道 session/end-seed **之前**：种子边界之前的
 // 日志是继承来的，那边的括号在这一侧永远等不到它的 compaction/end，

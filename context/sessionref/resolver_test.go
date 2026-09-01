@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // newTestResolver 拿一份替身装一个解析器出来。

@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 var (
@@ -49,7 +49,7 @@ const (
 //	vocabulary := session.CoreVocabulary().With(llmretry.EventTypes()...)
 //
 // 不这么做的话，一段带重试的日志会被 [session.CheckVocabulary] 判成
-// 「有不认识的事件类型」而整个拒掉。做法与 [ds-harness-go/compaction.EventTypes]
+// 「有不认识的事件类型」而整个拒掉。做法与 [github.com/snight1983/ds-harness-go/compaction.EventTypes]
 // 逐字相同。
 func EventTypes() []session.EventType {
 	return []session.EventType{EventRetry, EventRetryStarted}
@@ -131,7 +131,7 @@ type retryWire struct {
 // 档位和 maxRetries 对不上时当场报错，而不是排出一条介质上违规的事件：那种事件
 // 读回来会被本包的不变量拦下（[Trace.Validate]），而拦下的方式是 panic，
 // 现场却没有任何东西指回写它的这一刻。做法和
-// [ds-harness-go/compaction.SummaryData.MarshalJSON] 上那条 llmStreamCall 检查一样。
+// [github.com/snight1983/ds-harness-go/compaction.SummaryData.MarshalJSON] 上那条 llmStreamCall 检查一样。
 func (d RetryData) MarshalJSON() ([]byte, error) {
 	switch d.Mode {
 	case llm.RetryNormal:
@@ -229,7 +229,7 @@ func DecodeRetryStarted(event session.Event) (RetryStartedData, error) {
 // 类型收窄了。[session.EventData] 是个**封闭**接口（带一个不可导出的方法），
 // 本包这两种负载进不去那个联合，所以 [session.DecodeData] 只会把它们交成
 // [session.RawData]。于是这里直接读 [session.Event.Data]，自己查一遍类型。
-// 做法与 [ds-harness-go/compaction] 里那个同名函数逐字相同。
+// 做法与 [github.com/snight1983/ds-harness-go/compaction] 里那个同名函数逐字相同。
 func decodePayload[T any](event session.Event, kind session.EventType) (T, error) {
 	var decoded T
 	if event.Type != kind {

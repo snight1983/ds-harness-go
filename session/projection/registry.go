@@ -10,12 +10,12 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ChangeListener 是变更流的听众：一个会话上的一个单元的值变了。
 //
-// 源: packages/session/session-projection/src/index.ts:84-94
+// 源: packages/session/session-projection/src/index.ts:88-98（ProjectionChangeListener）
 //
 // value 是那个单元的 [Definition.View] 输出；seq 是发出这一声时那个单元的水位，
 // 也就是引起这次变化的那条事件的 seq。
@@ -26,7 +26,7 @@ type ChangeListener func(view SessionView, key string, value any, seq int)
 
 // Registry 是投影单元表和它的驱动。
 //
-// 源: packages/session/session-projection/src/index.ts:163-495
+// 源: packages/session/session-projection/src/index.ts:169-670（SessionProjectionRegistry）
 //
 // 每一条已提交的事件都要过一遍每个已登记单元的 [Definition.Apply]（急切驱动），
 // 一个客户端可见的单元报告自己变了，就带着视图通知变更流。
@@ -165,7 +165,7 @@ func (r *Registry) StateOf(view SessionView, key string) (any, bool) {
 // Snapshot 是对一个会话上所有已登记的客户端可见单元的一次一致读切，
 // 从水位缓存里读（缺的单元格现折）。
 //
-// 源: packages/session/session-projection/src/index.ts:297-313
+// 源: packages/session/session-projection/src/index.ts:100-110（ProjectionSnapshot）
 //
 // 它是完全同步的：每一个值和 AsOfSeq 都反映同一个日志位置。
 func (r *Registry) Snapshot(view SessionView) Snapshot {
@@ -186,7 +186,7 @@ func (r *Registry) Snapshot(view SessionView) Snapshot {
 // Checkpoint 给出一个会话上每一个已登记单元的状态级检查点，
 // 从水位缓存里读（缺的单元格现折）。
 //
-// 源: packages/session/session-projection/src/index.ts:315-340
+// 源: packages/session/session-projection/src/index.ts:129-130（ProjectionCheckpoint）
 //
 // 这是持久投影缓存的写侧：返回的行就是落盘那条
 // (sessionId, key, ver, seq, val) 记录去掉外面两个键之后的部分。

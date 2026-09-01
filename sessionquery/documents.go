@@ -5,7 +5,7 @@
 package sessionquery
 
 import (
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // BuildEventRecords 把一份原始日志投影成带表面位置的轻量记录。

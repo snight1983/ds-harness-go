@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 func TestASessionWithoutASeedStartsEmpty(t *testing.T) {

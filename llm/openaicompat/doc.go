@@ -18,7 +18,7 @@
 //
 // 做的：
 //   - 一个 OpenAI Chat Completions 的流式客户端（走 github.com/openai/openai-go/v3），
-//     实现 [ds-harness-go/llm.Adapter]；
+//     实现 [github.com/snight1983/ds-harness-go/llm.Adapter]；
 //   - 手工声明的路由（baseURL + apiKey + headers）——正是 docs/DESIGN.md 说的
 //     「本地模型走这条」；
 //   - 配置校验、模型目录解算、重试策略、重放状态、图片卸载这几层照旧逐行对着 DSH 走。
@@ -61,7 +61,7 @@ import "errors"
 
 // PluginName 是这个插件在诊断里的名字。
 //
-// 源: packages/llm/llm-pi-ai/src/index.ts:87
+// 源: packages/llm/llm-pi-ai/src/index.ts:89（name）
 //
 // 新增: 不叫 llm-pi-ai——它不再用那个库，一条说 "llm-pi-ai: ..." 的诊断会把人
 // 引到一个这份代码里根本不存在的依赖上去。
@@ -71,5 +71,5 @@ const PluginName = "llm-openai-compat"
 //
 // 新增: DSH 那边一律 `throw new Error(...)`，调用方靠读文案分辨。Go 这边配置错误
 // 全部包在这一个哨兵下面，让装配方能用 errors.Is 判定「这是配错了，不是跑挂了」。
-// 理由和 [ds-harness-go/llm/llmretry.ErrInvalidConfig] 上那条一样。
+// 理由和 [github.com/snight1983/ds-harness-go/llm/llmretry.ErrInvalidConfig] 上那条一样。
 var ErrInvalidConfig = errors.New(PluginName + ": 配置不合法")

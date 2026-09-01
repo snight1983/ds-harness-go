@@ -7,12 +7,12 @@ package session
 import (
 	"encoding/json"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // EventData 是一条事件的负载。
 //
-// 源: packages/core/session/src/types.ts:236-337
+// 源: packages/core/session/src/types.ts:210-320（SessionEventMap）
 //
 // 这个联合是**开放**的：本包登记的十三个变体之外，一切落进 [RawData]，
 // 原始字节原样保管。理由见包文档「事件数据为什么是 json.RawMessage」。

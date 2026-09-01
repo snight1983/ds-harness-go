@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // workspaceIDs 把一串工作区摊成 id，断言展示次序时读起来短一些。

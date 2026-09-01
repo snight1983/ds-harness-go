@@ -2,7 +2,7 @@
 // 看的说明、那份共用的紧凑输出、update_goal 那道从宽到严的资格阶梯，以及把这一整套
 // 连同那段策略指引装上一个作用域的那一步。
 //
-// 源: packages/goal/tool-goal/src/index.ts:45-338
+// 源: packages/goal/tool-goal/src/index.ts:44-337
 
 package goaltool
 
@@ -16,11 +16,11 @@ import (
 	"strings"
 	"unicode"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // 这三个是三件工具在模型那边的名字。
@@ -59,7 +59,7 @@ const (
 // 源: packages/goal/tool-goal/src/index.ts:43
 var updateActions = []string{actionEdit, actionPause, actionResume, actionComplete, actionBlocked}
 
-// blockCode 是模型自报阻塞时落进 [ds-harness-go/goal/goal.BlockReason] 的那个分类。
+// blockCode 是模型自报阻塞时落进 [github.com/snight1983/ds-harness-go/goal/goal.BlockReason] 的那个分类。
 //
 // 源: packages/goal/tool-goal/src/index.ts:310
 //
@@ -120,7 +120,7 @@ const (
 // 源: packages/goal/goal/src/index.ts:141-144
 //
 // 新增: DSH 那边这句话只在域里出现——模型给的 `number` 原样送进去，非整数由域拒。
-// Go 的 [ds-harness-go/goal/goal.CreateRequest.MaxGoalRounds] 是 *int，装不下 2.5，
+// Go 的 [github.com/snight1983/ds-harness-go/goal/goal.CreateRequest.MaxGoalRounds] 是 *int，装不下 2.5，
 // 所以那次拒收挪到了本层。字节要和域一模一样，否则同一个模型在两边看见两句话。
 const invalidMaxRounds = "maxGoalRounds must be a positive safe integer"
 
@@ -158,7 +158,7 @@ const maxSafeInteger = min(1<<53-1, math.MaxInt)
 // safeInteger 把模型给的那个 JSON number 折成一个安全整数。
 //
 // 新增: 走 float64 而不是 [encoding/json.Number]，理由同
-// [ds-harness-go/schedule/schedule.safeInteger]：JS 那边 3.0 和 3 是同一个数，
+// [github.com/snight1983/ds-harness-go/schedule/schedule.safeInteger]：JS 那边 3.0 和 3 是同一个数，
 // 换成 json.Number 的话 "3.0" 解不出整数，于是同一个模型在两边表现不一样。
 func safeInteger(value float64) (int, bool) {
 	if value != math.Trunc(value) || math.Abs(value) > float64(maxSafeInteger) {
@@ -172,7 +172,7 @@ func safeInteger(value float64) (int, bool) {
 // 新增: DSH 那份输出是 JSON.stringify 排的，它不把 < > & 转成 < 这类写法；
 // [encoding/json.Marshal] 默认转。目标描述和阻塞原因都是人和模型写的自由文本，
 // 而这份字节直接摆进模型上下文里给它读——多出来的转义只会让它看见一句和原文长得
-// 不一样的话。理由同 [ds-harness-go/goal/goal.marshalNoEscape]。
+// 不一样的话。理由同 [github.com/snight1983/ds-harness-go/goal/goal.marshalNoEscape]。
 //
 // 本包实际交给它的只有两种值：一个 Go 字符串，和一份只由字符串与整数组成的
 // [goalWire]。两种都排得出来，所以除了那三条工具体（它们一句 return 就把错误转手
@@ -243,7 +243,7 @@ type goalWire struct {
 // 源: packages/goal/tool-goal/src/index.ts:157-173
 //
 // activation 是一次**观察**，不是回放状态：它从不落盘（见
-// [ds-harness-go/goal/goal.Activation]），交给模型只是为了让它知道这个目标此刻
+// [github.com/snight1983/ds-harness-go/goal/goal.Activation]），交给模型只是为了让它知道这个目标此刻
 // 会不会自己往下推。
 func goalValue(view *goal.View) goalWire {
 	if view == nil {
@@ -258,7 +258,7 @@ func goalValue(view *goal.View) goalWire {
 		MaxGoalRounds: view.MaxGoalRounds,
 	}
 	if view.BlockedReason != nil {
-		// 复制一份再交出去：[ds-harness-go/goal/goal.View] 里那是一个导出的指针，
+		// 复制一份再交出去：[github.com/snight1983/ds-harness-go/goal/goal.View] 里那是一个导出的指针，
 		// 直接转手意味着这份结果和那台服务共享同一块可写内存。
 		reason := *view.BlockedReason
 		payload.BlockedReason = &reason
@@ -271,7 +271,7 @@ func goalValue(view *goal.View) goalWire {
 // 源: packages/goal/tool-goal/src/index.ts:72-110
 //
 // 新增: DSH 把「必填」写在每个属性自己身上（`required: true`），
-// [ds-harness-go/core/tools.Node] 按 JSON Schema 本来的样子写在对象上（Required）。
+// [github.com/snight1983/ds-harness-go/core/tools.Node] 按 JSON Schema 本来的样子写在对象上（Required）。
 // 两边表达的是同一件事。
 func goalValueSchema() tools.Node {
 	closed := false
@@ -755,7 +755,7 @@ func wrapupMessage(action, objective, blockedReason string, complete bool) llm.M
 
 // Install 把那段策略指引和这三件工具装上一个作用域，交回把它们一起摘下来的函数。
 //
-// 源: packages/goal/tool-goal/src/index.ts:187-338
+// 源: packages/goal/tool-goal/src/index.ts:185-337
 //
 // 次序照 DSH 的 apply：先指引，再 get_goal、create_goal、update_goal。中途失败就按
 // 反序摘干净——半装上去意味着模型手上有一件建得了目标、却没有那段策略指引管着的

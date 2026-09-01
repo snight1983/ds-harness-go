@@ -21,8 +21,8 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/storage"
-	"ds-harness-go/storage/storagetest"
+	"github.com/snight1983/ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )
 
 // hasCode 判断一个错误是不是带某个码的 *storage.Error。

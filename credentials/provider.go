@@ -8,7 +8,7 @@ import "context"
 
 // Resolved 是一次解析出来的凭据值，以及供出它的那一层。
 //
-// 源: packages/credentials/credentials/src/index.ts:114-120
+// 源: packages/credentials/credentials/src/index.ts:117-123（ResolvedCredential）
 type Resolved struct {
 	// Value 是非空的密钥值。
 	Value string
@@ -36,7 +36,7 @@ type Info struct {
 
 // RecordInfo 是一条记录的在场与可写性，配置界面拿它安全——**永远不含值本身**。
 //
-// 源: packages/credentials/credentials/src/index.ts:132-145
+// 源: packages/credentials/credentials/src/index.ts:125-138（CredentialRecordInfo）
 type RecordInfo struct {
 	// Configured 表示有没有存着一条记录。
 	//
@@ -56,7 +56,7 @@ type RecordInfo struct {
 
 // RecordEntry 是枚举时给出的一条记录的地址和标签——**永远不含值**。
 //
-// 源: packages/credentials/credentials/src/index.ts:147-153
+// 源: packages/credentials/credentials/src/index.ts:140-146（CredentialRecordEntry）
 type RecordEntry struct {
 	// Key 是这条记录的地址。
 	Key Key

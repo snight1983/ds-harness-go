@@ -16,9 +16,9 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // measurementAnchor 是一次「提供方亲口报过」的锚点。
@@ -77,7 +77,7 @@ type replayState struct {
 
 // TokenMeter 是 token 计量服务。
 //
-// 源: packages/llm/token-meter/src/index.ts:74-311
+// 源: packages/llm/token-meter/src/index.ts:88-332（TokenMeter）
 //
 // 它按会话缓一份重放状态，[TokenMeter.Measure] 每次调用先把新事件折进来再答话，
 // 所以同一份日志重复问不会重复折。

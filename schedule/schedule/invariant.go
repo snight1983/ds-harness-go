@@ -9,15 +9,15 @@ import (
 	"context"
 	"errors"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Stream 是一段要整条验的会话日志。
 //
 // 源: packages/schedule/schedule/src/invariant.ts:19 (events, seedLength)
 //
-// 新增: 本仓库别处的不变量都是一条事件一验（见 [ds-harness-go/todo.ValidateEvent]），
+// 新增: 本仓库别处的不变量都是一条事件一验（见 [github.com/snight1983/ds-harness-go/todo.ValidateEvent]），
 // 这一条不行：schedule 的规则全是**跨事件**的——一个 id 不许被建两次、delete 和
 // dispatch 只许指向此刻活着的记录、固定频率的 dispatch 必须带一个不早于当前
 // scheduledAt 的 acceptedAt。这几条脱离前面那一串就无从判断，所以这里传的是整条流。
@@ -33,7 +33,7 @@ type Stream struct {
 // 源: packages/schedule/schedule/src/invariant.ts:19-27
 //
 // 新增: DSH 那个 validate 收一个 fail 回调、就地报掉。这里交回错误，和
-// [ds-harness-go/todo.ValidateEvent] 的理由一样：它因此可以脱离不变量注册表单独用
+// [github.com/snight1983/ds-harness-go/todo.ValidateEvent] 的理由一样：它因此可以脱离不变量注册表单独用
 // ——离线校验一份日志，或者在写之前自己先验一遍——而 [RegisterInvariants] 只是把
 // 这个错接到 [invariants.Fail] 上。
 //

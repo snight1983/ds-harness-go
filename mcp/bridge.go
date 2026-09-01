@@ -16,14 +16,14 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // bridgeOptions 是造一代工具时要紧的那几个解算完的选项。
 //
-// 源: packages/mcp/mcp-client/src/tools.ts:30-35
+// 源: packages/mcp/mcp-client/src/tools.ts:29-35（ToolBridgeOptions）
 type bridgeOptions struct {
 	// serverName 是这台服务器的命名空间。
 	serverName string
@@ -78,7 +78,7 @@ type preparedProjection struct {
 // projectionStore 是「一次执行 → 一份预备好的投影」这张表。
 //
 // 新增: DSH 用 `WeakMap<ToolExecution, PreparedProjection>`，键是执行对象的身份，
-// 靠 GC 回收。Go 没有 WeakMap，但 [ds-harness-go/core/tools.ExecutionToken] 本来
+// 靠 GC 回收。Go 没有 WeakMap，但 [github.com/snight1983/ds-harness-go/core/tools.ExecutionToken] 本来
 // 就是一个可比较、且全进程唯一的相关性标识，拿它当键就够了；泄漏由「读一次就删」
 // 挡住——本包只在 Execute 里写，而管线保证对每一份规范化过的结果恰好调一次
 // FinalizeContent，所以每一条要么被读走，要么随着这一代工具一起被撤销。
@@ -127,7 +127,7 @@ func (s *projectionStore) take(token tools.ExecutionToken) (preparedProjection, 
 //     让模型要么看见完整的一代、要么一个都看不见。
 //
 // 新增: DSH 那边「入参 schema 说不出口」是在第 2 步由 ctx.tools.register 抛出来的，
-// 于是它走回滚那条路。Go 这边 schema 要先解成 [ds-harness-go/core/tools.Node] 才造得出
+// 于是它走回滚那条路。Go 这边 schema 要先解成 [github.com/snight1983/ds-harness-go/core/tools.Node] 才造得出
 // 定义，所以那件事提前到了第 1 步——按 DSH 自己写的分步意图（「凡是不碰注册表就
 // 判得了的都在第 1 步判」），这是它本来就该在的位置，而且上一代因此活了下来。
 func syncTools(
@@ -239,7 +239,7 @@ func createDefinition(
 // parseInputSchema 把对方报的入参 schema 解成本装置说得出的那个子集。
 //
 // 新增: DSH 直接把 `tool.inputSchema` 当成 `Record<string, unknown>` 往下递，
-// 由注册表在登记时验。Go 的 [ds-harness-go/core/tools.Definition.Parameters] 是
+// 由注册表在登记时验。Go 的 [github.com/snight1983/ds-harness-go/core/tools.Definition.Parameters] 是
 // 一个 typed 的 Node，所以这里先解一遍——解不动就是「这个工具的入参说不出口」，
 // 让整次同步失败，而不是造一个半截的定义。
 func parseInputSchema(tool *sdk.Tool, serverName string) (tools.Node, error) {

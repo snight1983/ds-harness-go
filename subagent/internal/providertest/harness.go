@@ -1,20 +1,29 @@
 // Package providertest 是进程内子 agent 提供方共用的测试装配。
 //
+// 新增: DSH 没有这个包，所以这里整份是新写的，全文没有 `// 源:` 注释。
+// 上游那两个提供方的 spec 各自就地摆自己的上下文，要共用别处的东西时直接
+// import 那个包的测试文件（fork 的 multi-subagent.spec.ts 就是这么拿
+// core/agent-loop/tests/mock-adapter.ts 的）——TS 的模块系统不拦这件事。
+// Go 的 _test.go 导不出去，共用的装配只能落成一个普通包，于是有了这一个。
+//
+// 注意别把它当成上游 subagent-spawn-in-process/tests/harness.ts 的对译：
+// 那一份装的是真模型加真 bash 的 e2e 整栈，和这里要的东西不是一回事。
+//
 // spawn 与 fork 两个提供方各自只有几十行，可它们那几行里唯一真正会出错的地方——
 // 「谁给种子、谁不给」——只有走完一整条真的创建路才看得见：种子是在
-// [ds-harness-go/core/agent.Registry] 调造法的那一刻记下来的。所以这里把注册表、
+// [github.com/snight1983/ds-harness-go/core/agent.Registry] 调造法的那一刻记下来的。所以这里把注册表、
 // 活会话表、一份记账的造法和一个手工摆出来的父装成一台，两个提供方共用。
 //
 // # 为什么它不是 _test.go
 //
 // 这台装配要被**两个包**导入，而 Go 的 _test.go 只属于自己那个包，导不出去。
 // 所以它是一个普通包，像标准库的 net/http/httptest 一样导入 testing
-// （成例见 ds-harness-go/storage/storagetest）。它落在 internal 下面，
-// 只有 ds-harness-go/subagent/... 进得来。
+// （成例见 github.com/snight1983/ds-harness-go/storage/storagetest）。它落在 internal 下面，
+// 只有 github.com/snight1983/ds-harness-go/subagent/... 进得来。
 //
 // # 这里的孩子当场就静
 //
-// [ds-harness-go/subagent/inprocessdriver] 自己那一包的用例要的是一个真的会停在
+// [github.com/snight1983/ds-harness-go/subagent/inprocessdriver] 自己那一包的用例要的是一个真的会停在
 // WhenIdle 上的孩子，好把「等孩子跑完」那条边压住。这里不要：那条边归那一包，
 // 这里只问「造法收到的那份 CreateOptions 长什么样」，而它在孩子静不静之前就记下了。
 package providertest
@@ -30,15 +39,15 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/subagent/inprocessdriver"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/inprocessdriver"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // absolutePath 是一条在本机上确实绝对的路径。
@@ -78,7 +87,7 @@ func TextContent(body string) llm.Content { return llm.Content{llm.TextBlock{Tex
 
 // ---- 假 agent ----
 
-// StubAgent 是一个只为满足 [ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
+// StubAgent 是一个只为满足 [github.com/snight1983/ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
 //
 // 它当场就静：WhenIdle 立刻返回。
 type StubAgent struct {
@@ -101,6 +110,8 @@ func (a *StubAgent) Followup(llm.Message)                                   {}
 func (a *StubAgent) Steer(llm.Message)                                      {}
 func (a *StubAgent) Inject(llm.Message)                                     {}
 func (a *StubAgent) Prepend(llm.Message, agent.InboxTarget)                 {}
+func (a *StubAgent) Remove(llm.MessageID)                                   {}
+func (a *StubAgent) Replace(llm.MessageID, llm.Message)                     {}
 
 func (a *StubAgent) RunMaintenance(ctx context.Context, task func(context.Context) error) error {
 	return task(ctx)

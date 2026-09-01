@@ -10,12 +10,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // Snapshot 是对一个会话上所有已登记的、客户端可见的单元的一次一致读切。
 //
-// 源: packages/session/session-projection/src/index.ts:96-106
+// 源: packages/session/session-projection/src/index.ts:100-110（ProjectionSnapshot）
 type Snapshot struct {
 	// AsOfSeq 是这些值反映到的最后一条事件的 seq；空日志时为 -1。
 	//
@@ -30,7 +30,7 @@ type Snapshot struct {
 // CheckpointRow 是一个单元的一次检查点：它的内部状态、折进去的最后一条事件的
 // seq、以及产出它的那个 [Definition.StateVersion]。
 //
-// 源: packages/session/session-projection/src/index.ts:108-123
+// 源: packages/session/session-projection/src/index.ts:112-127（ProjectionCheckpointRow）
 //
 // 一行检查点**永远不是权威**，它只是一条折叠捷径：[Registry.Restore] 在版本
 // 对不上、或者它声称的水位超过了存储里日志的末尾时会把它丢掉。
@@ -45,7 +45,7 @@ type CheckpointRow struct {
 
 // Checkpoint 是一个会话的那份持久投影缓存：按投影键归档的检查点行。
 //
-// 源: packages/session/session-projection/src/index.ts:125-126
+// 源: packages/session/session-projection/src/index.ts:129-130（ProjectionCheckpoint）
 type Checkpoint map[string]CheckpointRow
 
 // Restored 是一次冷读的结果：切在给进来那截日志末尾的读面，加上同一个位置上

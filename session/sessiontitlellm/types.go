@@ -12,9 +12,9 @@ import (
 	"iter"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/sessiontitle"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/sessiontitle"
 )
 
 // EventTitleLLMRequest 是派发之前落下来的那条请求记录。
@@ -79,7 +79,7 @@ var (
 // Streamer 是本包从模型运行时身上要用的全部东西。
 //
 // 新增: DSH 从 ctx.llm 上拿整个运行时。这里只声明流式那一件事，理由见包文档。
-// [ds-harness-go/llm.Runtime] 直接满足它。
+// [github.com/snight1983/ds-harness-go/llm.Runtime] 直接满足它。
 type Streamer interface {
 	// Stream 把一次模型调用按原始分块流出来。
 	Stream(ctx context.Context, options llm.GenerateOptions) (iter.Seq2[llm.StreamChunk, error], error)

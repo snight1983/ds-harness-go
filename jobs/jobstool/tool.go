@@ -2,7 +2,7 @@
 // 说明、那份「这次调用能看见多大预算」的旁路记账、一条结算通知怎么找到它的属主，
 // 以及把这一整套装上一个作用域的那一步。
 //
-// 源: packages/jobs/tool-jobs/src/index.ts:184-402
+// 源: packages/jobs/tool-jobs/src/index.ts:184-401
 
 package jobstool
 
@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // 这三个是三件工具在模型那边的名字。
@@ -116,7 +116,7 @@ type Controller struct {
 	// 源: packages/jobs/tool-jobs/src/index.ts:212-215
 	spentWakes map[agent.Agent]int
 	// wakeCleanups 是每个属主身上挂的那一项清理的摘除函数，做法同
-	// [ds-harness-go/jobs/localjobs.Registry.ensureOwnerCleanup]：Go 没有 WeakMap，
+	// [github.com/snight1983/ds-harness-go/jobs/localjobs.Registry.ensureOwnerCleanup]：Go 没有 WeakMap，
 	// 所以由属主自己的作用域负责把它那一行从表里删掉；攥住摘除函数是为了让本包
 	// 拆除时能把这些跨协程的清理收回来。
 	wakeCleanups map[agent.Agent]func(context.Context) error
@@ -180,7 +180,7 @@ func validateJobID(value string) (jobs.JobID, error) {
 
 // callerOf 把这次执行落在的那把钥匙换成那个活 agent，换不出来就是 nil。
 //
-// 新增: 和 [ds-harness-go/subagent/controltool.Controller.callerOf] 不同，这里
+// 新增: 和 [github.com/snight1983/ds-harness-go/subagent/controltool.Controller.callerOf] 不同，这里
 // **查不回来不是错**：这三件工具对一个无身份的调用方照样成立，它看得见的就是
 // 那些无主作业。理由写在 [Config.AgentOf] 上。
 func (c *Controller) callerOf(key *scope.Key) agent.Agent {
@@ -223,7 +223,7 @@ func (c *Controller) visibleOutputLimit(exec tools.Execution) (int, bool) {
 // 源: packages/jobs/tool-jobs/src/index.ts:232-236
 //
 // 新增: DSH 用 `{prepend: true}` 把这条规则排到瀑布最外层，好让它在任何一条可能
-// 拒掉调用的规则**之前**跑。Go 侧 [ds-harness-go/core/tools.Runtime.PreExecute]
+// 拒掉调用的规则**之前**跑。Go 侧 [github.com/snight1983/ds-harness-go/core/tools.Runtime.PreExecute]
 // 没有 prepend——顺序是「先全局、再从最远的祖先到 agent 自己，先登记的在外层」。
 // 这不影响正确性：记不上的那次调用会在收尾时回头现查一遍（见
 // [Controller.finalizeContent]），记账只是省掉那一次查。
@@ -240,7 +240,7 @@ func (c *Controller) captureOutputLimit(exec tools.Execution, next func() (tools
 //
 // 源: packages/jobs/tool-jobs/src/index.ts:238-240
 //
-// 无论取没取到都要删：[ds-harness-go/core/tools.Definition.FinalizeContent] 对
+// 无论取没取到都要删：[github.com/snight1983/ds-harness-go/core/tools.Definition.FinalizeContent] 对
 // 每一份规范化过的结果恰好被调一次，这一次就是这张表的摘除点。
 func (c *Controller) takeOutputLimit(exec tools.Execution) (int, bool) {
 	c.mutex.Lock()
@@ -328,7 +328,7 @@ func (c *Controller) deliver(snapshot jobs.Snapshot, owner agent.Agent) {
 func (c *Controller) spendWake(owner agent.Agent) bool {
 	// 先把清理挂上再记账：挂不上说明这个属主的作用域正在散，那它也不该被唤醒，
 	// 而且那一行会一直留在表里没人删。理由同
-	// [ds-harness-go/jobs/localjobs.Registry.ensureOwnerCleanup] 里那句注释。
+	// [github.com/snight1983/ds-harness-go/jobs/localjobs.Registry.ensureOwnerCleanup] 里那句注释。
 	if !c.ensureWakeCleanup(owner) {
 		return false
 	}
@@ -344,7 +344,7 @@ func (c *Controller) spendWake(owner agent.Agent) bool {
 // ensureWakeCleanup 保证这个属主身上挂着一项「散的时候把它那行记账删掉」的清理。
 //
 // 新增: 这是 DSH 那张 `WeakMap<Agent, number>` 在 Go 里的替身，做法和
-// [ds-harness-go/jobs/localjobs.Registry.ensureOwnerCleanup] 逐字相同。
+// [github.com/snight1983/ds-harness-go/jobs/localjobs.Registry.ensureOwnerCleanup] 逐字相同。
 func (c *Controller) ensureWakeCleanup(owner agent.Agent) bool {
 	c.mutex.Lock()
 	_, already := c.wakeCleanups[owner]
@@ -378,7 +378,7 @@ func (c *Controller) ensureWakeCleanup(owner agent.Agent) bool {
 // 源: packages/jobs/tool-jobs/src/index.ts:225-231
 //
 // 认领才是那条人写的输入真正进到一个步骤里的那一刻；本插件自己排进去的那条通知
-// 不许把它刚花掉的预算补回来，所以这里只认 [ds-harness-go/llm.SourceUser]。
+// 不许把它刚花掉的预算补回来，所以这里只认 [github.com/snight1983/ds-harness-go/llm.SourceUser]。
 func (c *Controller) refillWakeBudget(owner agent.Agent, message llm.Message, _ int) {
 	if message.Source == nil || message.Source.SourceKind() != llm.SourceUser {
 		return
@@ -436,7 +436,7 @@ func (c *Controller) newOutputTool() *tools.Definition {
 		Name:        OutputToolName,
 		Description: outputDescription,
 		// 一次等到超时交回的是作业状态，不是一份 TOOL_TIMEOUT 错误，所以这件工具
-		// 自己管期限，不用 [ds-harness-go/core/tools.Definition.Timeout]。
+		// 自己管期限，不用 [github.com/snight1983/ds-harness-go/core/tools.Definition.Timeout]。
 		//
 		// 源: packages/jobs/tool-jobs/src/index.ts:293-294
 		Parameters: tools.Node{
@@ -686,7 +686,7 @@ func execAgent(exec *tools.RunContext) *scope.Key {
 // Install 把这三件工具、那条投递规矩、那段指引和生产方要的控制器一起装上一个
 // 作用域，交回把它们一起摘下来的函数。
 //
-// 源: packages/jobs/tool-jobs/src/index.ts:205-402
+// 源: packages/jobs/tool-jobs/src/index.ts:204-401
 //
 // 次序照 DSH 的 apply：预算补给线 → 派发前记账 → 挂控制器 → 指引 → 完成监听器
 // → 三件工具。中途失败就按反序摘干净——半装上去意味着模型手上有一件读得了作业、

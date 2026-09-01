@@ -2,7 +2,7 @@
 //
 // 源: packages/skill/tool-skill
 //
-// 本包是 [ds-harness-go/skill] 那台注册表的**模型这一侧**。注册表回答的是
+// 本包是 [github.com/snight1983/ds-harness-go/skill] 那台注册表的**模型这一侧**。注册表回答的是
 // 「这次会话有哪些技能、正文是什么」，本包回答的是「模型什么时候看得见它们、
 // 看见的是哪一份、怎么把一份读进来」。
 //

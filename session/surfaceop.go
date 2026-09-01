@@ -22,7 +22,7 @@ const (
 // SurfaceOp 说明一条事件是怎么进到表面上的。只有 [IsSurfaceEligibleType] 认的
 // 那三种事件能带它。
 //
-// 源: packages/core/session/src/types.ts:363-378
+// 源: packages/core/session/src/types.ts:346-361（SurfaceOp）
 //
 // 新增: DSH 那边是 `'append' | { op: 'replace'; start; end }`——一个字符串字面量
 // 和一个对象的联合。Go 里用「接口 + 未导出的封印方法」把两个变体封在包内。

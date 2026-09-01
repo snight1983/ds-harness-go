@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 func TestReference把捕获seq折成可空的数(t *testing.T) {

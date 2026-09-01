@@ -10,9 +10,9 @@ import (
 	"errors"
 	"strings"
 
-	"ds-harness-go/interaction/commands"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // ProjectionKey 是这个单元占的投影键。
@@ -42,7 +42,7 @@ type runningCommand struct {
 // unitState 是这个单元的内部状态：日志上的模式、最近一次还没被 [EventMode] 结清的
 // 成功选择、以及一次还没结算的执行。
 //
-// 源: packages/plan/plan-mode/src/index.ts:146-152
+// 源: packages/plan/plan-mode/src/types.ts:26-36（PlanUnitState）
 //
 // 它必须是纯 JSON（落盘检查点的前提），所以三个字段都排得出去；Wanted 和 Running
 // 用指针表达 DSH 那两个 nullable，而且**不带** omitempty——排出去的是显式的 null，
@@ -58,12 +58,12 @@ type unitState struct {
 
 // RegisterProjection 把 plan 这个单元登进投影注册表，返回注销它的函数。
 //
-// 源: packages/plan/plan-mode/src/index.ts:261-292
+// 源: packages/plan/plan-mode/src/index.ts:130-163（planProjectionDefinition）
 //
 // 新增: DSH 那边这是 apply 里的一个 ctx.inject(['sessionProjections'], ...)
 // 子节点——投影服务在场它就装，不在场整个装配不受影响。Go 里没有那个容器，
 // 「在不在场」就是装配方手上有没有这个注册表，所以它是一个显式的函数（成例见
-// [ds-harness-go/todo.RegisterProjection]）。[Controller.Install] 在
+// [github.com/snight1983/ds-harness-go/todo.RegisterProjection]）。[Controller.Install] 在
 // [Deps.Projections] 非 nil 时替装配方叫它。
 //
 // # pending 为什么是一个纯回放量

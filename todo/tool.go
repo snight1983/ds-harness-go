@@ -1,7 +1,7 @@
 // 本文件的作用：todo_write 这件工具本身——配置怎么验、给模型看的那段说明怎么随
 // 策略变、schema 表达不了的那几条约束在哪查、以及一次成功的调用往日志里写什么。
 //
-// 源: packages/todo/tool-todo/src/index.ts:22-226
+// 源: packages/todo/tool-todo/src/index.ts:22-223
 
 package todo
 
@@ -12,10 +12,10 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ToolName 是这件工具在注册表里的名字。
@@ -100,7 +100,7 @@ func New(config Config) (*Tool, error) {
 
 // Install 把 todo_write 注册进一个工具注册表，返回注销它的函数。
 //
-// 源: packages/todo/tool-todo/src/index.ts:149-225
+// 源: packages/todo/tool-todo/src/index.ts:146-222
 func (t *Tool) Install(ctx context.Context, runtime *tools.Runtime, owner *scope.Scope) (func(context.Context) error, error) {
 	if runtime == nil {
 		return nil, errors.New("todo: 需要一个工具注册表")
@@ -213,7 +213,7 @@ func itemNode(describeFields bool) tools.Node {
 
 // definition 造这件工具的定义。
 //
-// 源: packages/todo/tool-todo/src/index.ts:149-225
+// 源: packages/todo/tool-todo/src/index.ts:147-221
 func (t *Tool) definition() *tools.Definition {
 	parameterItem := itemNode(true)
 	outputItem := itemNode(false)
@@ -273,7 +273,7 @@ func render(_ json.RawMessage, value json.RawMessage) (llm.Content, error) {
 
 // presentCall 是这次调用进行中在界面上的样子。
 //
-// 源: packages/todo/tool-todo/src/index.ts:224
+// 源: packages/todo/tool-todo/src/index.ts:221
 //
 // 它必须是纯函数（实时流式和会话重放都会调它），所以只看 args：拿不出那份清单
 // 就交出一张只有标题的卡片，绝不去碰别的地方。

@@ -8,8 +8,8 @@ import (
 	"errors"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestBalance一段没有工具调用的表面处处配平(t *testing.T) {

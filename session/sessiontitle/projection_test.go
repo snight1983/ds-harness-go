@@ -6,8 +6,8 @@ package sessiontitle
 import (
 	"testing"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // viewOf 从一次读切里取出标题单元当下的客户端视图。

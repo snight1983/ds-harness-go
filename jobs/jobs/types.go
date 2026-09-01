@@ -8,8 +8,8 @@ package jobs
 import (
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // JobID 认一件后台作业。注册表发的是 `<种类>-N`；id 是可预测的，所以边界靠属主
@@ -71,7 +71,7 @@ const (
 
 // Outcome 是生产方经 [Hooks.Done] 交出来的那份终局结果。
 //
-// 源: packages/jobs/jobs/src/types.ts:32-39
+// 源: packages/jobs/jobs/src/types.ts:31-39（JobOutcome）
 type Outcome struct {
 	// Status 是这件活儿怎么结束的：跑完了、被取消了、还是坏掉了。
 	//
@@ -111,7 +111,7 @@ type Start struct {
 
 // Hooks 是运行时用来控制和观察生产方那份活儿的几只手。
 //
-// 源: packages/jobs/jobs/src/types.ts:72-91
+// 源: packages/jobs/jobs/src/types.ts:71-91（JobHooks）
 type Hooks struct {
 	// Cancel 请求终止。必须是同步的、幂等的，并且最终让 [Hooks.Done] 落地；
 	// 它自己出错要原样往上抛。reason 空串表示没给理由，非空则原样转给生产方。
@@ -147,7 +147,7 @@ type Snapshot struct {
 	// OutputLimitBytes 是生产方定的那个上限，0 表示不设。
 	OutputLimitBytes int
 	// OwnerSession 是拿来授权和关联的属主会话 id，无主作业时是空串。
-	// 完成监听器另外经 [DoneListener] 拿到那个确切的 [ds-harness-go/core/agent.Agent]。
+	// 完成监听器另外经 [DoneListener] 拿到那个确切的 [github.com/snight1983/ds-harness-go/core/agent.Agent]。
 	OwnerSession session.SessionID
 	// Status 是当下的生命周期状态。
 	Status JobStatus
@@ -171,7 +171,7 @@ type Snapshot struct {
 
 // Read 是 [Registry.Read] 交回的输出和读后状态。
 //
-// 源: packages/jobs/jobs/src/types.ts:131-140
+// 源: packages/jobs/jobs/src/types.ts:130-140（JobRead）
 type Read struct {
 	// Text 对流式那类是上次读之后的增量；对只有最终输出那类，活着时是空串，
 	// 落定之后是那份终局输出（或者空串）——幂等，永远不会被消费掉。

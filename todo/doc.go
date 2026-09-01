@@ -7,7 +7,7 @@
 //
 // # 为什么是整表替换，不是逐条编辑
 //
-// 每一次 todo_write 都带着**完整的**清单，追加成一条 [ds-harness-go/session.EventTodoWrite]
+// 每一次 todo_write 都带着**完整的**清单，追加成一条 [github.com/snight1983/ds-harness-go/session.EventTodoWrite]
 // 事件；回放时最后写的那份生效。这条规矩是这个包全部设计的地基：
 //
 //   - 没有「加一条」「改第三条的状态」这类局部操作，也就没有「模型以为的清单」
@@ -20,10 +20,10 @@
 //
 //   - [Tool.Install] 把 todo_write 注册进工具注册表。这是必须的那条。
 //   - [RegisterProjection] 把 todos 这个投影单元登进
-//     [ds-harness-go/session/projection.Registry]。可选：装配里没有投影注册表时
+//     [github.com/snight1983/ds-harness-go/session/projection.Registry]。可选：装配里没有投影注册表时
 //     就不装，界面读到的就是「这个能力不在」。
 //   - [RegisterInvariants] 把持久快照的形状检查登进
-//     [ds-harness-go/invariants.Registry]。也是可选的，诊断能力开不开是部署的事。
+//     [github.com/snight1983/ds-harness-go/invariants.Registry]。也是可选的，诊断能力开不开是部署的事。
 //
 // 新增: DSH 是一个 cordis 插件，三条胳膊在同一个 apply 里靠 ctx.inject 按服务
 // 在不在场自动决定装不装。Go 里没有那个容器，装配方自己知道手上有没有投影注册表
@@ -43,7 +43,7 @@
 // # 和 DSH 不一样的地方
 //
 // 新增: DSH 的执行体直接写 exec.agent.session.append(...)——它靠结构类型从那个
-// agent 对象上摸到一个活会话。Go 这边 [ds-harness-go/core/tools.Execution.Agent]
+// agent 对象上摸到一个活会话。Go 这边 [github.com/snight1983/ds-harness-go/core/tools.Execution.Agent]
 // 是一个不透明的作用域键，从它到「往哪个会话追加」的映射只有装配方知道，
 // 所以那一步是 [Config.Append] 这条显式的接缝。
 //

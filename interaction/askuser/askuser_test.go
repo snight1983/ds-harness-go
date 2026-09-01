@@ -22,11 +22,11 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/askuser"
-	"ds-harness-go/interaction/userquestions"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/askuser"
+	"github.com/snight1983/ds-harness-go/interaction/userquestions"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // stubAsker 是一道把每次请求都记下来的假接缝。

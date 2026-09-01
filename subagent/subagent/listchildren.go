@@ -19,11 +19,11 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
-	"ds-harness-go/session/projection"
-	"ds-harness-go/session/projectioncache"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/session/projectioncache"
 )
 
 // coldReadConcurrency 是一次列举里并发的冷探视条数。
@@ -76,7 +76,7 @@ const (
 //
 // 源: packages/subagent/subagent/src/list-children.ts:44-92
 //
-// 只有持久头上 Origin 是 [ds-harness-go/session.OriginSubagent] 的候选才会被解读。
+// 只有持久头上 Origin 是 [github.com/snight1983/ds-harness-go/session.OriginSubagent] 的候选才会被解读。
 // 一个端得出 `subagent` 投影值的候选给出 [EntryChild]；一个已经安定下来、
 // 却折不出身份的候选给出 [EntryDiagnostic]；一个**正在跑**又还没有身份的候选
 // 整行略过——它的描述符可能还没追加（创建窗口）。诊断转述的是投影折叠的结局
@@ -115,7 +115,7 @@ type ListEntry struct {
 // DescendantListEntry 是一次 [ListDescendants] 结果里的一行：解读出来的那些
 // 子 agent 事实，加上它在整棵会话树里的位置。
 //
-// 源: packages/subagent/subagent/src/list-children.ts:94-99
+// 源: packages/subagent/subagent/src/list-children.ts:37-47（SubagentDescendantListEntry）
 type DescendantListEntry struct {
 	ListEntry
 	// ParentID 是列举出来的那份头里记的、这个候选耐久的直接父。
@@ -178,13 +178,13 @@ type coldRead struct {
 
 // ListChildren 列举一个父那些按 Origin 分类出来的直接孩子。
 //
-// 源: packages/subagent/subagent/src/list-children.ts:134-148
+// 源: packages/subagent/subagent/src/list-children.ts:65-93（listChildren）
 //
 // 语料是活会话表和可选持久化那份活优先的合并；每个身份都由 `subagent` 投影单元
 // 端出来：活孩子走注册表的水位读切；冷孩子先试一行耐久缓存（要过 seq 闸），
 // 不行就做一次有并发上限的持久化探视、再经注册表折一遍。
 //
-// 投影注册表或者活会话表没装，以及调用方取消，都报 [ds-harness-go/llm.Error]。
+// 投影注册表或者活会话表没装，以及调用方取消，都报 [github.com/snight1983/ds-harness-go/llm.Error]。
 func ListChildren(
 	ctx context.Context,
 	services ListingServices,
@@ -217,7 +217,7 @@ func ListChildren(
 
 // ListDescendants 按稳定的先序列举一个根底下每一个有会话的子 agent。
 //
-// 源: packages/subagent/subagent/src/list-children.ts:161-181
+// 源: packages/subagent/subagent/src/list-children.ts:95-128（listDescendants）
 //
 // 普通会话和一次性孩子照样是遍历节点，所以挂在它们底下的可续孩子仍然找得到。
 // 分类走的是和 [ListChildren] 同一套投影支撑的运行期；一个 agent 都不装载、
@@ -429,7 +429,7 @@ func compareCorpusRecords(a, b corpusRecord) int {
 // resolveColdIdentity 把一个冷候选沿梯子剩下那两级解出来：先试一行耐久缓存
 // （要它端出来的身份过得了 seq 闸），不行就做一次持久化探视、经投影注册表重折。
 //
-// 源: packages/subagent/subagent/src/list-children.ts:348-410
+// 源: packages/subagent/subagent/src/list-children.ts:287-359
 //
 // 一次失败的探视是一条**暂时的** unavailable 行，下次列举会重试；一次点着
 // 另一段生命的探视、以及一份折不出身份的已安定日志，都是终局，所以报 corrupt。
@@ -511,7 +511,7 @@ func servedIdentity(snapshot projection.Snapshot) (IdentityProjection, bool) {
 
 // childRow 把一份端出来的身份落成它那一行孩子。
 //
-// 源: packages/subagent/subagent/src/list-children.ts:412-436
+// 源: packages/subagent/subagent/src/list-children.ts:361-385
 func childRow(
 	id session.SessionID,
 	identity IdentityProjection,
@@ -535,11 +535,10 @@ func diagnosticRow(id session.SessionID, reason DiagnosticReason) ListEntry {
 
 // sameLifecycle 判一份探视回来的日志还属不属于当初列举出来的那段生命。
 //
-// 源: packages/subagent/subagent/src/list-children.ts:438-446
+// 源: packages/subagent/subagent/src/list-children.ts:387-396
 //
-// 逐字段比而不是 `meta == expected`：Origin 和 AgentPreset **有意**不算见证。
-// 它们是同一段生命里可以另有说法的展示性元数据，拿它们当见证会把一次无害的
-// 差异误报成 corrupt。
+// 逐字段比而不是 `meta == expected`：见证集是上游 LIFECYCLE_WITNESS_KEYS 那九个
+// 不可变头字段，逐项对齐。SessionHeader 上此外还有的字段不算见证。
 func sameLifecycle(meta, expected session.SessionHeader) bool {
 	return meta.Version == expected.Version &&
 		meta.ID == expected.ID &&
@@ -547,12 +546,14 @@ func sameLifecycle(meta, expected session.SessionHeader) bool {
 		meta.Cwd == expected.Cwd &&
 		meta.ParentSession == expected.ParentSession &&
 		meta.SeedLength == expected.SeedLength &&
-		meta.DelegationDepth == expected.DelegationDepth
+		meta.DelegationDepth == expected.DelegationDepth &&
+		meta.Origin == expected.Origin &&
+		meta.AgentPreset == expected.AgentPreset
 }
 
 // listingCancelled 在下一个取消检查点把一次列举停掉；没取消时返回 nil。
 //
-// 源: packages/subagent/subagent/src/list-children.ts:448-452
+// 源: packages/subagent/subagent/src/list-children.ts:398-403
 func listingCancelled(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return NewError("子 agent 列举被取消了", CodeCancelled, err)

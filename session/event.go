@@ -1,7 +1,7 @@
 // 本文件的作用：会话日志里的一条条目——信封字段、它在介质上的样子，
 // 以及「一个不认识的类型能不能跳过」那条规则。
 //
-// 源: packages/core/session/src/types.ts:395-440
+// 源: packages/core/session/src/types.ts:378-423
 
 package session
 
@@ -12,7 +12,7 @@ import (
 
 // EventType 是一条事件的判别标签。
 //
-// 源: packages/core/session/src/types.ts:339-340
+// 源: packages/core/session/src/types.ts:322-323（SessionEventType）
 //
 // 它是**开放**的：DSH 那边 SessionEventMap 是一个可被插件合并扩展的映射，
 // 本包只登记了核心的那 13 个（见 [CoreVocabulary]），别的包可以往上加。
@@ -73,7 +73,7 @@ const (
 
 // Event 是会话日志里一条不可变的条目。
 //
-// 源: packages/core/session/src/types.ts:395-440
+// 源: packages/core/session/src/types.ts:378-423
 //
 // 新增: DSH 那边是一个在 type 上判别的映射类型，data 的类型跟着 type 收窄，
 // 而且 sourceEventSeqs 与 surfaceOp 两个字段**只在**三种表面事件的变体上存在

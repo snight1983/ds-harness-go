@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/core/tools"
 )
 
 // RoundStatus 是一个孩子对自己这一轮的定性。
@@ -176,7 +176,7 @@ func readReport(value any, expected RoundStatus, maxChars int) (RoundReport, err
 // 源: packages/workflow/tool-ralph/src/index.ts:113-115, 248-249
 //
 // 新增: DSH 是 `isRecord(value) && Object.keys(value).sort().join(',') === '…'`。
-// Go 这边那个值是 [ds-harness-go/subagent/subagent.Result.Structured]（一个 any），
+// Go 这边那个值是 [github.com/snight1983/ds-harness-go/subagent/subagent.Result.Structured]（一个 any），
 // 所以先排回字节再解成键表——这一步同时把「不是对象」（数组、null、标量都解不进
 // map）和「键不对」两件事一起办了。
 //

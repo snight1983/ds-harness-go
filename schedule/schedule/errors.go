@@ -7,7 +7,7 @@ package schedule
 
 // LogError 是耐久数据本身坏了：字节解不动，或者这一串改动接不上。
 //
-// 源: packages/schedule/schedule/src/domain.ts:41-53
+// 源: packages/schedule/schedule/src/domain.ts:40-53（ScheduleLogError）
 //
 // 它的 Reason 是**给运维看的**，所以是中文：模型那一侧永远只会看到
 // [CodeCorruptLog] 那一个码加上一句固定的英文（见 tools.go 里的 corruptLogError），

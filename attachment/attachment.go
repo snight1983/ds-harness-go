@@ -65,7 +65,7 @@ import (
 // Store 是不可变二进制附件服务。实现方必须**先验字节、再发引用**：
 // 一个已经发出去的 [ImageRef] 就是一句承诺，说这些字节存在、并且确实是它描述的样子。
 //
-// 源: packages/attachment/attachment/src/index.ts:36-131
+// 源: packages/attachment/attachment/src/index.ts:39-145（AttachmentStore）
 //
 // 这个接口里只有 DSH 那边**抽象**的那四个成员。已经写好的那三个是包级函数，
 // 理由见包头「抽象类怎么变成了接口加几个函数」。

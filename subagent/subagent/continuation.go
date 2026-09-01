@@ -23,18 +23,18 @@ import (
 	"log/slog"
 	"sync"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/interaction/userapproval"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/interaction/userapproval"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
 )
 
 // ReportDelivery 是部署对一份被接受的孩子汇报的排期策略。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:99-100
+// 源: packages/subagent/subagent/src/continuation.ts:101-102（SubagentReportDelivery）
 type ReportDelivery string
 
 const (
@@ -46,7 +46,7 @@ const (
 
 // ReportOptions 是一个可续孩子向它直系父汇报时的那几样。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:102-108
+// 源: packages/subagent/subagent/src/continuation.ts:104-110（SubagentReportOptions）
 //
 // 新增: DSH 这里还有一个 signal 字段。Go 的取消是 ctx，走参数不走结构体。
 type ReportOptions struct {
@@ -56,7 +56,7 @@ type ReportOptions struct {
 
 // ContinuableStartSpec 是调用方要起一个可续后台孩子时说的话。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:110-130
+// 源: packages/subagent/subagent/src/continuation.ts:112-131（ContinuableStartSpec）
 type ContinuableStartSpec struct {
 	// Provider 是那个提供方名字，它那份可续创建能力立起这个孩子。
 	Provider string
@@ -78,7 +78,7 @@ type ContinuableStartSpec struct {
 
 // ContinuableStart 是一个可续孩子接下它的初始提示词之后交回来的那两个身份。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:132-137
+// 源: packages/subagent/subagent/src/continuation.ts:133-139（ContinuableStart）
 type ContinuableStart struct {
 	// ChildID 是那个耐久的孩子会话 id，跨活化稳定。
 	ChildID session.SessionID
@@ -98,7 +98,7 @@ const (
 
 // InterruptAuthority 是一次打断请求被准入所凭的那份权。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:139-146
+// 源: packages/subagent/subagent/src/continuation.ts:141-148（SubagentInterruptAuthority）
 //
 // 新增: DSH 是 `{kind:'user', parentSessionId} | {kind:'ancestor', agent}` 两支按
 // kind 判别的联合。Go 没有判别联合，和 [DescriptorData]、[ListEntry] 是同一种做法：
@@ -114,7 +114,7 @@ type InterruptAuthority struct {
 
 // FollowupOptions 是对一个可续孩子做后续投递时的那几样。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:148-154
+// 源: packages/subagent/subagent/src/continuation.ts:150-156（SubagentFollowupOptions）
 //
 // 新增: DSH 这里还有一个 signal 字段。Go 的取消是 ctx，走参数不走结构体。
 type FollowupOptions struct {
@@ -334,7 +334,7 @@ func (m *ContinuationManager) warn(message string, args ...any) {
 
 // ContinuationManager 是 `ctx.subagents` 背后那台可续子 agent 编排机。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:349-370
+// 源: packages/subagent/subagent/src/continuation.ts:350-1619（SubagentContinuationManager）
 //
 // 工具 schema 和宿主适配器都是这一份契约的消费方；前台那条一次性派发仍旧调
 // [Provider.Start]，一步都不进这条生命周期。
@@ -389,6 +389,8 @@ func NewContinuationManager(deps ContinuationDeps, host continuationHost) (*Cont
 	}
 	ownerScope, err := scope.New(scope.NewKey("subagents.activationOwner"), scope.Options{Parent: deps.Owner.Key()})
 	if err != nil {
+		// 走不到：每次 NewKey 都铸一把新的，所以撞不上；父那把作用域是不是还在，
+		// 这一步也不管（那由下面那笔登记认出来）。
 		return nil, err
 	}
 	manager := &ContinuationManager{
@@ -413,6 +415,8 @@ func NewContinuationManager(deps ContinuationDeps, host continuationHost) (*Cont
 		return nil, err
 	}
 	// 次序要紧：结构性处置先登记、排干后登记，倒着展开时才是「先排干、后放作用域」。
+	// 走不到（下面两笔）：Defer 只在这把作用域已经处置时失败，而那种 owner 上面
+	// 那笔 OnDisposed 就已经挡下了。
 	if _, err := deps.Owner.Defer("subagents.activationOwner()", ownerScope.Dispose); err != nil {
 		return nil, err
 	}

@@ -13,13 +13,13 @@ import (
 	"encoding/json"
 	"strings"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // CollectMessages 按日志顺序挑出够格当标题素材的人类文本消息。
 //
-// 源: packages/session/session-title/src/index.ts:167-184
+// 源: packages/session/session-title/src/index.ts:237-257（collectSessionTitleMessages）
 //
 // 三道筛子：
 //
@@ -90,7 +90,7 @@ func titleTextOf(event session.Event) (string, bool) {
 
 // FoldSnapshot 折出日志上最新那条标题，不去看任何可变的旁路元数据。
 //
-// 源: packages/session/session-title/src/index.ts:191-201
+// 源: packages/session/session-title/src/index.ts:276-291（foldSessionTitle）
 //
 // 从后往前找第一条 [EventSessionTitle]：标题是 last-wins 的，最新那条就是答案。
 // 第二个返回值为假表示这个会话还没有过标题。

@@ -10,9 +10,9 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // PackageName 是这个包在不变量注册表里的名字，和 DSH 的包名保持一致。
@@ -25,7 +25,7 @@ const PackageName = "@deepseek-ai/dsh-agent-presets"
 // 新增: DSH 那条检查读的是 `context.agent`——cordis 的装配上下文被 dsh-agent 用
 // declare module 合进了一个 agent 字段。Go 的 [systemprompt.AssembleContext] 只有
 // 一把作用域键（没有声明合并），所以这件事由装配方以函数交进来，做法和
-// [ds-harness-go/plan/planmode.RegisterInvariants] 收 loaded/subscribe 相同。
+// [github.com/snight1983/ds-harness-go/plan/planmode.RegisterInvariants] 收 loaded/subscribe 相同。
 //
 // 两个条件各自都承重。「是不是 agent」承重，是因为一次**只有作用域**的装配——一次
 // 在常驻键里解算呈现器的冷读、一次诊断——本来就不是 agent，不该拿「你认了谁」去判它。

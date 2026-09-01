@@ -56,12 +56,18 @@ func Ported() {}
 func Added() {}
 `)
 
-	count, problems, err := checkProvenance(goRoot, dshRoot)
+	count, added, problems, err := checkProvenance(goRoot, dshRoot)
 	if err != nil {
 		t.Fatalf("checkProvenance() error = %v", err)
 	}
-	if count != 2 {
-		t.Errorf("应当数出 2 条溯源注释，实际 %d 条", count)
+	// 两种注释分开计。混成一个数之后那个数没有含义：它曾经被打印成
+	// 「溯源注释：6284 条」，而其中 1668 条是新增注释，于是拿它去和别的工具对账
+	// 会得出「少了一千多条」这种假结论——我自己就先被这个数误导过一轮。
+	if count != 1 {
+		t.Errorf("应当数出 1 条源注释，实际 %d 条", count)
+	}
+	if added != 1 {
+		t.Errorf("应当数出 1 条新增注释，实际 %d 条", added)
 	}
 	if len(problems) != 0 {
 		t.Errorf("如实的引用不该被挑出问题，实际 %v", problems)
@@ -81,7 +87,7 @@ func TestProvenanceCatchesAFabricatedFile(t *testing.T) {
 func Ported() {}
 `)
 
-	_, problems, err := checkProvenance(goRoot, dshRoot)
+	_, _, problems, err := checkProvenance(goRoot, dshRoot)
 	if err != nil {
 		t.Fatalf("checkProvenance() error = %v", err)
 	}
@@ -113,7 +119,7 @@ func TestProvenanceCatchesAnOutOfRangeCitation(t *testing.T) {
 
 			goRoot, dshRoot := provenanceFixture(t, "package ported\n\n// 源: "+test.citation+"\nfunc Ported() {}\n")
 
-			_, problems, err := checkProvenance(goRoot, dshRoot)
+			_, _, problems, err := checkProvenance(goRoot, dshRoot)
 			if err != nil {
 				t.Fatalf("checkProvenance() error = %v", err)
 			}
@@ -145,7 +151,7 @@ func TestProvenanceIgnoresExamplesInsideDocComments(t *testing.T) {
 func Ported() {}
 `)
 
-	count, problems, err := checkProvenance(goRoot, dshRoot)
+	count, _, problems, err := checkProvenance(goRoot, dshRoot)
 	if err != nil {
 		t.Fatalf("checkProvenance() error = %v", err)
 	}
@@ -173,7 +179,7 @@ func TestProvenanceIgnoresCitationsInsideStringLiterals(t *testing.T) {
 		"// 源: packages/core/session/src/does-not-exist.ts:1-5\n"+
 		"func Fake() {}\n`\n")
 
-	count, problems, err := checkProvenance(goRoot, dshRoot)
+	count, _, problems, err := checkProvenance(goRoot, dshRoot)
 	if err != nil {
 		t.Fatalf("checkProvenance() error = %v", err)
 	}
@@ -195,7 +201,7 @@ func TestProvenanceRejectsUnparsableGo(t *testing.T) {
 
 	goRoot, dshRoot := provenanceFixture(t, "package ported\n\nfunc Broken( {\n")
 
-	_, _, err := checkProvenance(goRoot, dshRoot)
+	_, _, _, err := checkProvenance(goRoot, dshRoot)
 	if err == nil {
 		t.Fatal("解析不了的 Go 文件本该让检查失败")
 	}

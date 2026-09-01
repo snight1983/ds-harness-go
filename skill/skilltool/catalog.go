@@ -11,8 +11,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/skill"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/skill"
 )
 
 // CatalogEntry 是目录里的一条，也就是渲染出来的那一行背后的事实。

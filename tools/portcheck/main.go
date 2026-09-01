@@ -8,6 +8,9 @@
 //
 //	-mode check  门禁。任何一条不满足就退出码非零。
 //
+//	-mode reanchor  溯源注释**对内容**核对。check 只验行号在不在界内，reanchor
+//	                去上游按符号名重新定位、算出真实跨度再比。见 reanchor.go。
+//
 // 为什么要有它：这次移植最大的风险不是写错，是**悄悄漏掉**——我判断某个东西
 // 「用不上」于是不抄，而这个判断从来没有被人看见过。所以每一条「不抄」都必须
 // 落在纸上，并且默认是红的（PENDING），只有人明确填了结论才会变绿。
@@ -23,6 +26,7 @@
 //     越界的行号，和凭空编一段出处，在结果上完全一样——所以必须机器验。
 //
 //   - **PORTED 必须指向真实存在的 Go 符号。** 否则「已移植」就只是一句自述。
+
 package main
 
 import (
@@ -39,15 +43,20 @@ import (
 	"strconv"
 	"strings"
 
-	"ds-harness-go/tools/internal/rulingtable"
+	"github.com/snight1983/ds-harness-go/tools/internal/rulingtable"
 )
 
 func main() {
-	mode := flag.String("mode", "check", "sync（同步裁决表）或 check（跑门禁）")
+	mode := flag.String("mode", "check", "sync（同步裁决表）、check（跑门禁）、audit（出审查报告）或 reanchor（对内容重锚溯源行号）")
 	exports := flag.String("exports", `C:\code\ds-harness-go\docs\portmap\dsh-exports.tsv`, "机器清单路径")
 	ruling := flag.String("ruling", `C:\code\ds-harness-go\docs\portmap\portmap.tsv`, "裁决表路径")
 	goRoot := flag.String("go-root", `C:\code\ds-harness-go`, "Go 代码根目录")
-	dshRoot := flag.String("dsh-root", `C:\codestudy\deepseek-harness-master`, "DSH 源码根目录，用来验溯源注释")
+	dshRoot := flag.String("dsh-root", `C:\codestudy\deepseek-harness-dsh-v0.1.2-alpha.3`, "DSH 源码根目录，用来验溯源注释")
+	auditOut := flag.String("audit-out", `C:\code\ds-harness-go\docs\portmap\audit-findings.md`, "audit 模式的报告输出路径")
+	reanchorOut := flag.String("reanchor-out", `C:\code\ds-harness-go\docs\portmap\reanchor-findings.md`, "reanchor 模式的报告输出路径")
+	// -fix 默认关：这个开关会改 Go 源文件，而「先看报告再决定改不改」是它唯一
+	// 安全的用法。默认开的话，一次手误就是全仓 6000 多条注释被机器改过一遍。
+	fix := flag.Bool("fix", false, "reanchor 模式下顺手改掉 DRIFT 的行号（只改行号，不动注释其余文字）")
 	flag.Parse()
 
 	switch *mode {
@@ -59,6 +68,16 @@ func main() {
 	case "check":
 		if err := runCheck(*exports, *ruling, *goRoot, *dshRoot); err != nil {
 			fmt.Fprintf(os.Stderr, "\n门禁未通过：%v\n", err)
+			os.Exit(1)
+		}
+	case "audit":
+		if err := runAudit(*ruling, *goRoot, *auditOut); err != nil {
+			fmt.Fprintf(os.Stderr, "审查报告生成失败：%v\n", err)
+			os.Exit(1)
+		}
+	case "reanchor":
+		if err := runReanchor(*ruling, *goRoot, *dshRoot, *reanchorOut, *fix); err != nil {
+			fmt.Fprintf(os.Stderr, "重锚失败：%v\n", err)
 			os.Exit(1)
 		}
 	default:
@@ -85,19 +104,33 @@ func runSync(exportsPath, rulingPath string) error {
 		return err
 	}
 
+	// 按**不含行号**的键配对，见 [rulingtable.Row.MatchKey]：行号每次上游发版都会整体
+	// 漂移，拿它配对会把只是挪了几行的符号判成「新符号 + 消失的符号」，人填的裁决就丢了。
+	existingIndexes := rulingtable.MatchIndex(existing)
 	byKey := make(map[string]rulingtable.Row, len(existing))
-	for _, row := range existing {
-		byKey[row.Key()] = row
+	for position, row := range existing {
+		if strings.HasPrefix(row.Kind, "STALE:") {
+			// 上一轮已经标过 STALE 的行不参与配对：它的 kind 被改过，配不上；
+			// 而它要么这一轮又回来了（那清单里自有一条，走正常配对），
+			// 要么继续不在，下面照样重新标一次。
+			continue
+		}
+		byKey[rulingtable.QualifiedMatchKey(row, existingIndexes[position])] = row
 	}
 
+	freshIndexes := rulingtable.MatchIndex(fresh)
 	merged := make([]rulingtable.Row, 0, len(fresh))
 	seen := make(map[string]bool, len(fresh))
-	added := 0
-	for _, row := range fresh {
-		seen[row.Key()] = true
-		if previous, ok := byKey[row.Key()]; ok {
+	added, moved := 0, 0
+	for position, row := range fresh {
+		key := rulingtable.QualifiedMatchKey(row, freshIndexes[position])
+		seen[key] = true
+		if previous, ok := byKey[key]; ok {
 			// 保留人填过的三列，其余六列以清单为准（清单是唯一基准）。
 			row.Decision, row.GoRef, row.Note = previous.Decision, previous.GoRef, previous.Note
+			if previous.Line != row.Line {
+				moved++
+			}
 		} else {
 			row.Decision = rulingtable.Pending
 			added++
@@ -106,8 +139,15 @@ func runSync(exportsPath, rulingPath string) error {
 	}
 
 	stale := 0
-	for _, row := range existing {
-		if !seen[row.Key()] {
+	for position, row := range existing {
+		if strings.HasPrefix(row.Kind, "STALE:") {
+			// 老的 STALE 行原样留着，不重复加前缀——`STALE:STALE:function` 那种东西
+			// 一旦出现，就再也配不回任何清单行了。
+			merged = append(merged, row)
+			stale++
+			continue
+		}
+		if !seen[rulingtable.QualifiedMatchKey(row, existingIndexes[position])] {
 			row.Kind = "STALE:" + row.Kind
 			merged = append(merged, row)
 			stale++
@@ -122,6 +162,11 @@ func runSync(exportsPath, rulingPath string) error {
 	fmt.Printf("裁决表已同步：%s\n", rulingPath)
 	fmt.Printf("清单 %d 条，新增 %d 条 PENDING，保留已裁决 %d 条\n",
 		len(fresh), added, len(fresh)-added)
+	if moved > 0 {
+		// 这个数是「靠不含行号的键救回来的裁决」。它不为零本身不是问题——上游一发版
+		// 行号就整体漂——但它突然变成零，说明配对又退回按行号认人了。
+		fmt.Printf("其中 %d 条只是行号变了，裁决已跟着挪过去。\n", moved)
+	}
 	if stale > 0 {
 		fmt.Printf("注意：有 %d 条在清单里已经不存在了，已标成 STALE 留在表上，需要人确认。\n", stale)
 	}
@@ -209,7 +254,7 @@ func runCheck(exportsPath, rulingPath, goRoot, dshRoot string) error {
 	}
 
 	// 三、溯源注释验真。
-	provenance, provErrs, err := checkProvenance(goRoot, dshRoot)
+	provenance, addedNotes, provErrs, err := checkProvenance(goRoot, dshRoot)
 	if err != nil {
 		return err
 	}
@@ -234,7 +279,7 @@ func runCheck(exportsPath, rulingPath, goRoot, dshRoot string) error {
 		}
 	}
 
-	report(rows, counts, stales, provenance, pendingSamples)
+	report(rows, counts, stales, provenance, addedNotes, pendingSamples)
 
 	if len(failures) > 0 {
 		fmt.Println("\n不通过的原因：")
@@ -247,7 +292,7 @@ func runCheck(exportsPath, rulingPath, goRoot, dshRoot string) error {
 	return nil
 }
 
-func report(rows []rulingtable.Row, counts map[string]int, stales, provenance int, pendingSamples []string) {
+func report(rows []rulingtable.Row, counts map[string]int, stales, provenance, addedNotes int, pendingSamples []string) {
 	fmt.Printf("裁决表共 %d 行\n", len(rows))
 	kinds := make([]string, 0, len(counts))
 	for decision := range counts {
@@ -260,7 +305,10 @@ func report(rows []rulingtable.Row, counts map[string]int, stales, provenance in
 	if stales > 0 {
 		fmt.Printf("  %-14s %d\n", "STALE", stales)
 	}
-	fmt.Printf("溯源注释：%d 条，全部验过出处\n", provenance)
+	// 「验过出处」只说到出处存在、行号在界内。行号有没有漂是 reanchor 那一项的事，
+	// 这里把话说到边界为止——一句说过头的通过语比不通过更难发现。
+	fmt.Printf("源注释：%d 条，出处全部存在且行号在界内（是否漂移见 -mode reanchor）\n", provenance)
+	fmt.Printf("新增注释：%d 条\n", addedNotes)
 	if len(pendingSamples) > 0 {
 		fmt.Println("待裁决的头几条：")
 		for _, sample := range pendingSamples {
@@ -287,16 +335,23 @@ var (
 
 // checkProvenance 走遍 Go 代码，把每一条溯源注释拿去和 DSH 源码对质。
 //
-// 只验「出处是否真实存在」，不验「引的那段是不是真的对应这里的代码」——后者机器做不到。
-// 但光是前者就能挡住凭空编出处这一类，而那正是幻觉最常见的形态。
+// 只验「出处是否真实存在」，**不验**「引的那段是不是真的对应这里的代码」。
+// 后者不是机器做不到，是这一项不做：见 [runReanchor]，它按锚点符号重新定位算真实跨度，
+// 正是为了补上这一半。两项的分工是这样的——这里验的是「有没有凭空编出处」，
+// 那边验的是「出处有没有漂」。只跑这一项就宣布移植完整是不成立的：上游换版本之后，
+// 漂出文件末尾的会被这里抓到，漂了却仍落在文件内的一条都抓不到。
+//
+// 交回的两个数分开计：源注释和新增注释是两种东西，混成一个数之后那个数没有含义
+// ——它曾经被打印成「溯源注释：6284 条」，而其中 1668 条是新增注释，
+// 于是没人能拿这个数去和别的工具对账。
 //
 // **用 go/parser 而不是按行扫文本**，因为只有真正的注释节点才算数。
 // 第一版是逐行正则，于是本工具自己的测试夹具（一段写在反引号字符串里的假 Go 源码，
 // 里面故意放了一条指向不存在文件的引用）被当成了真注释报错。
 // 字符串字面量里长得像注释的内容不是注释——这一点靠正则分不出来，靠解析器是白送的。
-func checkProvenance(goRoot, dshRoot string) (int, []string, error) {
+func checkProvenance(goRoot, dshRoot string) (int, int, []string, error) {
 	lineCache := map[string]int{}
-	count := 0
+	count, added := 0, 0
 	var problems []string
 
 	err := filepath.WalkDir(goRoot, func(path string, entry os.DirEntry, err error) error {
@@ -326,7 +381,7 @@ func checkProvenance(goRoot, dshRoot string) (int, []string, error) {
 			for _, comment := range group.List {
 				text := comment.Text
 				if reAdded.MatchString(text) {
-					count++
+					added++
 					continue
 				}
 				match := reSource.FindStringSubmatch(text)
@@ -360,7 +415,7 @@ func checkProvenance(goRoot, dshRoot string) (int, []string, error) {
 		}
 		return nil
 	})
-	return count, problems, err
+	return count, added, problems, err
 }
 
 // countLines 数一个文件有多少行。文件打不开返回 -1，让调用方把它报成「出处不存在」。
@@ -399,8 +454,12 @@ func countLines(path string) int {
 //
 //   - **方法用「包.接收者类型.方法名」而不是「包.方法名」。** 不同类型上的同名方法
 //     （Close、String）遍地都是，不带接收者的话它们会互相冒充。
-func collectGoSymbols(goRoot string) (map[string]struct{}, error) {
-	symbols := map[string]struct{}{}
+//
+// 交回的是「符号 → 声明类别」而不是一个集合：门禁只需要「在不在」，但审查模式
+// （[runAudit]）要拿它跟上游那一列 kind 对质——上游一个 `function` 落在 Go 的一个
+// `type` 上，是填错格子最典型的形态，而光有名字看不出来。
+func collectGoSymbols(goRoot string) (map[string]symbolKind, error) {
+	symbols := map[string]symbolKind{}
 
 	err := filepath.WalkDir(goRoot, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
@@ -429,23 +488,29 @@ func collectGoSymbols(goRoot string) (map[string]struct{}, error) {
 		for _, declaration := range parsed.Decls {
 			switch node := declaration.(type) {
 			case *ast.GenDecl:
+				// var 和 const 分开记：上游一个 `const` 落在 Go 的 var 上是常事
+				// （Go 的 const 存不下 map 和结构体），落在 type 上就不是了。
+				valueKind := kindVar
+				if node.Tok == token.CONST {
+					valueKind = kindConst
+				}
 				for _, spec := range node.Specs {
 					switch item := spec.(type) {
 					case *ast.TypeSpec:
-						symbols[packageName+"."+item.Name.Name] = struct{}{}
+						symbols[packageName+"."+item.Name.Name] = kindType
 					case *ast.ValueSpec:
 						for _, name := range item.Names {
-							symbols[packageName+"."+name.Name] = struct{}{}
+							symbols[packageName+"."+name.Name] = valueKind
 						}
 					}
 				}
 			case *ast.FuncDecl:
 				if node.Recv == nil || len(node.Recv.List) == 0 {
-					symbols[packageName+"."+node.Name.Name] = struct{}{}
+					symbols[packageName+"."+node.Name.Name] = kindFunc
 					continue
 				}
 				if receiver := receiverTypeName(node.Recv.List[0].Type); receiver != "" {
-					symbols[packageName+"."+receiver+"."+node.Name.Name] = struct{}{}
+					symbols[packageName+"."+receiver+"."+node.Name.Name] = kindMethod
 				}
 			}
 		}

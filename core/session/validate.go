@@ -11,14 +11,14 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // ErrInvalidHeader 是一份会话头本身不成立。
 //
 // 新增: DSH 侧全是 `throw new Error(字符串)`。分类的理由和
-// [ds-harness-go/session] 那几个哨兵逐字相同：Go 的错误是要被 errors.Is 分派的。
+// [github.com/snight1983/ds-harness-go/session] 那几个哨兵逐字相同：Go 的错误是要被 errors.Is 分派的。
 var ErrInvalidHeader = errors.New("core/session: 会话头不合法")
 
 // ErrInvalidSeed 是构造 seed 里有一条事件过不了检查。
@@ -52,7 +52,7 @@ var ErrAlreadyAnnounced = errors.New("core/session: 这个会话已经公布过�
 //
 // 源: packages/core/session/src/index.ts:215-217、363-366
 //
-// 它不在 [ds-harness-go/session] 的词汇表里，本包认得它**只是为了报一句说得清
+// 它不在 [github.com/snight1983/ds-harness-go/session] 的词汇表里，本包认得它**只是为了报一句说得清
 // 的话**：一份用它写下的旧日志读进来时，「不认识的类型」这句诊断帮不上忙，
 // 「这是已经删掉的旧格式」才帮得上。
 const legacyHeaderDelta sessionlog.EventType = "request/header-delta"
@@ -68,7 +68,7 @@ const legacyFallbackReason = "fallback"
 //
 // 新增: DSH 那边前四分之三是「这是不是一个普通对象」「这个字段是不是 number」
 // 之类的类型探测，因为它拿到的是 unknown。Go 这边
-// [ds-harness-go/session.SessionHeader] 已经把形状钉死了，剩下的只有取值范围。
+// [github.com/snight1983/ds-harness-go/session.SessionHeader] 已经把形状钉死了，剩下的只有取值范围。
 // Number.isSafeInteger 同理消失：那几个字段在 Go 里是 int / int64，逐位精确。
 //
 // 新增: DSH 的 validateRestoredSessionHeader 在这道检查前面多一道 JS 原型检查
@@ -122,7 +122,7 @@ func validateSessionHeader(id sessionlog.SessionID, header sessionlog.SessionHea
 //
 // 新增: DSH 在这里先 snapshotJsonValue 再验，排不成 JSON 就报
 // 「is not losslessly JSON-serializable」。Go 里
-// [ds-harness-go/session.SessionHeader] 每个字段都是标量，那句诊断没有对应物。
+// [github.com/snight1983/ds-harness-go/session.SessionHeader] 每个字段都是标量，那句诊断没有对应物。
 func snapshotSessionHeader(
 	id sessionlog.SessionID,
 	source *sessionlog.SessionHeader,
@@ -148,12 +148,12 @@ func snapshotSessionHeader(
 //
 // 新增: DSH 那边这道检查同时在做三件事：判「这是不是一个事件信封」、判
 // 「里面有没有多余的键」、判「取值合不合法」。前两件在 Go 里由
-// [ds-harness-go/session.Event] 兑现——它的 UnmarshalJSON 本来就拒收信封上
+// [github.com/snight1983/ds-harness-go/session.Event] 兑现——它的 UnmarshalJSON 本来就拒收信封上
 // 不认识的键，而一个在 Go 代码里直接构造出来的 Event 根本没有「多余的键」这
 // 种状态。所以这里只剩第三件。
 //
 // 同样消失的还有：`data !== undefined`（Go 的 Data 为空就是空负载，
-// [ds-harness-go/session.Event.MarshalJSON] 会把它排成 `{}`，没有第三种状态）、
+// [github.com/snight1983/ds-harness-go/session.Event.MarshalJSON] 会把它排成 `{}`，没有第三种状态）、
 // `ignorable !== true`（bool 只有两个值）、以及 seq / time 那两道
 // Number.isSafeInteger（int 与 int64 逐位精确，只剩下 seq 的非负）。
 func validateSeedEvent(event sessionlog.Event, index int) error {
@@ -212,7 +212,7 @@ func validateSeedRequestHeader(event sessionlog.Event, index int) error {
 //
 // 新增: DSH 验四件事——是不是普通对象、键在不在白名单里、值是不是恒为 true、
 // 以及每个立着的标记在 config 里有没有对应的字段。前三件在
-// [ds-harness-go/llm.CallConfigAdapterDefaults] 上不可能违反：它是一个恰好两个
+// [github.com/snight1983/ds-harness-go/llm.CallConfigAdapterDefaults] 上不可能违反：它是一个恰好两个
 // bool 字段的结构体。所以这里只剩第四件——而它恰恰是真正有内容的那一条：
 // 一个「这一项是适配器解析出来的」标记，指向一个根本不存在的字段，说明写下
 // 这份头的那一方和读它的这一方对不上。
@@ -233,11 +233,11 @@ func validateAdapterDefaults(header sessionlog.EpochHeader, index int) error {
 // （seed 里是「seed user/message at index 3」，活着的日志里是
 // 「session event at seq 12」）。
 //
-// 新增: DSH 那条「content 必须是数组」在 Go 里落空了——[ds-harness-go/llm.Content]
+// 新增: DSH 那条「content 必须是数组」在 Go 里落空了——[github.com/snight1983/ds-harness-go/llm.Content]
 // 是切片，nil 和空清单是同一个值，没有「content 是 null」这种状态。
 //
-// 新增: 这一整套在本仓库是新写的，不是转发。[ds-harness-go/session.Trace] 只管
-// 回合与步骤的开关，[ds-harness-go/llm.Message] 的 UnmarshalJSON 只认来源的判别
+// 新增: 这一整套在本仓库是新写的，不是转发。[github.com/snight1983/ds-harness-go/session.Trace] 只管
+// 回合与步骤的开关，[github.com/snight1983/ds-harness-go/llm.Message] 的 UnmarshalJSON 只认来源的判别
 // 标签，两者都不查「这条消息有没有身份」「角色对不对得上事件类型」。
 func validateMessageEventShape(event sessionlog.Event, subject string) error {
 	message, ok, err := messageOf(event)
@@ -365,7 +365,7 @@ func validateSupportedRequestHeader(
 
 // nonEmptyData 把一段空负载补成 `{}`，好让它能被解进一个结构体。
 //
-// 新增: [ds-harness-go/session.Event.MarshalJSON] 在排出去时做的是同一件事，
+// 新增: [github.com/snight1983/ds-harness-go/session.Event.MarshalJSON] 在排出去时做的是同一件事，
 // 这里是它读回来那一侧的对应物——一个 Data 为 nil 的事件在 Go 里表示
 // 「负载是空的」，而 encoding/json 解不动一段零长度的字节。
 func nonEmptyData(data json.RawMessage) json.RawMessage {

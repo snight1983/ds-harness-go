@@ -123,7 +123,7 @@ var (
 
 // Namespace 是一个已登记设置段的标称 id。
 //
-// 源: packages/settings/settings/src/types.ts:12-13
+// 源: packages/settings/settings/src/types.ts:14-15（SettingsNamespace）
 //
 // 新增: DSH 那边是 Branded<'SettingsNamespace'>，也就是用类型技巧给 string 造一个
 // 不可互换的别名。Go 的具名类型天生就是标称类型，这件事不需要技巧。
@@ -145,7 +145,7 @@ func NewNamespace(value string) (Namespace, error) {
 
 // Applies 说明一个命名空间的改动**什么时候**对它的拥有者生效。
 //
-// 源: packages/settings/settings/src/index.ts:33-34
+// 源: packages/settings/settings/src/index.ts:45-46（SettingsApplies）
 //
 // 这是给配置界面看的：改完就生效的字段和改完要重启的字段，界面上得给出不同的提示，
 // 否则用户会以为自己改了没用。
@@ -160,7 +160,7 @@ const (
 
 // Source 是一次已提交变更的来路。
 //
-// 源: packages/settings/settings/src/types.ts:15-16
+// 源: packages/settings/settings/src/types.ts:17-18（SettingsUpdateSource）
 type Source string
 
 const (
@@ -172,7 +172,7 @@ const (
 
 // ConflictError 是一次因为「读到之后又被人改过」而被拒的写入。
 //
-// 源: packages/settings/settings/src/index.ts:159-183
+// 源: packages/settings/settings/src/index.ts:149-173（SettingsConflictError）
 //
 // 串行写队列只排次序，它分不出一个刚读完就写的调用方和一个拿着过期快照的调用方——
 // 那正是这个错误报告的事。

@@ -16,9 +16,9 @@ import (
 
 	wire "github.com/coder/acp-go-sdk"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/core/agent"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // imageMediaTypes 是 ACP 图片块和核心附件词汇共有的那几种栅格格式。
@@ -33,7 +33,7 @@ var imageMediaTypes = []attachment.MediaType{
 
 // ContentFailureKind 是内容准入失败的分类，协议处理那一层照它决定回哪个错误码。
 //
-// 源: packages/acp/acp/src/content.ts:22
+// 源: packages/acp/acp/src/content.ts:21-22（AcpContentFailureKind）
 type ContentFailureKind string
 
 const (
@@ -45,7 +45,7 @@ const (
 
 // ContentError 是一次带稳定分类的内容失败，消息里**绝不夹原始二进制**。
 //
-// 源: packages/acp/acp/src/content.ts:25-39
+// 源: packages/acp/acp/src/content.ts:24-39（AcpContentError）
 //
 // Message 面向协议对面，原样保留英文：它会被塞进 JSON-RPC 的错误消息里送出去，
 // 而对面是一个程序，不是一个人。
@@ -80,7 +80,7 @@ func internalContent(message string, cause error) *ContentError {
 //
 // 新增: DSH 是 `ctx.get('llm')`——整个服务注入进来，用到的只有 resolveModelInfo 这一个
 // 方法。这里写成一个单方法接口（窄口子的成例见
-// [ds-harness-go/sdk/sdkserver.ProviderLister]），交进来的 [llm.Runtime] 自然满足它。
+// [github.com/snight1983/ds-harness-go/sdk/sdkserver.LLMService]），交进来的 [llm.Runtime] 自然满足它。
 // 它可以为 nil，对应 DSH 那个 `?.`：这条线上根本没挂 LLM 服务。
 type ModelResolver interface {
 	// ResolveModelInfo 解算一条精确路由上的模型元数据。
@@ -179,7 +179,7 @@ func assertImageRoute(ctx context.Context, models ModelResolver, target agent.Ag
 
 // SupportsImagePrompts 判这条连接握手时能不能**如实**声明支持内联图提示词。
 //
-// 源: packages/acp/acp/src/content.ts:90-105
+// 源: packages/acp/acp/src/content.ts:81-104（supportsAcpImagePrompts）
 //
 // 说不清的一律算否：没挂附件存储、没挂 LLM 服务、路由没配、部署根本不收这几种
 // 栅格格式、模型没声明收图、解算失败——每一条都返回假。一句声明出去之后客户端会
@@ -232,7 +232,7 @@ func resourceLinkText(block *wire.ContentBlockResourceLink) string {
 
 // AdmitPrompt 把一条 ACP 提示词准入成有序的耐久核心内容。
 //
-// 源: packages/acp/acp/src/content.ts:124-205
+// 源: packages/acp/acp/src/content.ts:111-204（admitAcpPrompt）
 //
 // 次序是定死的：**每一个线上块和每一张图都先验完**，那批图才开始写。取消如果落在
 // 一次已经成功的内容寻址写入之后，可能在存储里留下一个没人指得到的对象，但它绝不会
@@ -336,7 +336,7 @@ func AdmitPrompt(
 
 // AssistantBlockToACP 把一个已提交的助手内容块翻成 ACP 线上内容。
 //
-// 源: packages/acp/acp/src/content.ts:215-238
+// 源: packages/acp/acp/src/content.ts:206-237
 //
 // 第二个返回值为假表示这个块**不上线**：空文本，以及一切不是文本也不是图的块——
 // 推理、工具调用这些是呈现和轨迹数据，不属于这条自动化线。

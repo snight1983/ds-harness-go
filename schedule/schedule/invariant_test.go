@@ -22,8 +22,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/invariants"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // registryOf 造一份什么都放行的不变量注册表。

@@ -12,8 +12,8 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // newEmitter 造一个把警告攒进切片、而不是往 slog 里写的发射器。

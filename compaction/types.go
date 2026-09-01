@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // 四条 compaction/* 事件的类型。
@@ -323,7 +323,7 @@ type PruneData struct {
 
 // Result 是一次成功压缩交出来的结果。
 //
-// 源: packages/compaction/compaction/src/types.ts:93-119
+// 源: packages/compaction/compaction/src/types.ts:92-119（CompactionResult）
 //
 // 它不进日志，所以没有 json 标签：三个 seq 是刚刚追加进去的那三条事件的位置，
 // 调用方拿它去定位自己这次做了什么。

@@ -1,7 +1,7 @@
 // 本文件的作用：这一层的主体——挂起的选择存在哪儿、它在什么时候落进日志、
 // 那段提示词什么时候出现，以及五条胳膊怎么一次装齐、一次摘干净。
 //
-// 源: packages/plan/plan-mode/src/index.ts:197-511
+// 源: packages/plan/plan-mode/src/index.ts:165-462
 
 package planmode
 
@@ -14,16 +14,16 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/commands"
-	"ds-harness-go/interaction/userquestions"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/interaction/userquestions"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // sectionName 是那段计划指引在系统提示词里的段名。
@@ -41,7 +41,7 @@ const sectionOrder = 50
 
 // Config 是这个控制器的部署配置。
 //
-// 源: packages/plan/plan-mode/src/index.ts:70-73
+// 源: packages/plan/plan-mode/src/index.ts:62-66（PlanModeConfig）
 type Config struct {
 	// Section 是计划模式开着时作为 `plan:policy` 段落发出去的那段指引。
 	//
@@ -53,7 +53,7 @@ type Config struct {
 	// 新增: 顶掉 DSH 的 `exec.agent` / `invocation.agent` / `context.agent`——那三处
 	// 在 DSH 里都是同一个结构类型的 agent 对象。Go 这三处拿到的是不透明的
 	// [scope.Key]，从它到 agent 的映射只有装配方知道（成例见
-	// [ds-harness-go/interaction/commands.Options.LogOf]）。
+	// [github.com/snight1983/ds-harness-go/interaction/commands.Options.LogOf]）。
 	//
 	// 它是必填的：退出工具、`/plan` 命令、那段提示词都要靠它找到会话，
 	// 一条都少不了。认不出那把钥匙时返回错误——各处对「认不出」的反应不同，
@@ -107,7 +107,7 @@ type pendingIntent struct {
 // Controller 拥有日志上的计划状态、在步骤开头把选定的状态落盘并旁白、
 // 那段 `plan:policy` 指引、`/plan` 命令，以及那件一直挂着的退出工具。
 //
-// 源: packages/plan/plan-mode/src/index.ts:202-512
+// 源: packages/plan/plan-mode/src/index.ts:165-462
 //
 // 界面通过 session/event 看到已经提交的翻转；本包**不**维护任何活着的镜像。
 type Controller struct {
@@ -261,7 +261,7 @@ func (c *Controller) Get(target agent.Agent) State {
 
 // Set 选定计划模式开还是关。
 //
-// 源: packages/plan/plan-mode/src/index.ts:462-482
+// 源: packages/plan/plan-mode/src/index.ts:396-432
 //
 // 回合之间**立刻**落盘：在下一段提示开起一个新回合之前，不会再有回合之内的步骤
 // 前置来接这次选择了。判断依据是日志里有没有一个开着的回合（[hasOpenTurn]），
@@ -311,7 +311,7 @@ func (c *Controller) Set(target agent.Agent, active bool) (Outcome, error) {
 //
 // 新增: DSH 用 `WeakMap<Session, ...>` 记挂起的选择，会话被回收时那一条跟着没了。
 // Go 没有弱引用，所以由装配方在会话散掉时叫这个方法（成例见
-// [ds-harness-go/session/sessiontitle.Service.OnSessionDisposed]）。
+// [github.com/snight1983/ds-harness-go/session/sessiontitle.Service.OnSessionDisposed]）。
 //
 // 不叫它的后果只是留下一条永远不会被读到的记录：会话身份不复用，所以它既不会
 // 被误当成另一个会话的选择，也不会改变任何行为——只是一点不回收的内存。
@@ -368,7 +368,7 @@ func (c *Controller) preStep(
 
 // onBoundary 在下一次请求装配之前把那一条挂起的选择落进日志。
 //
-// 源: packages/plan/plan-mode/src/index.ts:485-497
+// 源: packages/plan/plan-mode/src/index.ts:434-447
 func (c *Controller) onBoundary(sess *coresession.Session) error {
 	pending, ok := c.pendingOf(sess.ID())
 	if !ok {
@@ -389,7 +389,7 @@ func (c *Controller) onBoundary(sess *coresession.Session) error {
 
 // narration 在「最后一次告诉模型的是另一种模式」时造一条切换通知。
 //
-// 源: packages/plan/plan-mode/src/index.ts:500-511
+// 源: packages/plan/plan-mode/src/index.ts:449-461
 //
 // 第一次请求之前不通知（模型还没被告知过任何模式，没有可纠正的印象），
 // 已经是那种模式时也不通知。

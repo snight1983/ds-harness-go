@@ -42,9 +42,9 @@ import (
 	"runtime"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ptr 把一个值取址，专给那几个「不给」和「给了个非法值」必须分开的可选入参。

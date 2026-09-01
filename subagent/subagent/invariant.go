@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // PackageName 是这个包在不变量注册表里占的名字。
@@ -36,7 +36,7 @@ type lifecycleInvariant struct {
 	fail invariants.Fail
 
 	// mutex 守住下面两张表。fail 一律在锁**外面**叫——它是 panic，在临界区里抛
-	// 会把这把锁永远留在锁着的状态（和 [ds-harness-go/llm.Runtime] 那处同一条规矩）。
+	// 会把这把锁永远留在锁着的状态（和 [github.com/snight1983/ds-harness-go/llm.Runtime] 那处同一条规矩）。
 	mutex     sync.Mutex
 	providers map[string]struct{}
 	runs      map[RunID]RunInfo
@@ -131,7 +131,7 @@ func (i *lifecycleInvariant) runEnded(info RunEndInfo) {
 
 // RegisterInvariants 装上本包那两条检查，返回注销函数。
 //
-// 源: packages/subagent/subagent/src/invariant.ts:88-92
+// 源: packages/subagent/subagent/src/invariant.ts:86-92（apply）
 //
 // # 这两条检查在查什么
 //

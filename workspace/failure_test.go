@@ -32,9 +32,9 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/fs"
-	"ds-harness-go/session"
-	"ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/storage/domain"
 )
 
 // -- 打不开 / 关不掉 --------------------------------------------------------

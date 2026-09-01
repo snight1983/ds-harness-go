@@ -16,8 +16,8 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 func TestBuildingACoordinatorNeedsSomewhereToPutTheRecords(t *testing.T) {

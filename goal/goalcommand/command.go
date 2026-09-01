@@ -13,10 +13,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/interaction/commands"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/interaction/commands"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // usage 是那句贴在几条错误后面的语法提示。

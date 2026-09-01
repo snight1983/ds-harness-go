@@ -8,16 +8,16 @@ package jobstool
 import (
 	"encoding/json"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
 )
 
 // PublicSnapshot 是一件作业里可以放心交给模型自己写程序去读的那一部分：属主和
 // 通知记账全部不给。
 //
-// 源: packages/jobs/tool-jobs/src/index.ts:55-64
+// 源: packages/jobs/tool-jobs/src/index.ts:54-63（PublicJobSnapshot）
 //
-// 新增: 时刻在 [ds-harness-go/jobs/jobs.Snapshot] 那边是 [time.Time]，到这里折回
+// 新增: 时刻在 [github.com/snight1983/ds-harness-go/jobs/jobs.Snapshot] 那边是 [time.Time]，到这里折回
 // DSH 那种 epoch 毫秒整数——这一层是**线上格式**，模型看见的必须和 DSH 一模一样。
 type PublicSnapshot struct {
 	ID     string `json:"id"`
@@ -55,11 +55,11 @@ func publicJob(snapshot jobs.Snapshot) PublicSnapshot {
 	return public
 }
 
-// statusNames 是 schema 里那份状态白名单，从 [ds-harness-go/jobs/jobs] 的常量取。
+// statusNames 是 schema 里那份状态白名单，从 [github.com/snight1983/ds-harness-go/jobs/jobs] 的常量取。
 //
 // 源: packages/jobs/tool-jobs/src/index.ts:74-78
 //
-// 不写字面量的理由同 [ds-harness-go/sessionquery/querytool] 那几张白名单：这套值
+// 不写字面量的理由同 [github.com/snight1983/ds-harness-go/sessionquery/querytool] 那几张白名单：这套值
 // 和注册表认得的那套必须是同一套，抄一遍就意味着以后加一种状态时这里会悄悄落下。
 var statusNames = []jobs.JobStatus{
 	jobs.StatusRunning,
@@ -98,7 +98,7 @@ func publicJobSchema() tools.Node {
 
 // StatusLine 排出那行通用状态，生产方给了细节就带上。
 //
-// 源: packages/jobs/tool-jobs/src/index.ts:98-107
+// 源: packages/jobs/tool-jobs/src/index.ts:97-106（statusLine）
 //
 // 新增: DSH 收的是 `Pick<JobSnapshot, 'status' | 'detail'>`，靠结构化类型让注册表
 // 那份快照和这份公开投影都能传进来。Go 没有结构化类型，硬造一个只有两个字段的

@@ -5,7 +5,12 @@
 //
 //   - 装配面缺一样却拖到第一个请求进来才空指针——四个必填协作者各有一条用例。
 //   - 装了两次、或者握了两次手：后者会再挂一次兜底适配器，把第一次那次挂载的
-//     撤销函数覆盖掉，从此再也卸不掉。
+//     撤销函数覆盖掉，从此再也卸不掉。并发的两次 `initialize` 是同一件事的另一面：
+//     「办成了没有」那个开关要到最后才置起来，挡不住它们。
+//   - 一次半路失败的握手把这台服务器留在「自称办好了、路由却还没落地」的样子上：
+//     那期间进来的 `session/prompt` 会拿一条空路由建 agent，一步都跑不动。
+//   - 握手记下的推理档位没走到 agent 的选项上，或者没拿去把那条路由真解算一遍。
+//   - 一轮带内联图的输入被逐张送去准入（绕开批次规则），或者准入回来的引用串了位。
 //   - 同一个会话标识上并发的两次 `session/prompt` 建出两个 agent。
 //   - 收摊时漏掉一个还在半路上的创建：那个 agent 会活过这次拆解，没人拆得掉它。
 //   - 一次只重载 agent 循环的重启把 agent 拆了、会话记录还在，于是 Followup 投进
@@ -21,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -30,14 +36,15 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/invariants"
-	"ds-harness-go/llm"
-	"ds-harness-go/sdk/sdkprotocol"
-	sessionlog "ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/sdk/sdkprotocol"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // absolutePath 是一条在本机上确实绝对的路径；写死哪一边的字面量都会让另一个平台上的
@@ -112,11 +119,106 @@ func (p *recordingPeer) only(t *testing.T, method string) any {
 	return found[0]
 }
 
-// ---- 假提供方名册 ----
+// ---- 假 LLM 服务 ----
 
-type stubProviders struct{ entries []llm.ProviderInfo }
+// stubLLM 是一台假 LLM 服务：一份提供方名册，加上一次可以配置成失败的路由解算。
+type stubLLM struct {
+	entries []llm.ProviderInfo
+	// resolveErr 非 nil 时每次路由解算都失败。
+	resolveErr error
 
-func (s stubProviders) ListProviders() []llm.ProviderInfo { return s.entries }
+	mutex sync.Mutex
+	// resolved 按次序记下每一次解算收到的那份配置。
+	resolved []llm.CallConfig
+}
+
+func (s *stubLLM) ListProviders() []llm.ProviderInfo { return s.entries }
+
+func (s *stubLLM) ResolveCallConfig(_ context.Context, config llm.CallConfig) (llm.CallConfig, error) {
+	s.mutex.Lock()
+	s.resolved = append(s.resolved, config)
+	s.mutex.Unlock()
+	if s.resolveErr != nil {
+		return llm.CallConfig{}, s.resolveErr
+	}
+	return config, nil
+}
+
+// lastResolved 交回最后一次解算收到的那份配置，一次都没解过时第二个值为假。
+func (s *stubLLM) lastResolved() (llm.CallConfig, bool) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if len(s.resolved) == 0 {
+		return llm.CallConfig{}, false
+	}
+	return s.resolved[len(s.resolved)-1], true
+}
+
+// ---- 假附件库 ----
+
+// stubAttachments 是一台假附件库：限额宽到不挡路，存一张就发一条按次序编号的引用。
+//
+// 编号是有意为之：这一批图交回来的引用必须按原来的次序落回各自那一块，编号让串位
+// 当场看得出来。
+type stubAttachments struct {
+	// saveErr 非 nil 时每一次保存都失败。
+	saveErr error
+
+	mutex sync.Mutex
+	// saved 是到目前为止存下来的那些图。
+	saved []attachment.ImageInput
+	// admissions 是走过几次批次准入。
+	admissions int
+}
+
+// ImageLimits 顺便记一次批次准入：[attachment.SaveImages] 每批只问一次限额。
+func (s *stubAttachments) ImageLimits() attachment.ImageLimits {
+	s.mutex.Lock()
+	s.admissions++
+	s.mutex.Unlock()
+	return attachment.ImageLimits{
+		MaxImageBytes:        1 << 20,
+		MaxImagesPerMessage:  8,
+		MaxMessageImageBytes: 1 << 20,
+		MaxImagePixels:       1 << 20,
+		MaxImageDimension:    4096,
+		MediaTypes:           []attachment.MediaType{"image/png"},
+	}
+}
+
+func (s *stubAttachments) ValidateImage(context.Context, attachment.ImageInput) error { return nil }
+
+func (s *stubAttachments) SaveImage(
+	_ context.Context, input attachment.ImageInput,
+) (attachment.ImageRef, error) {
+	if s.saveErr != nil {
+		return attachment.ImageRef{}, s.saveErr
+	}
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	ref := attachment.ImageRef{
+		ID:        attachment.ID(fmt.Sprintf("att-%d", len(s.saved))),
+		MediaType: input.MediaType,
+		Bytes:     len(input.Data),
+		Width:     1,
+		Height:    1,
+	}
+	s.saved = append(s.saved, input)
+	return ref, nil
+}
+
+func (s *stubAttachments) ReadImage(
+	context.Context, attachment.ImageRef,
+) (attachment.StoredImage, error) {
+	return attachment.StoredImage{}, errors.New("这台假附件库不读回")
+}
+
+// batches 交出走过几次批次准入。
+func (s *stubAttachments) batches() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.admissions
+}
 
 // ---- 假 agent ----
 
@@ -289,7 +391,7 @@ func newLive(t *testing.T, mutate func(*Config)) *live {
 		Agents:    agents,
 		Sessions:  sessions,
 		Subagents: subs,
-		Providers: stubProviders{entries: []llm.ProviderInfo{{ID: "known", Name: "known"}}},
+		LLM:       &stubLLM{entries: []llm.ProviderInfo{{ID: "known", Name: "known"}}},
 		Logger:    quiet,
 	}
 	if mutate != nil {
@@ -336,7 +438,7 @@ func (l *live) prompt(t *testing.T, sessionID string) sdkprotocol.SessionPromptR
 	t.Helper()
 	result, err := l.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
 		SessionID:     sessionID,
-		ContentBlocks: llm.Content{llm.TextBlock{Text: "hi"}},
+		ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}},
 	})
 	if err != nil {
 		t.Fatalf("排一轮输入不该失败：%v", err)
@@ -363,7 +465,7 @@ func (l *live) stallOneCreation(t *testing.T, sessionID string) (chan struct{}, 
 	go func() {
 		_, err := l.server.Prompt(context.Background(), sdkprotocol.SessionPromptParams{
 			SessionID:     sessionID,
-			ContentBlocks: llm.Content{llm.TextBlock{Text: "hi"}},
+			ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}},
 		})
 		failed <- err
 	}()
@@ -516,6 +618,155 @@ func TestInitializeRejectsANonPositiveMaxTokens(t *testing.T) {
 	}
 }
 
+// 「给了空串」是坏输入，「根本没给」是常态；线上那个指针就是为了让两者分得开，
+// 收进来之后前者必须当场被拒，否则它会悄悄变成后者。
+func TestInitializeRejectsAnEmptyReasoningEffort(t *testing.T) {
+	t.Parallel()
+	fixture := newLive(t, nil)
+	empty := llm.ReasoningEffortID("")
+	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
+		Cwd: absolutePath, Provider: "known", Model: "m", ReasoningEffort: &empty,
+	}); err == nil {
+		t.Fatal("推理档位给了空串该被拒")
+	}
+}
+
+// 握手记下的推理档位要一路走到每一个 agent 的选项上；只落在服务器自己身上等于没落。
+func TestInitializeCarriesTheReasoningEffortEverywhere(t *testing.T) {
+	t.Parallel()
+	service := &stubLLM{entries: []llm.ProviderInfo{{ID: "known", Name: "known"}}}
+	fixture := newLive(t, func(c *Config) { c.LLM = service })
+	effort := llm.ReasoningEffortID("high")
+	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
+		Cwd: absolutePath, Provider: "known", Model: "m", ReasoningEffort: &effort,
+	}); err != nil {
+		t.Fatalf("握手不该失败：%v", err)
+	}
+	resolved, ok := service.lastResolved()
+	if !ok {
+		t.Fatal("握手该把这条路由真解算一遍")
+	}
+	if resolved.ReasoningEffort != effort || resolved.Provider != "known" || resolved.Model != "m" {
+		t.Fatalf("解算收到的那份配置不对：%+v", resolved)
+	}
+
+	fixture.prompt(t, "s1")
+	created := fixture.factory.created()
+	if len(created) != 1 {
+		t.Fatalf("该建出一个 agent，实际 %d 个", len(created))
+	}
+	if created[0].AgentOptions.ReasoningEffort != effort {
+		t.Fatalf("这个 agent 该照握手的档位跑，实际 %q", created[0].AgentOptions.ReasoningEffort)
+	}
+}
+
+// 解不开的路由必须在握手这一步就撞上；留到第一次 `session/prompt` 才撞，错误就已经
+// 落在一个会话的历史里了。
+func TestInitializeRefusesARouteThatCannotBeResolved(t *testing.T) {
+	t.Parallel()
+	service := &stubLLM{
+		entries:    []llm.ProviderInfo{{ID: "known", Name: "known"}},
+		resolveErr: errors.New("这个模型不收这个档位"),
+	}
+	fixture := newLive(t, func(c *Config) { c.LLM = service })
+	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
+		Cwd: absolutePath, Provider: "known", Model: "m",
+	}); err == nil {
+		t.Fatal("解不开的路由该在握手这一步被拒")
+	}
+	// 失败的那次握手一个字都没公布，所以此刻这台服务器还停在握手之前。
+	if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
+		SessionID:     "s1",
+		ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}},
+	}); err == nil {
+		t.Fatal("握手失败之后该还收不了输入")
+	}
+	// 而换一份参数重来是允许的：那扇门失败时还了回去。
+	service.mutex.Lock()
+	service.resolveErr = nil
+	service.mutex.Unlock()
+	fixture.handshake(t)
+}
+
+// 没挂 LLM 服务就解不了这条路由，于是握不了手——公布一条没解算过的路由，等于让
+// 之后每一个会话都拿它去撞。
+func TestInitializeNeedsAnLLMServiceToResolveTheRoute(t *testing.T) {
+	t.Parallel()
+	var mounted atomic.Int64
+	fixture := newLive(t, func(c *Config) {
+		c.LLM = nil
+		c.MountAdapter = func(context.Context, string) (func(context.Context) error, error) {
+			mounted.Add(1)
+			return nil, nil
+		}
+	})
+	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
+		Cwd: absolutePath, Provider: "known", Model: "m",
+	}); err == nil {
+		t.Fatal("没挂 LLM 服务该握不了手")
+	}
+	if mounted.Load() != 1 {
+		t.Fatalf("兜底那条路该照走（没挂 LLM 服务一律当作没有适配器认领），实际 %d 次", mounted.Load())
+	}
+}
+
+// 那条通道的处理器是并发的，两次 `initialize` 真的会同时进来。只靠「办成了没有」这
+// 一个开关挡不住它们——它要到最后才置起来，于是两边都会去挂一次兜底适配器，后挂上
+// 的那个把前一个的撤销函数覆盖掉，从此拆不掉。
+func TestConcurrentInitializeMountsTheFallbackAdapterOnce(t *testing.T) {
+	t.Parallel()
+	var mounted, unmounted atomic.Int64
+	release := make(chan struct{})
+	fixture := newLive(t, func(c *Config) {
+		c.LLM = &stubLLM{}
+		c.MountAdapter = func(context.Context, string) (func(context.Context) error, error) {
+			mounted.Add(1)
+			// 卡在挂载里，好让第二次握手确实撞上「有一次正在半路上」那条路。
+			<-release
+			return func(context.Context) error { unmounted.Add(1); return nil }, nil
+		}
+	})
+
+	var group sync.WaitGroup
+	results := make(chan error, 2)
+	for range 2 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			_, err := fixture.server.Initialize(context.Background(), sdkprotocol.InitializeParams{
+				Cwd: absolutePath, Provider: "nobody", Model: "m",
+			})
+			results <- err
+		}()
+	}
+	// 等第一次握手真的走进挂载里，再放它过去；第二次那时必然已经被那扇门挡下。
+	for mounted.Load() == 0 {
+		runtime.Gosched()
+	}
+	close(release)
+	group.Wait()
+	close(results)
+
+	var succeeded int
+	for err := range results {
+		if err == nil {
+			succeeded++
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("两次并发握手该只成一次，实际 %d 次", succeeded)
+	}
+	if mounted.Load() != 1 {
+		t.Fatalf("兜底适配器该只挂一次，实际 %d 次", mounted.Load())
+	}
+	if err := fixture.server.Shutdown(t.Context()); err != nil {
+		t.Fatalf("收摊失败：%v", err)
+	}
+	if unmounted.Load() != 1 {
+		t.Fatalf("收摊该把那次挂载卸掉，实际 %d 次", unmounted.Load())
+	}
+}
+
 func TestInitializeNeedsAnInstalledServer(t *testing.T) {
 	t.Parallel()
 	server, err := New(Config{
@@ -556,12 +807,12 @@ func TestInitializeRefusesAnUnclaimedProviderWithoutAFallback(t *testing.T) {
 	}
 }
 
-// 没挂 LLM 服务时一律当作「没有适配器认领」，于是照样走兜底那条路。
+// 名册里没有这个提供方时走兜底那条路，收摊时卸掉。
 func TestInitializeMountsTheFallbackAdapterWhenUnclaimed(t *testing.T) {
 	t.Parallel()
 	var mounted, unmounted atomic.Int64
 	fixture := newLive(t, func(c *Config) {
-		c.Providers = nil
+		c.LLM = &stubLLM{}
 		c.MountAdapter = func(context.Context, string) (func(context.Context) error, error) {
 			mounted.Add(1)
 			return func(context.Context) error { unmounted.Add(1); return nil }, nil
@@ -594,6 +845,136 @@ func TestInitializeReportsAFailedFallbackMount(t *testing.T) {
 }
 
 // ---- 排输入 ----
+
+// 握手之前建出来的会话会带着一条空路由，一步都跑不动；所以这一步必须拒，
+// 而不是先把会话建出来再说。
+func TestPromptRefusesBeforeTheHandshake(t *testing.T) {
+	t.Parallel()
+	fixture := newLive(t, nil)
+	if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
+		SessionID:     "s1",
+		ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}},
+	}); err == nil {
+		t.Fatal("握手之前一轮输入都不该收")
+	}
+	if got := len(fixture.factory.created()); got != 0 {
+		t.Fatalf("一个 agent 都不该建出来，实际 %d 个", got)
+	}
+}
+
+func TestPromptAdmitsInlineImagesInPlace(t *testing.T) {
+	t.Parallel()
+	store := &stubAttachments{}
+	fixture := newLive(t, func(c *Config) { c.Attachments = store })
+	fixture.handshake(t)
+
+	if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
+		SessionID: "s1",
+		ContentBlocks: sdkprotocol.PromptContent{
+			{Durable: llm.TextBlock{Text: "看这张"}},
+			{Encoded: &sdkprotocol.EncodedImageBlock{Data: "AAAA", MimeType: "image/png"}},
+			{Durable: llm.TextBlock{Text: "再看这张"}},
+			{Encoded: &sdkprotocol.EncodedImageBlock{Data: "BBBB", MimeType: "image/png"}},
+		},
+	}); err != nil {
+		t.Fatalf("排一轮带图的输入不该失败：%v", err)
+	}
+
+	// 整批一次准入而不是逐张：张数、字节总和这几条本来就是批次规则。
+	if got := store.batches(); got != 1 {
+		t.Fatalf("该只走一次批次准入，实际 %d 次", got)
+	}
+	handle, ok := fixture.agents.Get("s1")
+	if !ok {
+		t.Fatal("那个 agent 该在注册表里")
+	}
+	delivered := handle.(*stubAgent).delivered()
+	if len(delivered) != 1 {
+		t.Fatalf("该投进一条消息，实际 %d 条", len(delivered))
+	}
+	content := delivered[0].Content
+	if len(content) != 4 {
+		t.Fatalf("四块该原样留在原位，实际 %d 块", len(content))
+	}
+	for index, want := range []llm.BlockType{llm.BlockText, llm.BlockImage, llm.BlockText, llm.BlockImage} {
+		if content[index].BlockType() != want {
+			t.Fatalf("第 %d 块该是 %s，实际 %s", index, want, content[index].BlockType())
+		}
+	}
+	// 两张图各自换成自己那条引用，不能串位。
+	if got := content[1].(llm.ImageBlock).Attachment.ID; got != "att-0" {
+		t.Fatalf("第一张图的引用不对：%q", got)
+	}
+	if got := content[3].(llm.ImageBlock).Attachment.ID; got != "att-1" {
+		t.Fatalf("第二张图的引用不对：%q", got)
+	}
+}
+
+// 一张图都没有时一次存储都不碰：绝大多数轮次是纯文本的，不该为它们要求一个附件库。
+func TestPromptWithoutImagesNeedsNoAttachmentStore(t *testing.T) {
+	t.Parallel()
+	fixture := newLive(t, nil)
+	fixture.handshake(t)
+	fixture.prompt(t, "s1")
+}
+
+func TestPromptNeedsAnAttachmentStoreForInlineImages(t *testing.T) {
+	t.Parallel()
+	fixture := newLive(t, nil)
+	fixture.handshake(t)
+	if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
+		SessionID: "s1",
+		ContentBlocks: sdkprotocol.PromptContent{
+			{Encoded: &sdkprotocol.EncodedImageBlock{Data: "AAAA", MimeType: "image/png"}},
+		},
+	}); err == nil {
+		t.Fatal("没有附件库该收不了带内联图的输入")
+	}
+}
+
+func TestPromptReportsAFailedAdmission(t *testing.T) {
+	t.Parallel()
+	store := &stubAttachments{saveErr: errors.New("这张图不合规")}
+	fixture := newLive(t, func(c *Config) { c.Attachments = store })
+	fixture.handshake(t)
+	if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
+		SessionID: "s1",
+		ContentBlocks: sdkprotocol.PromptContent{
+			{Encoded: &sdkprotocol.EncodedImageBlock{Data: "AAAA", MimeType: "image/png"}},
+		},
+	}); err == nil {
+		t.Fatal("准入失败该把这一轮带失败")
+	}
+}
+
+// nil 和长度为零的切片分得开：这条消息的内容是原样落进会话日志的，「没给内容」和
+// 「给了一份空内容」在那份日志的往返上不是同一件事。
+func TestPromptKeepsAbsentContentDistinctFromEmpty(t *testing.T) {
+	t.Parallel()
+	fixture := newLive(t, nil)
+	fixture.handshake(t)
+	for name, blocks := range map[string]sdkprotocol.PromptContent{
+		"没给":   nil,
+		"给了空的": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			session := "s-" + name
+			if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
+				SessionID: session, ContentBlocks: blocks,
+			}); err != nil {
+				t.Fatalf("排一轮空输入不该失败：%v", err)
+			}
+			handle, ok := fixture.agents.Get(sessionlog.SessionID(session))
+			if !ok {
+				t.Fatal("那个 agent 该在注册表里")
+			}
+			delivered := handle.(*stubAgent).delivered()[0].Content
+			if (delivered == nil) != (blocks == nil) {
+				t.Fatalf("「没给」和「给了空的」该分得开，实际 %#v", delivered)
+			}
+		})
+	}
+}
 
 func TestPromptCreatesTheSessionOnFirstSight(t *testing.T) {
 	t.Parallel()
@@ -635,7 +1016,7 @@ func TestConcurrentPromptsShareOneCreation(t *testing.T) {
 			defer wait.Done()
 			_, _ = fixture.server.Prompt(context.Background(), sdkprotocol.SessionPromptParams{
 				SessionID:     "s1",
-				ContentBlocks: llm.Content{llm.TextBlock{Text: "hi"}},
+				ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}},
 			})
 		}()
 	}
@@ -655,7 +1036,7 @@ func TestPromptReportsAFailedCreation(t *testing.T) {
 	fixture.factory.mutex.Unlock()
 
 	if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
-		SessionID: "s1", ContentBlocks: llm.Content{llm.TextBlock{Text: "hi"}},
+		SessionID: "s1", ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}},
 	}); err == nil {
 		t.Fatal("建不出 agent 该把这次排队带失败")
 	}
@@ -693,7 +1074,7 @@ func TestPromptRefusesASessionWhoseAgentDiedElsewhere(t *testing.T) {
 	}
 
 	if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
-		SessionID: "s1", ContentBlocks: llm.Content{llm.TextBlock{Text: "hi"}},
+		SessionID: "s1", ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}},
 	}); err == nil {
 		t.Fatal("agent 在服务器之外被拆掉了，该拒这次投递")
 	}
@@ -784,7 +1165,7 @@ func TestShutdownRefusesNewSessions(t *testing.T) {
 		t.Fatalf("收摊失败：%v", err)
 	}
 	if _, err := fixture.server.Prompt(t.Context(), sdkprotocol.SessionPromptParams{
-		SessionID: "s1", ContentBlocks: llm.Content{llm.TextBlock{Text: "hi"}},
+		SessionID: "s1", ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}},
 	}); err == nil {
 		t.Fatal("收摊之后该不再接新会话")
 	}
@@ -856,7 +1237,7 @@ func TestHandleRequestDispatchesTheThreeMethods(t *testing.T) {
 		t.Fatalf("initialize 该派得出去：%v", err)
 	}
 	if _, err := fixture.server.HandleRequest(t.Context(), sdkprotocol.MethodSessionPrompt, raw(
-		sdkprotocol.SessionPromptParams{SessionID: "s1", ContentBlocks: llm.Content{llm.TextBlock{Text: "hi"}}},
+		sdkprotocol.SessionPromptParams{SessionID: "s1", ContentBlocks: sdkprotocol.PromptContent{{Durable: llm.TextBlock{Text: "hi"}}}},
 	)); err != nil {
 		t.Fatalf("session/prompt 该派得出去：%v", err)
 	}
@@ -1115,3 +1496,7 @@ func TestRegisterInvariantsNeedsARegistry(t *testing.T) {
 		t.Fatal("没有注册表该装不上")
 	}
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

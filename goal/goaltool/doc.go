@@ -6,7 +6,7 @@
 // 源: packages/goal/tool-goal/src/index.ts:1-5
 //
 // 本包自己不拥有任何耐久状态：改动落不落得下去、修订号接不接得上、阶段跃迁成不
-// 成立，全归 [ds-harness-go/goal/goal] 那台服务验。本包只回答一个它管不了的问题
+// 成立，全归 [github.com/snight1983/ds-harness-go/goal/goal] 那台服务验。本包只回答一个它管不了的问题
 // ——**这次调用够不够格**。
 //
 // # 为什么授权要在这一层做
@@ -30,7 +30,7 @@
 // # 一次终局更新之后模型还要说一句话
 //
 // complete 和 blocked 在一个自动轮次里成立时，本包往这次调用的最终结果上捎一条
-// 插件来源的上下文（见 [ds-harness-go/core/tools.RunContext.DeferContext]），
+// 插件来源的上下文（见 [github.com/snight1983/ds-harness-go/core/tools.RunContext.DeferContext]），
 // 让模型在这一轮结束之前正面对用户交代一次。它取代的是 DSH 早先那个「硬停回合」
 // 的做法——硬停会让最后一轮的产出无人转述。
 package goaltool

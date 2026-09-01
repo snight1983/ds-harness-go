@@ -11,11 +11,11 @@ import (
 	"encoding/json"
 	"slices"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // 这几句是拒收时给模型看的话，一个字都不许改译。
@@ -33,7 +33,7 @@ const (
 // Execution 是一次经过认证的目标工具调用：调用方、它所在的那个还开着的回合，
 // 以及那个回合边界**之后**被接受的那些事件。
 //
-// 源: packages/goal/tool-goal/src/authority.ts:13-17
+// 源: packages/goal/tool-goal/src/authority.ts:11-16（GoalToolExecution）
 type Execution struct {
 	// Agent 是那个确切的活调用方。
 	Agent agent.Agent
@@ -61,10 +61,10 @@ const (
 
 // Authority 是一次改状态的调用拿到的那份硬授权。
 //
-// 源: packages/goal/tool-goal/src/authority.ts:20-22
+// 源: packages/goal/tool-goal/src/authority.ts:18-21（GoalToolAuthority）
 //
 // 新增: DSH 那边这是两支联合。Go 里合成一个带 Kind 判别的结构体（成例见
-// [ds-harness-go/goal/goal.Change]）：Goal 恰好在 Kind 是 [AuthorityGoalRound]
+// [github.com/snight1983/ds-harness-go/goal/goal.Change]）：Goal 恰好在 Kind 是 [AuthorityGoalRound]
 // 时非 nil。
 type Authority struct {
 	// Kind 是这份授权的判别。
@@ -94,7 +94,7 @@ func openTurn(caller agent.Agent) (session.Event, []session.Event, error) {
 
 // execution 认出这次调用的 agent，并且把它那个还开着的回合切出来。
 //
-// 源: packages/goal/tool-goal/src/authority.ts:50-63
+// 源: packages/goal/tool-goal/src/authority.ts:41-60（goalToolExecution）
 //
 // 三件事都得成立才算数：手里这个 agent 就是注册表里那个确切的活实例、它此刻正
 // 在跑、而且这条调用链上继承下来的发起者就是它本人。第三条挡的是「一个 agent
@@ -102,7 +102,7 @@ func openTurn(caller agent.Agent) (session.Event, []session.Event, error) {
 // 由那条因果链说了算。
 //
 // 新增: DSH 的 `ctx.agents.currentInitiator()` 是 cordis 上的全局态。Go 里同一件
-// 事是 [ds-harness-go/core/agent.CurrentInitiator]——它挂在 ctx 上，而工具执行体
+// 事是 [github.com/snight1983/ds-harness-go/core/agent.CurrentInitiator]——它挂在 ctx 上，而工具执行体
 // 拿到的 ctx 正是从那个驱动的活动 ctx 派生下来的。
 func (c *Controller) execution(ctx context.Context, exec *tools.RunContext) (Execution, error) {
 	if exec == nil || exec.Agent == nil {
@@ -131,7 +131,7 @@ func (c *Controller) execution(ctx context.Context, exec *tools.RunContext) (Exe
 //
 // 读不回来当成「不算数」而不是当成错误：这两道闸问的都是「这一轮里**有没有**一条
 // 够格的输入」，一条坏掉的事件显然不是那一条。真要拿这段日志当权威去回放的是
-// [ds-harness-go/goal/goal.Fold]，那一侧一个字节都不放过。
+// [github.com/snight1983/ds-harness-go/goal/goal.Fold]，那一侧一个字节都不放过。
 func userMessage(event session.Event) (llm.Message, bool) {
 	if event.Type != session.EventUserMessage {
 		return llm.Message{}, false
@@ -150,7 +150,7 @@ func userMessage(event session.Event) (llm.Message, bool) {
 // 两道条件缺一不可：调用方得是一个**顶层** agent，而且这条边界之后得有一条
 // kind 是 user 的消息。子 agent 一律不算——它那条链上的输入来自它的父，不来自人。
 //
-// [ds-harness-go/core/agent.Agent.Followup] 和 Steer 省掉来源时落下来的就是
+// [github.com/snight1983/ds-harness-go/core/agent.Agent.Followup] 和 Steer 省掉来源时落下来的就是
 // user，所以任何一个**不是人**的生产方必须自己带上来源，否则它就白捡了这份资格。
 func (c *Controller) hasDirectHumanInput(execution Execution) bool {
 	if !slices.Contains(c.agents.Roots(), execution.Agent) {
@@ -182,7 +182,7 @@ func isMatchingGoalRound(execution Execution, view *goal.View) bool {
 
 // requireDirectHuman 要求这次调用坐在一条直接的人类回合上。
 //
-// 源: packages/goal/tool-goal/src/authority.ts:90-93
+// 源: packages/goal/tool-goal/src/authority.ts:94-102（requireDirectHuman）
 //
 // create、edit、pause、resume 走这条：它们要么开出一份新预算，要么改动预算本身，
 // 要么把一个停住的目标重新推起来——每一件都不该由模型自己批给自己。
@@ -195,7 +195,7 @@ func (c *Controller) requireDirectHuman(execution Execution) error {
 
 // completionAuthority 给一次 complete 或者 blocked 定出它靠的是哪一份授权。
 //
-// 源: packages/goal/tool-goal/src/authority.ts:101-108
+// 源: packages/goal/tool-goal/src/authority.ts:104-117（completionAuthority）
 //
 // 比 [Controller.requireDirectHuman] 松一档，而且必须松：一个自动往下推的目标
 // 如果只有人才能宣布它结束，那它就永远结束不了，只能耗光轮数预算。

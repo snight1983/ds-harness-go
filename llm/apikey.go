@@ -18,7 +18,7 @@ import (
 
 // APIKeyRejection 说明一个交进来的密钥为什么用不了。
 //
-// 源: packages/llm/llm/src/api-key.ts:18
+// 源: packages/llm/llm/src/api-key.ts:17-18（ApiKeyRejection）
 type APIKeyRejection string
 
 const (
@@ -30,7 +30,7 @@ const (
 
 // APIKeyCheck 是对一个交进来的密钥的裁定。
 //
-// 源: packages/llm/llm/src/api-key.ts:21-23
+// 源: packages/llm/llm/src/api-key.ts:20-23（ApiKeyCheck）
 //
 // 新增: DSH 是一个判别联合（ok:true 带 value，ok:false 带 reason）。Go 这边是
 // 一个结构体加一位 OK：这个联合只有两支、两支的载荷各只有一个字段，用封闭接口
@@ -84,7 +84,7 @@ func NormalizeAPIKey(raw string) APIKeyCheck {
 
 // AssertUsableAPIKey 收下一份凭据，或者说清它为什么用不了。
 //
-// 源: packages/llm/llm/src/index.ts:138-161
+// 源: packages/llm/llm/src/index.ts:122-155（assertUsableApiKey）
 //
 // 存下来的密钥从凭据接缝、一行 .env、或者一句 shell export 过来，这几条路都会
 // 顺手带上首尾空白，所以去空白是不声张的。除此之外的毛病在这里就拦下，而不是留到

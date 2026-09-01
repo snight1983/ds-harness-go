@@ -8,9 +8,9 @@ package tokenmeter
 import (
 	"encoding/json"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/projection"
 )
 
 // TokenUsageProjectionKey 是累计用量那个单元占的投影键。

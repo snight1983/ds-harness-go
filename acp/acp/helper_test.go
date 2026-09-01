@@ -9,21 +9,24 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	wire "github.com/coder/acp-go-sdk"
 
-	"ds-harness-go/attachment"
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // absolutePath 是一条在本机上确实绝对的路径；写死哪一边的字面量都会让另一个平台上的
@@ -205,24 +208,96 @@ func (s *fakeStore) ReadImage(_ context.Context, ref attachment.ImageRef) (attac
 
 // ---- 假模型名册 ----
 
-// fakeModels 按剧本回一份模型元数据。
+// fakeModels 按剧本回一份模型目录。
+//
+// 它满足整个 [ModelCatalog]：这一包好几条路要的是「翻得出提供方和模型」，而不只是
+// 「问得出模态」。
 type fakeModels struct {
 	modalities []llm.ModelModality
+	reasoning  *llm.ModelReasoningInfo
+	providers  []llm.ProviderInfo
+	models     map[string][]llm.ModelInfo
 	fail       error
+	listFail   error
+
+	// observed 记下这台名册当下挂着的那些拓扑观察者，好让用例自己敲一次更新。
+	observed *observerBox
 }
 
-func (m fakeModels) ResolveModelInfo(context.Context, string, string) (llm.ResolvedModelInfo, error) {
+// observerBox 是那几条观察者的共享落点：fakeModels 按值传，钩子得挂在同一处。
+type observerBox struct {
+	mutex     sync.Mutex
+	observers []llm.AdaptersUpdatedObserver
+}
+
+// notify 敲一遍当下挂着的每一条观察者。
+func (b *observerBox) notify() {
+	b.mutex.Lock()
+	observers := append([]llm.AdaptersUpdatedObserver(nil), b.observers...)
+	b.mutex.Unlock()
+	for _, observer := range observers {
+		observer()
+	}
+}
+
+func (m fakeModels) ResolveModelInfo(_ context.Context, provider, model string) (llm.ResolvedModelInfo, error) {
 	if m.fail != nil {
 		return llm.ResolvedModelInfo{}, m.fail
 	}
 	return llm.ResolvedModelInfo{
-		ModelInfo: llm.ModelInfo{InputModalities: m.modalities},
+		ModelInfo: llm.ModelInfo{
+			Provider:        provider,
+			ID:              model,
+			InputModalities: m.modalities,
+		},
+		Reasoning: m.reasoning,
 	}, nil
+}
+
+func (m fakeModels) ListProviders() []llm.ProviderInfo { return m.providers }
+
+func (m fakeModels) ListModels(_ context.Context, provider string) ([]llm.ModelInfo, error) {
+	if m.listFail != nil {
+		return nil, m.listFail
+	}
+	return m.models[provider], nil
+}
+
+func (m fakeModels) ResolveCallConfig(_ context.Context, config llm.CallConfig) (llm.CallConfig, error) {
+	if m.fail != nil {
+		return llm.CallConfig{}, m.fail
+	}
+	return config, nil
+}
+
+func (m fakeModels) OnAdaptersUpdated(
+	_ context.Context,
+	_ *scope.Scope,
+	observer llm.AdaptersUpdatedObserver,
+) (func(context.Context) error, error) {
+	if m.observed == nil {
+		return func(context.Context) error { return nil }, nil
+	}
+	m.observed.mutex.Lock()
+	m.observed.observers = append(m.observed.observers, observer)
+	m.observed.mutex.Unlock()
+	return func(context.Context) error { return nil }, nil
 }
 
 // imageModels 是一台声明收图的名册。
 func imageModels() fakeModels {
 	return fakeModels{modalities: []llm.ModelModality{llm.ModalityImage}}
+}
+
+// catalogModels 是一台真翻得出东西的名册：一条提供方、两个模型。
+func catalogModels() fakeModels {
+	return fakeModels{
+		providers: []llm.ProviderInfo{{ID: "acme", Name: "Acme"}},
+		models: map[string][]llm.ModelInfo{"acme": {
+			{Provider: "acme", ID: "fast", Name: "Fast", Description: "快的那个"},
+			{Provider: "acme", ID: "slow", Name: "Slow"},
+		}},
+	}
 }
 
 // ---- 假 agent ----
@@ -355,6 +430,70 @@ func (a *scriptedAgent) runTurn(
 	a.appendAll(t, logEvent(t, sessionlog.EventTurnEnd, sessionlog.TurnEndData{Turn: turn, Reason: reason}))
 }
 
+// ---- 假存档 ----
+
+// storedSession 是存档里的一条：那份耐久的头，加上它整条事件日志。
+type storedSession struct {
+	header sessionlog.SessionHeader
+	events []sessionlog.Event
+}
+
+// fakeCatalog 是一份摆在内存里的会话存档，同时当 [SessionCatalog] 和续跑的数据源。
+type fakeCatalog struct {
+	mutex sync.Mutex
+	// order 定死 List 交出去的次序：一份真实现的次序是不保证的，用例不该依赖它。
+	order []sessionlog.SessionID
+	// stored 是那些落了档的会话。
+	stored map[sessionlog.SessionID]storedSession
+	// listFail 非 nil 时翻存档当场失败。
+	listFail error
+}
+
+func newCatalog() *fakeCatalog {
+	return &fakeCatalog{stored: map[sessionlog.SessionID]storedSession{}}
+}
+
+// put 往存档里放一条会话。
+func (c *fakeCatalog) put(header sessionlog.SessionHeader, events ...sessionlog.Event) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if _, seen := c.stored[header.ID]; !seen {
+		c.order = append(c.order, header.ID)
+	}
+	c.stored[header.ID] = storedSession{header: header, events: events}
+}
+
+// take 取出一条落了档的会话。
+func (c *fakeCatalog) take(id sessionlog.SessionID) (storedSession, bool) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	found, ok := c.stored[id]
+	return found, ok
+}
+
+func (c *fakeCatalog) List(context.Context) ([]sessionlog.SessionHeader, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	if c.listFail != nil {
+		return nil, c.listFail
+	}
+	headers := make([]sessionlog.SessionHeader, 0, len(c.order))
+	for _, id := range c.order {
+		headers = append(headers, c.stored[id].header)
+	}
+	return headers, nil
+}
+
+// archived 造一条落了档的会话头。
+func archived(id sessionlog.SessionID, createdAt int64, cwd string) sessionlog.SessionHeader {
+	return sessionlog.SessionHeader{
+		Version:   sessionlog.FormatVersion,
+		ID:        id,
+		CreatedAt: createdAt,
+		Cwd:       cwd,
+	}
+}
+
 // ---- 假造法 ----
 
 // scriptedFactory 把整条真创建路走完：铸自己的作用域、在活会话表里建会话、进注册表、
@@ -370,6 +509,10 @@ type scriptedFactory struct {
 	made map[sessionlog.SessionID]*scriptedAgent
 	// createFail 非 nil 时创建当场失败。
 	createFail error
+	// resumeFail 非 nil 时续跑当场失败。
+	resumeFail error
+	// archive 是续跑读的那份存档，为 nil 表示这台造法根本续不动。
+	archive *fakeCatalog
 	// disposeFail 非 nil 时每一个句柄的处置都报这个错；真的摘除照旧走完。
 	disposeFail error
 	// gate 非 nil 时，每一次创建都先等它开。
@@ -442,18 +585,106 @@ func (f *scriptedFactory) CreateAgent(
 		_ = agentScope.Dispose(context.Background())
 		return agent.Handle{}, err
 	}
+	return f.publish(ctx, agentScope, live, options.SessionID, options.AgentOptions, options.Setup, planted, hook)
+}
+
+// Resume 走的是同一条装配路，差别只有那个活会话是从存下来的头和事件上重建的。
+//
+// 那份存档由 [fakeCatalog] 提供：造法和目录读的是同一张表，不然一次续跑会重建出一条
+// 和存档对不上的会话，而这一包好几条判据（cwd 是否相符、日志里记着哪条路由）恰恰要
+// 看那两样。
+func (f *scriptedFactory) Resume(
+	ctx context.Context,
+	owner *scope.Scope,
+	options agent.ResumeOptions,
+) (agent.Handle, error) {
+	f.mutex.Lock()
+	failure, planted, hook := f.resumeFail, f.disposeFail, f.onAgent
+	archive := f.archive
+	f.mutex.Unlock()
+	if failure != nil {
+		return agent.Handle{}, failure
+	}
+	if archive == nil {
+		return agent.Handle{}, errors.New("这台造法没挂存档")
+	}
+
+	stored, ok := archive.take(options.ResumeSessionID)
+	if !ok {
+		return agent.Handle{}, fmt.Errorf("存档里没有 %s", options.ResumeSessionID)
+	}
+	agentScope, err := scope.New(
+		scope.NewKey(string(options.ResumeSessionID)), scope.Options{Parent: owner.Key()})
+	if err != nil {
+		return agent.Handle{}, err
+	}
+	live, err := f.sessions.PrepareRestored(options.ResumeSessionID, coresession.RestoreOptions{
+		Seed: stored.events, Header: stored.header,
+	})
+	if err != nil {
+		_ = agentScope.Dispose(context.Background())
+		return agent.Handle{}, err
+	}
+	detachSession, err := f.sessions.Enter(agentScope, live)
+	if err != nil {
+		_ = agentScope.Dispose(context.Background())
+		return agent.Handle{}, err
+	}
+	if _, err := agentScope.Defer("scriptedFactory.Resume()", detachSession); err != nil {
+		_ = agentScope.Dispose(context.Background())
+		return agent.Handle{}, err
+	}
+	if err := f.sessions.Announce(ctx, live); err != nil {
+		_ = agentScope.Dispose(context.Background())
+		return agent.Handle{}, err
+	}
+	return f.publish(
+		ctx, agentScope, live, options.ResumeSessionID, options.AgentOptions, options.Setup, planted, hook)
+}
+
+// publish 把「跑 setup、进注册表、commit、公布」这四步走完，交出那个句柄。
+//
+// 次序照 [agent.Setup] 的约定：铸出作用域之后、公布之前跑组装，报错就回滚。少了它，
+// 这台假造法会让「装配失败必须挡住这次创建」那一整类用例假通过。
+func (f *scriptedFactory) publish(
+	ctx context.Context,
+	agentScope *scope.Scope,
+	live *coresession.Session,
+	sessionID sessionlog.SessionID,
+	options agent.Options,
+	setup agent.Setup,
+	planted error,
+	hook func(*scriptedAgent),
+) (agent.Handle, error) {
 	made := &scriptedAgent{
-		id:      options.SessionID,
+		id:      sessionID,
 		scope:   agentScope,
 		live:    live,
-		options: options.AgentOptions,
+		options: options,
 		idle:    make(chan struct{}),
+	}
+
+	var commit func() error
+	if setup != nil {
+		var err error
+		commit, err = setup(ctx, agentScope)
+		if err != nil {
+			_ = agentScope.Dispose(context.Background())
+			return agent.Handle{}, err
+		}
 	}
 
 	detach, err := f.agents.Enter(made, nil)
 	if err != nil {
 		_ = agentScope.Dispose(context.Background())
 		return agent.Handle{}, err
+	}
+	if commit != nil {
+		if err := commit(); err != nil {
+			_ = detach(context.Background())
+			_ = agentScope.Dispose(context.Background())
+			return agent.Handle{}, err
+		}
 	}
 	if err := f.agents.Announce(ctx, made); err != nil {
 		_ = detach(context.Background())
@@ -462,7 +693,7 @@ func (f *scriptedFactory) CreateAgent(
 	}
 
 	f.mutex.Lock()
-	f.made[options.SessionID] = made
+	f.made[sessionID] = made
 	f.mutex.Unlock()
 	if hook != nil {
 		hook(made)
@@ -478,10 +709,6 @@ func (f *scriptedFactory) CreateAgent(
 		})
 		return failure
 	}}, nil
-}
-
-func (f *scriptedFactory) Resume(context.Context, *scope.Scope, agent.ResumeOptions) (agent.Handle, error) {
-	return agent.Handle{}, errors.New("这一包不走续跑")
 }
 
 // ---- 夹具 ----
@@ -520,12 +747,20 @@ func newFixture(t *testing.T, mutate func(*Config)) *fixture {
 		t.Fatalf("登记 agent 造法失败：%v", err)
 	}
 
+	owner := scope.NewRoot()
+	t.Cleanup(func() { _ = owner.Dispose(context.Background()) })
+	prompts, err := systemprompt.NewRegistry(t.Context(), owner, systemprompt.Options{})
+	if err != nil {
+		t.Fatalf("造提示词注册表失败：%v", err)
+	}
+
 	store := &fakeStore{}
 	config := Config{
 		Agents:      agents,
 		Sessions:    sessions,
 		Attachments: store,
 		Models:      imageModels(),
+		Prompts:     prompts,
 		Provider:    "p",
 		Model:       "m",
 		Logger:      quiet,
@@ -539,8 +774,6 @@ func newFixture(t *testing.T, mutate func(*Config)) *fixture {
 	}
 
 	peer := &recordingPeer{}
-	owner := scope.NewRoot()
-	t.Cleanup(func() { _ = owner.Dispose(context.Background()) })
 	quiesce, err := bridge.Install(t.Context(), owner, peer)
 	if err != nil {
 		t.Fatalf("装桥失败：%v", err)
@@ -579,6 +812,55 @@ func (f *fixture) newSession(t *testing.T) wire.SessionId {
 		t.Fatalf("开会话不该失败：%v", err)
 	}
 	return response.SessionId
+}
+
+// record 取出这条会话在桥上的那份记录，取不到当场失败。
+func (f *fixture) record(t *testing.T, id wire.SessionId) *sessionRecord {
+	t.Helper()
+	f.bridge.mutex.Lock()
+	defer f.bridge.mutex.Unlock()
+	found, ok := f.bridge.sessions[sessionlog.SessionID(id)]
+	if !ok {
+		t.Fatalf("会话 %s 不在桥上", id)
+	}
+	return found
+}
+
+// waitQuiet 等这条会话当下这条投递链送完。
+//
+// 接在一次同步的事件追加后面才作数：那一步已经把这一节接上了尾巴，所以「当下这条尾巴」
+// 关掉就等于那一节送到了。异步排上来的那种（拓扑变动那一路）得用 [fixture.waitUpdates]。
+func (f *fixture) waitQuiet(record *sessionRecord) {
+	f.bridge.mutex.Lock()
+	tail := record.outputTail
+	f.bridge.mutex.Unlock()
+	<-tail
+}
+
+// waitUpdates 等对面收满 count 条满足 match 的更新，等不到就当场失败。
+//
+// 这是给那些从别的 goroutine 排上来的推送用的：那种情况下投递链的尾巴在这里看还没接上，
+// 等它等的是上一节。
+func (f *fixture) waitUpdates(t *testing.T, count int, match func(wire.SessionNotification) bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		seen := 0
+		f.peer.mutex.Lock()
+		for _, update := range f.peer.updates {
+			if match(update) {
+				seen++
+			}
+		}
+		f.peer.mutex.Unlock()
+		if seen >= count {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("等了十秒也没收满 %d 条更新，只收到 %d 条", count, seen)
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // promptText 排一轮纯文本输入。
@@ -627,3 +909,7 @@ func freeAgent(t *testing.T, provider, model string) *scriptedAgent {
 		idle:    make(chan struct{}),
 	}
 }
+
+func (a *scriptedAgent) Remove(llm.MessageID) {}
+
+func (a *scriptedAgent) Replace(llm.MessageID, llm.Message) {}

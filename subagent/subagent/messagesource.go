@@ -5,9 +5,9 @@
 //
 // 新增: DSH 用 `declare module` 往 llm 那张 MessageSourceMap 上合并三个新 kind，
 // 于是它们和内建来源共用一个可判别联合。Go 没有声明合并，本仓库给插件留的口子是
-// [ds-harness-go/llm.PluginSource]：kind 落成 Plugin 名，form 落成
-// [ds-harness-go/llm.Context]，剩下的自有字段编进 Extra。
-// 成例见 [ds-harness-go/compaction.NewCheckpointSource]。
+// [github.com/snight1983/ds-harness-go/llm.PluginSource]：kind 落成 Plugin 名，form 落成
+// [github.com/snight1983/ds-harness-go/llm.Context]，剩下的自有字段编进 Extra。
+// 成例见 [github.com/snight1983/ds-harness-go/compaction.NewCheckpointSource]。
 
 package subagent
 
@@ -15,8 +15,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 const (
@@ -45,7 +45,7 @@ type senderExtra struct {
 	SenderSessionID session.SessionID `json:"senderSessionId"`
 }
 
-// marshalSenderExtra 把发送方那一项编成 [ds-harness-go/llm.PluginSource] 的 Extra。
+// marshalSenderExtra 把发送方那一项编成 [github.com/snight1983/ds-harness-go/llm.PluginSource] 的 Extra。
 func marshalSenderExtra(senderSessionID session.SessionID) (json.RawMessage, error) {
 	if senderSessionID == "" {
 		return nil, fmt.Errorf("%w：消息来源缺发送方会话 id", ErrInvalidRequest)
@@ -60,7 +60,7 @@ func marshalSenderExtra(senderSessionID session.SessionID) (json.RawMessage, err
 
 // NewCoordinatorSource 造一个模型协调方后续消息的归属。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:57-63
+// 源: packages/subagent/subagent/src/continuation.ts:58-65（CoordinatorMessageSource）
 //
 // 形态是 relay：这是另一个 agent 对本 agent 说的话。
 func NewCoordinatorSource(senderSessionID session.SessionID) (llm.PluginSource, error) {
@@ -73,7 +73,7 @@ func NewCoordinatorSource(senderSessionID session.SessionID) (llm.PluginSource, 
 
 // NewReportSource 造一个可续孩子显式汇报的耐久归属。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:65-72
+// 源: packages/subagent/subagent/src/continuation.ts:67-74（SubagentReportMessageSource）
 func NewReportSource(senderSessionID session.SessionID) (llm.PluginSource, error) {
 	extra, err := marshalSenderExtra(senderSessionID)
 	if err != nil {
@@ -84,10 +84,10 @@ func NewReportSource(senderSessionID session.SessionID) (llm.PluginSource, error
 
 // NewSettledSource 造运行时那份「孩子结清了」陈述的耐久归属。
 //
-// 源: packages/subagent/subagent/src/continuation.ts:74-89
+// 源: packages/subagent/subagent/src/continuation.ts:76-91（SubagentSettledMessageSource）
 //
 // 形态是 notice：一份不展开行就看得见的运行时交代，那句一行陈述收进
-// [ds-harness-go/llm.ContextSummaryMaxChars]。
+// [github.com/snight1983/ds-harness-go/llm.ContextSummaryMaxChars]。
 func NewSettledSource(senderSessionID session.SessionID, summary string) (llm.PluginSource, error) {
 	extra, err := marshalSenderExtra(senderSessionID)
 	if err != nil {

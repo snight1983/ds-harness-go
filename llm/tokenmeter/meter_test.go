@@ -6,8 +6,8 @@ package tokenmeter
 import (
 	"testing"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // assistantEventFrom 造一条引用了那几条分块的助手消息。

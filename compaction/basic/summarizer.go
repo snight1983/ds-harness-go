@@ -6,7 +6,7 @@
 
 package basic
 
-import "ds-harness-go/llm"
+import "github.com/snight1983/ds-harness-go/llm"
 
 // 裹在检查点节点里那份结构化摘要外面的一对标签。
 //
@@ -47,7 +47,7 @@ type SummarizationInput struct {
 
 // SummaryResult 是一次总结交出来的安全摘要，外加那次调用的信封原样。
 //
-// 源: packages/compaction/compaction-basic/src/summarizer.ts:88-108
+// 源: packages/compaction/compaction-basic/src/summarizer.ts:87-108（SummaryResult）
 //
 // 这几个字段直接落进 [compaction.SummaryData] 的尾巴，所以两边的语义要对齐：
 // LLMStreamCall 为真就必须带 RawOutput，那一条在摘要事件排出去的那一刻校验

@@ -13,15 +13,15 @@ import (
 
 	wire "github.com/coder/acp-go-sdk"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/interaction/userapproval"
-	"ds-harness-go/invariants"
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/interaction/userapproval"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // # 这些测试防的是什么错
@@ -98,12 +98,21 @@ func TestInstallHangsTheApprovalAnswererOnlyWhenAServiceIsMounted(t *testing.T) 
 		t.Fatalf("造审批服务失败：%v", err)
 	}
 	f := newFixture(t, func(config *Config) { config.Approvals = approvals })
-	// 四条订阅：会话事件、收件箱认领、agent 错误、审批答复者。
+	// 五条订阅：会话事件、收件箱认领、agent 错误、LLM 拓扑变动、审批答复者。
 	f.bridge.mutex.Lock()
 	installed := len(f.bridge.disposers)
 	f.bridge.mutex.Unlock()
-	if installed != 4 {
-		t.Fatalf("挂了审批服务时该有四条订阅，实际 %d 条", installed)
+	if installed != 5 {
+		t.Fatalf("挂了审批服务时该有五条订阅，实际 %d 条", installed)
+	}
+
+	// 两样可选协作者各带一条：都不挂就只剩那三条必有的。
+	bare := newFixture(t, func(config *Config) { config.Models, config.Prompts = nil, nil })
+	bare.bridge.mutex.Lock()
+	minimal := len(bare.bridge.disposers)
+	bare.bridge.mutex.Unlock()
+	if minimal != 3 {
+		t.Fatalf("什么可选协作者都不挂时该只有三条订阅，实际 %d 条", minimal)
 	}
 }
 
@@ -569,14 +578,14 @@ func TestAdmitStopsWhenTheRequestIsCancelledDuringAdmission(t *testing.T) {
 	// 准入自己不看上下文（纯文本那条路上没有任何会等的东西），所以撤单要在准入
 	// 之后、投递之前再问一次。少了这一问，一条已经没人等的输入照样会排进耐久收件箱。
 	f := newFixture(t, nil)
-	f.newSession(t)
+	id := f.newSession(t)
 	made := f.factory.only(t)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	err := f.bridge.admit(ctx, made, []wire.ContentBlock{wire.TextBlock("喂")}, false, &inflightPrompt{
+	err := f.bridge.admit(ctx, f.record(t, id), made, []wire.ContentBlock{wire.TextBlock("喂")}, false, &inflightPrompt{
 		done: make(chan struct{}), admissionDone: make(chan struct{}), abortAdmission: func(error) {},
-	})
+	}, agent.ModelSelection{}, false)
 	assertRequestError(t, err, -32603)
 	if len(made.delivered()) != 0 {
 		t.Fatal("撤了之后不该再投递")
@@ -602,11 +611,11 @@ func TestAdmitRefusesAnAgentThatRetiredWhileTheImagesWereBeingWritten(t *testing
 	f.store.mutex.Unlock()
 
 	err := f.bridge.admit(
-		t.Context(), made,
+		t.Context(), f.record(t, id), made,
 		[]wire.ContentBlock{wire.ImageBlock(base64Of([]byte{1}), "image/png")}, true,
 		&inflightPrompt{
 			done: make(chan struct{}), admissionDone: make(chan struct{}), abortAdmission: func(error) {},
-		})
+		}, agent.ModelSelection{}, false)
 	assertRequestError(t, err, -32603)
 	if len(made.delivered()) != 0 {
 		t.Fatal("不该往一个已经退休的目的地投递")
@@ -619,7 +628,7 @@ func TestAdmitCancelsAgentActivityWhenACancelLandsAroundDelivery(t *testing.T) {
 	// 并发的 session/cancel 真的会挤在这两步之间，而它看见 messageQueued 还是假就不会
 	// 去动这个 agent，于是这条迟到的消息没人清。投递之后补的那一次取消治的就是这个。
 	f := newFixture(t, nil)
-	f.newSession(t)
+	id := f.newSession(t)
 	made := f.factory.only(t)
 
 	inflight := &inflightPrompt{
@@ -629,7 +638,8 @@ func TestAdmitCancelsAgentActivityWhenACancelLandsAroundDelivery(t *testing.T) {
 		cancelRequested: true,
 	}
 	if err := f.bridge.admit(
-		t.Context(), made, []wire.ContentBlock{wire.TextBlock("喂")}, false, inflight); err != nil {
+		t.Context(), f.record(t, id), made, []wire.ContentBlock{wire.TextBlock("喂")}, false, inflight,
+		agent.ModelSelection{}, false); err != nil {
 		t.Fatalf("准入本身不该失败：%v", err)
 	}
 	if len(made.cancelled()) != 1 {
@@ -804,7 +814,11 @@ func TestDeliverIsANoOpBeforeAnythingIsInstalled(t *testing.T) {
 	t.Parallel()
 	// 一条还没装上去的桥没有任何可以发的地方；这一步必须是空操作而不是空指针。
 	bare := &Bridge{config: Config{Logger: quietLogger()}}
-	bare.deliver("随便", textContent("喂"), nil)
+	bare.deliver("随便", func(context.Context) ([]wire.SessionUpdate, error) {
+		return []wire.SessionUpdate{{AgentMessageChunk: &wire.SessionUpdateAgentMessageChunk{
+			Content: wire.TextBlock("喂"),
+		}}}, nil
+	}, nil)
 }
 
 func TestAgentErrorsOutsideAPromptAreIgnored(t *testing.T) {
@@ -986,7 +1000,7 @@ func refusingNext(t *testing.T) func() (tools.ApprovalOutcome, error) {
 	}
 }
 
-// ---- 不办的那六个 ----
+// ---- 不办的那几个 ----
 
 func TestUnservedMethodsAnswerMethodNotFound(t *testing.T) {
 	t.Parallel()
@@ -995,22 +1009,6 @@ func TestUnservedMethodsAnswerMethodNotFound(t *testing.T) {
 	calls := map[string]func() error{
 		"session/logout": func() error {
 			_, err := f.bridge.Logout(t.Context(), wire.LogoutRequest{})
-			return err
-		},
-		"session/close": func() error {
-			_, err := f.bridge.CloseSession(t.Context(), wire.CloseSessionRequest{})
-			return err
-		},
-		"session/list": func() error {
-			_, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{})
-			return err
-		},
-		"session/resume": func() error {
-			_, err := f.bridge.ResumeSession(t.Context(), wire.ResumeSessionRequest{})
-			return err
-		},
-		"session/set_config_option": func() error {
-			_, err := f.bridge.SetSessionConfigOption(t.Context(), wire.SetSessionConfigOptionRequest{})
 			return err
 		},
 		"session/set_mode": func() error {
@@ -1024,6 +1022,45 @@ func TestUnservedMethodsAnswerMethodNotFound(t *testing.T) {
 			assertRequestError(t, call(), -32601)
 		})
 	}
+}
+
+func TestPersistenceBackedMethodsAnswerMethodNotFoundWithoutAnArchive(t *testing.T) {
+	t.Parallel()
+	// 这两项能力跟着持久化走：没挂存档，握手里就不声明，方法本身也必须说「没有」，
+	// 而不是回一句「找不到这条会话」——后者会让客户端以为再换一个标识就能成。
+	f := newFixture(t, nil)
+	calls := map[string]func() error{
+		"session/list": func() error {
+			cwd := absolutePath
+			_, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{Cwd: &cwd})
+			return err
+		},
+		"session/resume": func() error {
+			_, err := f.bridge.ResumeSession(t.Context(), wire.ResumeSessionRequest{
+				SessionId: "随便", Cwd: absolutePath,
+			})
+			return err
+		},
+	}
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assertRequestError(t, call(), -32601)
+		})
+	}
+}
+
+func TestSetConfigOptionAnswersMethodNotFoundWithoutAModelCatalog(t *testing.T) {
+	t.Parallel()
+	// 没挂 LLM 目录就一个配置项都没摆过，所以「改一个配置项」这件事在这条线上不存在。
+	f := newFixture(t, func(config *Config) { config.Models, config.Prompts = nil, nil })
+	id := f.newSession(t)
+	_, err := f.bridge.SetSessionConfigOption(t.Context(), wire.SetSessionConfigOptionRequest{
+		ValueId: &wire.SetSessionConfigOptionValueId{
+			SessionId: id, ConfigId: modelConfigID, Value: "随便",
+		},
+	})
+	assertRequestError(t, err, -32601)
 }
 
 // ---- 收摊 ----

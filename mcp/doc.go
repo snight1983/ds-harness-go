@@ -70,7 +70,7 @@
 //
 // 新增: DSH 在这里读 `exec.agent.session.requestHeader()` 和
 // `ctx.get('llm').resolveModelInfo(...)`，为的是拿到「当前这次请求真正路由到了哪个
-// 模型、那个模型收不收图」。Go 这边 [ds-harness-go/core/tools.ExecutionInput.Agent]
+// 模型、那个模型收不收图」。Go 这边 [github.com/snight1983/ds-harness-go/core/tools.ExecutionInput.Agent]
 // 只是一个作用域键，活会话和 llm 服务都在后面的块里，本包够不着。所以那一整段
 // 换成 [Options.ImageAdmission] 这个接缝：装配方自己回答「这次执行能不能收图、
 // 收的话存到哪」。它为 nil 时图一律降级成文本——那正是 DSH 在没装附件仓库时的行为。
@@ -81,7 +81,7 @@
 //
 //   - **撤销注册失败**（bridge.go 的 171／180、connection.go 的 137／323、
 //     host.go 的 137／143）。这些是撤工具时又出错的那条日志。撤销走的是
-//     [ds-harness-go/core/tools.Runtime] 交回来的那个函数，本包自己注册进去的
+//     [github.com/snight1983/ds-harness-go/core/tools.Runtime] 交回来的那个函数，本包自己注册进去的
 //     东西撤起来不会失败；要造出失败得换掉整张注册表，那时测的就不是本包了。
 //     错误照样接住并且记下来，不接住是更糟的代码。
 //

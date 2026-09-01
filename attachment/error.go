@@ -51,7 +51,7 @@ const (
 
 // imageAdmissionCodes 是「调用方自己能改对」的那一组码。
 //
-// 源: packages/attachment/attachment/src/error.ts:3-13
+// 源: packages/attachment/attachment/src/error.ts:15-16（ImageAdmissionErrorCode）
 //
 // 它和存储故障的分界线是**谁能让下一次尝试成功**：这一组里的失败，调用方换一张图、
 // 少传几张、或者换个格式就能过；不在这一组里的，调用方再试多少次都一样。

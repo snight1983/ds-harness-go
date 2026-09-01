@@ -5,7 +5,7 @@
 //
 // # 谁在两端
 //
-// 服务端是 [ds-harness-go/sdk/sdkserver]；客户端是各语言的 SDK。`serverInfo.name`
+// 服务端是 [github.com/snight1983/ds-harness-go/sdk/sdkserver]；客户端是各语言的 SDK。`serverInfo.name`
 // 是**线上稳定**的 `deepseek-harness-sdk-runtime`，改它等于换协议。
 //
 // # 为什么用 github.com/sourcegraph/jsonrpc2 而不是照着 DSH 再写一遍
@@ -27,4 +27,12 @@
 // 都不该让整条会话死掉——那会把一次可恢复的手滑变成一次不可恢复的掉线。这一条是
 // DSH 明确写下来的行为（transport.ts:4「Malformed lines are ignored」），而那个库自带的
 // [jsonrpc2.NewPlainObjectStream] 在解不动的时候会关掉连接，所以帧这一层得自己写。
+//
+// # 新增: 两条 DSH 没有的上限
+//
+// 「另一端是别人写的 SDK」这句话同时意味着：那一端可以写坏，也可以写得没完没了。
+// DSH 两处都没设防——一行永远不来的换行符会让它的读缓冲一直攒下去，而每一行都
+// `void this.handleLine(line)` 一发了之，同时在办多少件完全由对面说了算。本包给这
+// 两处各加了一条可调的上限，见 [TransportOptions]：超长的那一行按坏行处理（丢掉，
+// 连接照常），名额满了则让读循环停下来等，把压力顺着流还给对面。
 package sdkprotocol

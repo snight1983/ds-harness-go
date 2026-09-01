@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"slices"
 
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // surfaceEventTypes 是那三种会产出模型消息的事件类型。
@@ -114,7 +114,7 @@ func DeriveEventMessage(event Event) (llm.Message, bool, error) {
 
 // SurfaceFoldReplacement 是折表面时观察到的一次替换操作。
 //
-// 源: packages/core/session/src/surface.ts:117-126
+// 源: packages/core/session/src/surface.ts:116-126（SurfaceFoldReplacement）
 type SurfaceFoldReplacement struct {
 	// Seq 是执行这次替换的那条事件的 seq。
 	Seq int
@@ -128,7 +128,7 @@ type SurfaceFoldReplacement struct {
 
 // SurfaceFoldResult 是把一段日志里的表面操作全部重放一遍的结果。
 //
-// 源: packages/core/session/src/surface.ts:129-134
+// 源: packages/core/session/src/surface.ts:128-134（SurfaceFoldResult）
 type SurfaceFoldResult struct {
 	// Nodes 是当前表面上的那些事件 seq，按模型可见的顺序。
 	Nodes []int
@@ -440,7 +440,7 @@ func FoldSurface(events []Event) (SurfaceFoldResult, error) {
 
 // SurfaceFolder 是那条有序表面的增量视图，兼作追加边界上的校验器。
 //
-// 源: packages/core/session/src/surface.ts:398-460
+// 源: packages/core/session/src/surface.ts:397-460（SurfaceManager）
 //
 // 新增: DSH 那个 SurfaceManager 握着调用方那个会自己变长的日志数组，
 // 每次读属性时补折一段增量，还缓存一份 _pendingPlan 免得同一条事件规划两遍。

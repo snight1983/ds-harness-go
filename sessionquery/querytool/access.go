@@ -13,9 +13,9 @@ import (
 	"context"
 	"fmt"
 
-	"ds-harness-go/core/tools"
-	"ds-harness-go/session"
-	"ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionquery"
 )
 
 // caller 是这次调用的发起方，从它的活会话上摘下来的三样事实。
@@ -91,7 +91,7 @@ func (c *Controller) authorizeTarget(ctx context.Context, from caller, target se
 
 // recordAuthorized 判一条记录准不准给这个调用方看。
 //
-// 源: packages/session-query/tool-session-query/src/workspace-access.ts:90-92
+// 源: packages/session-query/tool-session-query/src/workspace-access.ts:246-260（workspaceAccess）
 func recordAuthorized(record sessionquery.Record, from caller) bool {
 	return headerAuthorized(record.Header, from)
 }

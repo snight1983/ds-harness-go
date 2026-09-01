@@ -22,8 +22,8 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/interaction/userquestions"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/interaction/userquestions"
 )
 
 // stubProvider 是一个把每次请求都记下来的假界面。

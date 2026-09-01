@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // normalizePrefix 把用户给的世界根前缀折成内部形式：空串，或者以斜杠结尾。

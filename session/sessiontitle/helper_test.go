@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // fakeSession 是一个把日志摆在那儿、并且接得住追加的会话。

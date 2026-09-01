@@ -1,4 +1,4 @@
-// 本文件的作用：把 mockserver 包起成一个独立进程，播报地址、转发遥测、接住信号。
+// Command llmmockserver 把 mockserver 包起成一个独立进程，播报地址、转发遥测、接住信号。
 //
 // 源: packages/test-support/llm-mock-server/src/bin.ts:1-50
 //
@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"ds-harness-go/llm/mockserver"
+	"github.com/snight1983/ds-harness-go/llm/mockserver"
 )
 
 func main() {

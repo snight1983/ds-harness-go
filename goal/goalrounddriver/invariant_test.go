@@ -8,7 +8,7 @@
 //     读到的是内容不是来源。所以这里专门有一条「来源一字不差、正文改了一个词」的
 //     用例，它必须被拒。
 //   - **把不归本包管的事也报了**。一条本身就折不动的日志由
-//     [ds-harness-go/goal/goal] 那条不变量报，本包必须闭嘴——同一件事响两遍会让人
+//     [github.com/snight1983/ds-harness-go/goal/goal] 那条不变量报，本包必须闭嘴——同一件事响两遍会让人
 //     去查错的那个包。
 //   - **把 round 为 0 的目标来源当成一次自动轮次**。目标那一层会用它发别的东西；
 //     本包去验那些消息，等于拿一条它没写过的消息的内容去比自己的提示词，必然误报。
@@ -22,10 +22,10 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/goal/goal"
-	"ds-harness-go/invariants"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/goal/goal"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // registryOf 造一份什么都放行的不变量注册表。
@@ -176,7 +176,7 @@ func TestValidateStreamLetsOtherEventsThrough(t *testing.T) {
 }
 
 func TestValidateStreamDefersUnfoldableStreamsToTheGoalPackage(t *testing.T) {
-	// 一条折不动的日志归 [ds-harness-go/goal/goal] 那条不变量报。本包在那一刻收手，
+	// 一条折不动的日志归 [github.com/snight1983/ds-harness-go/goal/goal] 那条不变量报。本包在那一刻收手，
 	// 后面那条伪造的续推它一个字都不说——同一件事响两遍会让人去查错的那个包。
 	events, view := goalStream(t, 3)
 	broken := session.Event{Type: goal.EventChange, Data: json.RawMessage(`{"version":1}`)}

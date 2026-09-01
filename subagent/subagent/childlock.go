@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // childLock 把同一个耐久孩子上的那些临界区串起来，不同孩子之间互不相干。

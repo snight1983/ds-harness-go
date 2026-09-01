@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"strings"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // maxSafeInteger 是 IEEE 754 双精度还能逐个数清楚的最大整数。
@@ -50,7 +50,7 @@ func foldErrorf(format string, args ...any) *FoldError {
 
 // FoldState 是回放过程中那个可变的累加器。
 //
-// 源: packages/goal/goal/src/fold.ts:27-34
+// 源: packages/goal/goal/src/fold.ts:26-34（GoalFoldState）
 //
 // 新增: DSH 的 createdAt / updatedAt 是 `number | undefined`，而且在几个地方写了
 // 「有当前目标就一定有时刻」的断言（那几条它自己标了 v8 ignore，走不到）。Go 里
@@ -105,7 +105,7 @@ func (s *FoldState) Clone() *FoldState {
 
 // Folded 是一次纯回放脱手交出来的结果。
 //
-// 源: packages/goal/goal/src/domain.ts:71-82
+// 源: packages/goal/goal/src/domain.ts:70-82（FoldedGoal）
 //
 // [Activation] 故意不在这里：它是进程局部的，一次都不落盘（理由见它自己的注释）。
 type Folded struct {

@@ -56,10 +56,63 @@ type Row struct {
 	Note     string // GoNative / Skip 时的理由
 }
 
-// Key 是一行的身份。用「包 + 文件 + 行号 + 名字」而不是自增序号，
-// 这样清单重跑、行序变化都不会让已有的裁决对不上号。
+// Key 是一行在**某一份**清单里的精确身份：包 + 文件 + 行号 + 名字。
+//
+// 只在同一次清单快照内部比对时用它（门禁那两项就是——同步之后裁决表的行号是从
+// 清单刷过来的，两边必然一致）。跨上游版本认同一个符号**不能**用它，见 [Row.MatchKey]。
 func (r Row) Key() string {
 	return r.Package + "\x00" + r.File + "\x00" + strconv.Itoa(r.Line) + "\x00" + r.Name
+}
+
+// MatchKey 是一行跨上游版本的身份：包 + 文件 + 种类 + 名字，**不含行号**。
+//
+// 为什么必须把行号排除掉：行号是派生数据，上游每发一版都会整体漂移，而人填的裁决
+// （decision/go_ref/note）是这套流程里最贵的东西。拿 [Row.Key] 去跨版本配对的话，
+// 一个只是往下挪了两行的符号会同时变成「一条新的 PENDING」和「一条 STALE」，
+// 那份裁决就凭空丢了。实测从旧快照换到 v0.1.2-alpha.3：6224 条 PENDING 里有 2947 条
+// 是这么来的——同包同文件同种类同名，裁决就躺在旁边那条 STALE 上。
+//
+// 种类算进键里而名字之外不再加别的，是因为名字加种类已经把 9771 条清单分成 9683 个
+// 不同的键；剩下那 18 个重复键（106 条，绝大多数是名字为 `*` 的 star 转发导出）
+// 靠 [MatchIndex] 按行序配序号来分。
+func (r Row) MatchKey() string {
+	return r.Package + "\x00" + r.File + "\x00" + r.Kind + "\x00" + r.Name
+}
+
+// MatchIndex 给一批行算出各自「同键第几个」的下标，让 [Row.MatchKey] 重复时也能稳定配对。
+//
+// 同一个键下按行号排序后取序号：一个文件里有 9 条 star 转发、上游仍旧有 9 条时，
+// 它们按出现次序一一对上。这比「重复就整批不配」强——后者会把那 106 条的裁决全丢掉；
+// 也比「随便挑一条」强——那个结果取决于 map 遍历次序，每次跑都不一样。
+//
+// 交回的切片和 rows 一一对应。
+func MatchIndex(rows []Row) []int {
+	order := make([]int, len(rows))
+	for index := range rows {
+		order[index] = index
+	}
+	// 按键、再按行号排，于是同键的行在 order 里连成一段、且段内是行序。
+	sort.SliceStable(order, func(i, j int) bool {
+		left, right := rows[order[i]], rows[order[j]]
+		if leftKey, rightKey := left.MatchKey(), right.MatchKey(); leftKey != rightKey {
+			return leftKey < rightKey
+		}
+		return left.Line < right.Line
+	})
+
+	indexes := make([]int, len(rows))
+	seen := map[string]int{}
+	for _, position := range order {
+		key := rows[position].MatchKey()
+		indexes[position] = seen[key]
+		seen[key]++
+	}
+	return indexes
+}
+
+// QualifiedMatchKey 是 [Row.MatchKey] 加上 [MatchIndex] 算出的序号，可以直接当 map 键。
+func QualifiedMatchKey(row Row, index int) string {
+	return row.MatchKey() + "\x00#" + strconv.Itoa(index)
 }
 
 // Header 是裁决表的表头，也是列顺序的唯一定义。

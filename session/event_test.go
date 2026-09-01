@@ -1,6 +1,6 @@
 // 本文件的作用：一条日志条目的信封在介质上的往返，以及信封那道严格的键检查。
 //
-// 源: packages/core/session/src/types.ts:395-440
+// 源: packages/core/session/src/types.ts:378-423
 
 package session
 

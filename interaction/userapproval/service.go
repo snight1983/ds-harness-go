@@ -1,7 +1,7 @@
 // 本文件的作用：那道审批接缝本身——日志与通知这两条能力接缝、答复者链的登记与
 // 派发、以及一次询问从回合围栏走到审计落地的全程。
 //
-// 源: packages/interaction/user-approval/src/index.ts:136-345
+// 源: packages/interaction/user-approval/src/index.ts:101-310
 
 package userapproval
 
@@ -12,10 +12,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ErrInvalidConfig 表示配置本身不成立，构造被拒。
@@ -46,10 +46,10 @@ type Log interface {
 
 // Answerer 是答复者链上的一条：要么给出答复认领这次询问，要么调 next 让下一条来。
 //
-// 源: packages/interaction/user-approval/src/index.ts:22-31（`approval/request` 瀑布）
+// 源: packages/interaction/user-approval/src/index.ts:18（`approval/request` 瀑布）
 //
 // 新增: DSH 是 cordis 的 waterfall 事件，答复者用 `ctx.on('approval/request', ...)`
-// 挂上去。Go 里它是一条显式的规则链，和 [ds-harness-go/core/tools] 那几道瀑布同一个
+// 挂上去。Go 里它是一条显式的规则链，和 [github.com/snight1983/ds-harness-go/core/tools] 那几道瀑布同一个
 // 形状：登记进 [Service.RegisterAnswerer]，按「先全局、再从最远的祖先到自己」的顺序
 // 组合，最里面那层是那个失败关闭的默认答复。
 //
@@ -62,7 +62,7 @@ type Answerer func(
 
 // Config 是这个服务的装配配置。
 //
-// 源: packages/interaction/user-approval/src/index.ts:176-185
+// 源: packages/interaction/user-approval/src/index.ts:141-150（Config）
 type Config struct {
 	// Policy 是这个部署给「没有自己切过策略的会话」定的默认值。
 	//
@@ -94,9 +94,9 @@ type Config struct {
 
 // Service 是审批这条能力的接缝。
 //
-// 源: packages/interaction/user-approval/src/index.ts:186-345
+// 源: packages/interaction/user-approval/src/index.ts:152-310
 //
-// 它的 [Service.Request] 就是 [ds-harness-go/core/tools.Approval]，所以装好之后
+// 它的 [Service.Request] 就是 [github.com/snight1983/ds-harness-go/core/tools.Approval]，所以装好之后
 // 可以直接交给工具运行时当审批后端。
 type Service struct {
 	policy Policy
@@ -112,7 +112,7 @@ var _ tools.Approval = (*Service)(nil)
 
 // answererLayer 是一个作用域在答复者链上的全部贡献。
 //
-// 新增: cordis 的作用域分派在 Go 里靠 [ds-harness-go/core/scope.Layers] 表达，
+// 新增: cordis 的作用域分派在 Go 里靠 [github.com/snight1983/ds-harness-go/core/scope.Layers] 表达，
 // 做法和 core/tools 那几张规则表逐字相同。
 type answererLayer struct {
 	answerers *scope.AnonymousEntries[Answerer]
@@ -123,7 +123,7 @@ func newAnswererLayer(*scope.Key) (*answererLayer, error) {
 	return &answererLayer{answerers: scope.NewAnonymousEntries[Answerer]()}, nil
 }
 
-// IsEmpty 实现 [ds-harness-go/core/scope.Layer]。
+// IsEmpty 实现 [github.com/snight1983/ds-harness-go/core/scope.Layer]。
 func (l *answererLayer) IsEmpty() bool { return l.answerers.IsEmpty() }
 
 // New 验一份配置，造出这个服务。
@@ -162,7 +162,7 @@ func New(config Config) (*Service, error) {
 //
 // 源: packages/interaction/user-approval/src/index.ts:22-31
 //
-// 落在哪一层由 owner 的身份决定：[ds-harness-go/core/scope.NewRoot] 造的作用域落在
+// 落在哪一层由 owner 的身份决定：[github.com/snight1983/ds-harness-go/core/scope.NewRoot] 造的作用域落在
 // 全局层，一次询问不论为哪个 agent 发起都会走到它；有身份的作用域落在自己那一层，
 // 只有那个 agent 及其子孙的询问看得见——这就是 DSH 那句「界面只答自己拥有的那些
 // agent」。
@@ -181,7 +181,7 @@ func (s *Service) RegisterAnswerer(
 
 // SetPolicy 往日志里追加一条会话策略覆盖——那是这件事**唯一**的持久表示。
 //
-// 源: packages/interaction/user-approval/src/index.ts:136-147
+// 源: packages/interaction/user-approval/src/index.ts:101-112（setApprovalPolicy）
 //
 // 词汇表外的值在日志变化之前就被拒，一个字节都不写。读的一方每次自己折
 // （[EffectivePolicy]），所以没有任何需要保持同步的缓存。
@@ -240,7 +240,7 @@ func (s *Service) SwitchPolicy(agent *scope.Key, policy Policy) error {
 	))
 }
 
-// Request 问一次，交出答复。它实现 [ds-harness-go/core/tools.Approval]。
+// Request 问一次，交出答复。它实现 [github.com/snight1983/ds-harness-go/core/tools.Approval]。
 //
 // 源: packages/interaction/user-approval/src/index.ts:239-276
 //
@@ -296,7 +296,7 @@ func (s *Service) resolve(agent *scope.Key) (Log, error) {
 
 // decide 判出这一次询问的答复。它永远给得出一个词汇表里的值。
 //
-// 源: packages/interaction/user-approval/src/index.ts:298-344
+// 源: packages/interaction/user-approval/src/index.ts:263-309
 func (s *Service) decide(
 	ctx context.Context,
 	request tools.ApprovalRequest,
@@ -330,11 +330,11 @@ func (s *Service) decide(
 
 // consult 把这次询问交给答复者链，并把链的答复收敛成一个词汇表里的值。
 //
-// 源: packages/interaction/user-approval/src/index.ts:317-329
+// 源: packages/interaction/user-approval/src/index.ts:282-294
 //
 // 三种坏答复收敛成同一个失败关闭的值：链走到底也没人认领、某一条报了错、某一条
 // 还回来一个词汇表外的字符串。最后一条在 Go 里同样拦得住——
-// [ds-harness-go/core/tools.ApprovalOutcome] 是个开放的字符串类型，一条答复者写得出
+// [github.com/snight1983/ds-harness-go/core/tools.ApprovalOutcome] 是个开放的字符串类型，一条答复者写得出
 // 任何值，而调用方那边是按四个常量分流的。
 func (s *Service) consult(ctx context.Context, request tools.ApprovalRequest) tools.ApprovalOutcome {
 	chain := s.answerers(request.Agent)
@@ -366,7 +366,7 @@ func contain(next func() (tools.ApprovalOutcome, error)) (outcome tools.Approval
 
 // answerers 按「先全局、再从最远的祖先到自己」的顺序收齐这条链。
 //
-// 源: packages/interaction/user-approval/src/index.ts:318-319（scopeTarget 的作用域分派）
+// 源: packages/interaction/user-approval/src/index.ts:283-284（scopeTarget 的作用域分派）
 func (s *Service) answerers(key *scope.Key) []Answerer {
 	var chain []Answerer
 	for answerer := range s.layers.Global().answerers.Values() {

@@ -22,7 +22,7 @@ import (
 	"sort"
 	"sync"
 
-	"ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage"
 )
 
 // record 是内存里一条记录的两面：登记方的类型化值，和它的 JSON 投影。

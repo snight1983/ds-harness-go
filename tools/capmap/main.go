@@ -1,4 +1,4 @@
-// 本文件的作用：从 DSH 的 227 个包里机器抽出一份「能力清单」。
+// Command capmap 从 DSH 的 227 个包里机器抽出一份「能力清单」。
 //
 // 为什么不是导出符号清单：符号清单管的是「这个函数抄了没有」，那是字符级搬运。
 // 我们要抄的是**能力**——「进程崩在工具调用中间，重开后能说出结果未知」这种事。
@@ -61,7 +61,7 @@ var (
 )
 
 func main() {
-	root := flag.String("root", `C:\codestudy\deepseek-harness-master`, "DSH 源码根目录")
+	root := flag.String("root", `C:\codestudy\deepseek-harness-dsh-v0.1.2-alpha.3`, "DSH 源码根目录")
 	out := flag.String("out", `C:\code\ds-harness-go\docs\portmap\dsh-capabilities.md`, "能力清单输出路径")
 	flag.Parse()
 

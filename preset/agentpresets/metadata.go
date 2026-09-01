@@ -16,7 +16,7 @@ import (
 
 // MetadataFile 是组合文件旁边那份可选的展示元数据。
 //
-// 源: packages/preset/agent-presets/src/metadata.ts:25
+// 源: packages/preset/agent-presets/src/metadata.ts:24-25（METADATA_FILE）
 //
 // 它单独一个文件，是因为组合本身是一个**顶层的插件行列表**——YAML 上没法在它旁边
 // 再挂同级的键，而伪造一行元数据出来等于递给装载器一个要去装的东西。分开也让组合
@@ -28,7 +28,7 @@ const MetadataFile = "preset.yml"
 
 // Metadata 是一份预设可以自己发布的那点展示文字。
 //
-// 源: packages/preset/agent-presets/src/metadata.ts:28-39
+// 源: packages/preset/agent-presets/src/metadata.ts:27-39（PresetMetadata）
 type Metadata struct {
 	// Name 是面向人的名字；缺席时回落到预设 id。
 	Name string

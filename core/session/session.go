@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"ds-harness-go/llm"
-	sessionlog "ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
 // Options 是造一个游离会话时给的东西。
@@ -39,7 +39,7 @@ type Options struct {
 }
 
 // Session 是一个事件溯源的会话：一份只增不改的
-// [ds-harness-go/session.Event] 日志。
+// [github.com/snight1983/ds-harness-go/session.Event] 日志。
 //
 // 源: packages/core/session/src/index.ts:416-425
 //
@@ -48,7 +48,7 @@ type Options struct {
 //
 // 新增: 这个类型有自己的互斥锁，理由见包文档。锁的次序规矩是**存储的锁可以在
 // 会话的锁之前拿，不许在它之后拿**：追加路径收集观察者时走的是
-// [ds-harness-go/core/scope.Layers]，那一层自己并发安全，不碰存储的锁，
+// [github.com/snight1983/ds-harness-go/core/scope.Layers]，那一层自己并发安全，不碰存储的锁，
 // 于是「会话锁 → 存储锁」这条边根本不存在。
 type Session struct {
 	// mutex 守住下面每一个字段。观察者一律在锁外调用。
@@ -101,7 +101,7 @@ type Session struct {
 // 源: packages/core/session/src/index.ts:471-479（Session.create）
 //
 // 「借来的」是关键：seed 里每一条事件都会被
-// [ds-harness-go/session.Event.Clone] 复制，调用方留着的那些切片之后怎么改
+// [github.com/snight1983/ds-harness-go/session.Event.Clone] 复制，调用方留着的那些切片之后怎么改
 // 都改不动这份日志。
 func NewSession(id sessionlog.SessionID, options Options) (*Session, error) {
 	return newSession(id, options, false)
@@ -109,7 +109,7 @@ func NewSession(id sessionlog.SessionID, options Options) (*Session, error) {
 
 // RestoreSession 造一个游离会话，并**接手**这些持久化产物的所有权。
 //
-// 源: packages/core/session/src/index.ts:481-491（Session.fromRestore）
+// 源: packages/core/session/src/index.ts:484-495（Session.fromRestore）
 //
 // 落盘格式、事件信封、序号连续性、表面转移、头字段全部照验，但这些事件
 // **不复制**：调用方交出的是刚从存储里读出来、别处没有别名的一份图。
@@ -216,7 +216,7 @@ func (s *Session) ID() sessionlog.SessionID { return s.header.ID }
 // 源: packages/core/session/src/index.ts:428-438
 //
 // 它由存储那一侧在 [Store.Create] 时给出；没有存储给头时这里合成一份最小的
-// （盖上当下的 [ds-harness-go/session.FormatVersion]），所以它**总是**在。
+// （盖上当下的 [github.com/snight1983/ds-harness-go/session.FormatVersion]），所以它**总是**在。
 // 它不进事件日志：那是存储的事，不是可回放的对话状态。
 //
 // 造出来之后不再变，所以读它不必上锁。
@@ -231,7 +231,7 @@ func (s *Session) Header() sessionlog.SessionHeader { return s.header }
 // [Store.OnEvent] 那条广播上发布过（构造 seed 不发），所以那些「拿重放日志当
 // 发布的替代品」的消费方（遥测的接管）该从这里起步。
 //
-// 它和 [ds-harness-go/session.SessionHeader.SeedLength] 不是一回事：后者是
+// 它和 [github.com/snight1983/ds-harness-go/session.SessionHeader.SeedLength] 不是一回事：后者是
 // **耐久**的分叉血统边界。一个续跑起来的会话，它的构造 seed 是自己完整的存储
 // 日志，而它的头里留着当初分叉那个值——这个字段说的是进程内的构造事实。
 //
@@ -258,7 +258,7 @@ func (s *Session) Seq() int {
 // 交回的切片自己是一份复制：之后的追加长不了一个调用方已经拿在手里的数组。
 // 同一份快照在下一次追加之前会被重复交出，所以**把它当只读的**——里面那些
 // 事件的 Data 字节是共享的。要一份自己拥有的就
-// [ds-harness-go/session.Event.Clone]。
+// [github.com/snight1983/ds-harness-go/session.Event.Clone]。
 //
 // 新增: DSH 靠 deepFreeze 让「改不动」成为运行期事实。Go 里没有这回事，
 // 这条契约和本仓库每一处 json.RawMessage 一样，是写在文档里的。
@@ -280,7 +280,7 @@ func (s *Session) eventsLocked() []sessionlog.Event {
 
 // SurfaceNodes 是当前表面上那些事件的 seq，按模型可见的顺序。
 //
-// 源: packages/core/session/src/index.ts:427-430（Session.surface）
+// 源: packages/core/session/src/index.ts:725（Session.surface）
 //
 // 新增: DSH 那边 `session.surface` 交出去的是折叠器本身，用一个只读接口
 // SessionSurface 挡住写。Go 这边直接把它的两个读方法搬到会话上——交出折叠器
@@ -309,10 +309,10 @@ func (s *Session) SurfaceReplaceGeneration() int {
 //
 // 新增: DSH 的签名是 `append(type, data, ...opts)`，opts 那一项对表面事件是
 // 必填、对别的类型被编译器拒收。Go 的类型系统做不到「按第一个参数的取值决定
-// 第二个参数在不在」，而 [ds-harness-go/session.Event] 上那两个字段本来就在，
+// 第二个参数在不在」，而 [github.com/snight1983/ds-harness-go/session.Event] 上那两个字段本来就在，
 // 所以这里收的就是一条填了一半的事件，见裁决表上 SurfaceIntent 那一行。
 // 那条「表面事件必须带 SurfaceOp」的约束由
-// [ds-harness-go/session.SurfaceOpOf] 在下面验，DSH 在运行期也验同一条。
+// [github.com/snight1983/ds-harness-go/session.SurfaceOpOf] 在下面验，DSH 在运行期也验同一条。
 //
 // 热路径不为 I/O 阻塞——持久化插件自己异步缓冲。事件一旦进了日志这次追加就
 // 算提交了：观察者失败被逐个记日志兜住，既不改变返回值，也不妨碍后面的观察者
@@ -361,7 +361,7 @@ func (s *Session) Append(candidate sessionlog.Event) (sessionlog.Event, error) {
 //
 // 新增: DSH 是先收监听器快照、再 push 进日志，因为它那次收集会经过 cordis 的
 // 派发检查、是**会抛**的。Go 这边收观察者只是遍历
-// [ds-harness-go/core/scope.Layers] 的两层，不会失败，所以次序上没有可观察的
+// [github.com/snight1983/ds-harness-go/core/scope.Layers] 的两层，不会失败，所以次序上没有可观察的
 // 差别；这里把它放在表面提交之后，是为了不给一条注定要失败的追加白收一遍。
 //
 // 也因此这里用的是 Push 而不是「先 ValidateNext 再 Push」：Push 本身就是
@@ -459,13 +459,13 @@ func (s *Session) attachedEntry() *entry {
 }
 
 // RequestHeader 是这段日志最后一条请求头事件之后生效的那份
-// [ds-harness-go/session.EpochHeader]——也就是**下一次**请求要拿去比对的那份。
+// [github.com/snight1983/ds-harness-go/session.EpochHeader]——也就是**下一次**请求要拿去比对的那份。
 //
 // 源: packages/core/session/src/index.ts:664-687
 //
 // 第二个返回值为假表示还没有过任何一条 request/header 快照。
 //
-// 它是 [ds-harness-go/session.FoldRequestHeader] 活着的、增量维护的那个形态：
+// 它是 [github.com/snight1983/ds-harness-go/session.FoldRequestHeader] 活着的、增量维护的那个形态：
 // 每条头事件只折一次，于是每个步骤读一次的代价是 O(新事件)。
 func (s *Session) RequestHeader() (sessionlog.EpochHeader, bool, error) {
 	s.mutex.Lock()
@@ -515,7 +515,7 @@ func (s *Session) RequestContext() (sessionlog.RequestContext, bool, error) {
 // 表面是派生历史的**唯一**来源：每一次会产出消息的追加都记下了自己的
 // SurfaceOp，于是一条没带标记的原始事件（一个分块、一次回合边界）理所当然地
 // 缺席，而一次压缩的 replace 会把被盖住的节点从派生里删掉。逐节点的投影规则
-// 是 [ds-harness-go/session.DeriveEventMessage]。
+// 是 [github.com/snight1983/ds-harness-go/session.DeriveEventMessage]。
 //
 // 有缓存：每个表面节点只在第一次见到时投影一次，一次调用的代价是 O(新节点)；
 // 一次表面重写（[Session.SurfaceReplaceGeneration] 变了）会整份重建。交回的
@@ -549,10 +549,10 @@ func (s *Session) DeriveMessages() ([]llm.Message, error) {
 	return slices.Clone(s.derived), nil
 }
 
-// DeriveEventMessage 是 [ds-harness-go/session.DeriveEventMessage] 挂在会话上的
+// DeriveEventMessage 是 [github.com/snight1983/ds-harness-go/session.DeriveEventMessage] 挂在会话上的
 // 那一面。
 //
-// 源: packages/core/session/src/index.ts:750-757
+// 源: packages/core/session/src/index.ts:747-755（deriveEventMessage）
 //
 // 新增: DSH 那边这个方法的存在理由是「让拿着 session 的人不必再 import 一次
 // surface.ts」。Go 里同一个理由成立得弱一些，但删掉它会让一个从

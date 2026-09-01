@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/session"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // agentAtDepth 造一个持久头里记着确切派发深度的假 agent。

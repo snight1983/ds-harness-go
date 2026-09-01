@@ -6,8 +6,8 @@
 //
 // # 它只决定「什么时候」，不拥有存储也不拥有预览
 //
-// 存全文是 [ds-harness-go/spill.Store] 的事，切头尾是
-// [ds-harness-go/util/outputretention.TextRetainer] 的事。本包做的是三件：
+// 存全文是 [github.com/snight1983/ds-harness-go/spill.Store] 的事，切头尾是
+// [github.com/snight1983/ds-harness-go/util/outputretention.TextRetainer] 的事。本包做的是三件：
 // 判断这份结果超没超预算、把全文交给后端、把「预览 + 句柄 + 取回说明」拼成
 // 一段替换内容。
 //
@@ -44,7 +44,7 @@
 // （表示什么都外置），所以拿零值当「没给」会吃掉一个能表达的配置。
 //
 // 新增: DSH 靠结构类型 SpillPolicyExec 从 exec.agent.session.header.id 里读出会话。
-// Go 这边 [ds-harness-go/core/tools.Execution.Agent] 是一个不透明的作用域键，
+// Go 这边 [github.com/snight1983/ds-harness-go/core/tools.Execution.Agent] 是一个不透明的作用域键，
 // 从它到会话 id 的映射由调用方在 [Config.OwnerOf] 里给。
 //
 // 新增: DSH 还有第二条胳膊，给 Code Mode 的 tools/code-dispatch-log 瀑布封顶。
@@ -53,7 +53,7 @@
 //
 // # 存这一次用的是背景 ctx
 //
-// [ds-harness-go/core/tools.PostRule] 的签名里没有 ctx——执行后瀑布跑的时候
+// [github.com/snight1983/ds-harness-go/core/tools.PostRule] 的签名里没有 ctx——执行后瀑布跑的时候
 // 这次调用已经收敛了。DSH 那边这个监听器同样拿不到调用方的信号。所以存全文用的是
 // 一个独立的背景 ctx：它不该被那次已经结束的调用连累，中途撤掉只会留下一个
 // 存了一半的句柄。

@@ -14,13 +14,13 @@ import (
 	"log/slog"
 	"sync"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
-	"ds-harness-go/subagent/subagent"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
 // 这三个是那份权威结果值的三种形状，由 kind 判别。
@@ -112,7 +112,7 @@ type delegationResult struct {
 // 源: packages/subagent/tool-subagent/src/index.ts:101-109
 //
 // 新增: DSH 拿类型守卫在 JsonValue 上筛。Go 里那份数组是
-// [encoding/json.RawMessage]，所以逐个解成 [ds-harness-go/llm.Content] 里的块，
+// [encoding/json.RawMessage]，所以逐个解成 [github.com/snight1983/ds-harness-go/llm.Content] 里的块，
 // 解不动的直接跳过——那正是 DSH 那个 filter 的意思。
 func outputValueText(values []json.RawMessage) string {
 	blocks := make(llm.Content, 0, len(values))
@@ -234,7 +234,7 @@ func (c *Controller) startContinuable(
 //
 // 源: packages/subagent/tool-subagent/src/index.ts:409-431
 //
-// 新增: DSH 的 done 是一个 Promise，Go 这边 [ds-harness-go/jobs/jobs.Hooks.Done]
+// 新增: DSH 的 done 是一个 Promise，Go 这边 [github.com/snight1983/ds-harness-go/jobs/jobs.Hooks.Done]
 // 是一条 channel，所以结清那件事挪进一条协程；它必须**恰好**送一个值，作业注册表
 // 那条契约就是这么定的。
 func (c *Controller) startBackgroundJob(
@@ -314,10 +314,10 @@ func (c *Controller) runForeground(
 //
 // 新增: DSH 直接 `result.output as unknown as JsonValue[]`，靠工具注册表在那一步
 // 做无损快照。Go 这边排一遍就是那次快照。逐块排而不是把整份内容排成一个数组再拆
-// 开：[ds-harness-go/llm.Content] 只挂了 UnmarshalJSON，编组是逐块进行的，所以两
+// 开：[github.com/snight1983/ds-harness-go/llm.Content] 只挂了 UnmarshalJSON，编组是逐块进行的，所以两
 // 条路的字节完全一样，而这一条不必再把那个数组解回来——那一步的错误分支根本走不到
 // （排得出来的一定是个 JSON 数组），留着就是一段验不了的代码。块的形状仍旧归
-// [ds-harness-go/llm.Content] 所有，本包一个字都不复述。
+// [github.com/snight1983/ds-harness-go/llm.Content] 所有，本包一个字都不复述。
 func marshalBlocks(content llm.Content) ([]json.RawMessage, error) {
 	blocks := make([]json.RawMessage, 0, len(content))
 	for _, block := range content {
@@ -374,7 +374,7 @@ func outputSchema() tools.Node {
 		shape(kindForeground,
 			tools.Property{Name: "runId", Schema: tools.Node{Type: tools.TypeString}},
 			// items 是「任意 JSON 值」：孩子交回来的是内容块，块的形状归
-			// [ds-harness-go/llm.Content] 所有，本包不在这里复述一遍。
+			// [github.com/snight1983/ds-harness-go/llm.Content] 所有，本包不在这里复述一遍。
 			tools.Property{Name: "output", Schema: tools.Node{Type: tools.TypeArray, Items: &tools.Node{}}},
 		),
 	}}

@@ -5,6 +5,7 @@
 package subagent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,12 +14,12 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ---- 假宿主 ----
@@ -70,6 +71,10 @@ func (h *fakeHost) observeActivation(
 type childAgent struct {
 	*fakeAgent
 
+	// idleErr 非 nil 时，这个孩子静下来之后 WhenIdle 交回的是这个错——一个「停是停了，
+	// 但停得不干净」的孩子。它在这个 agent 公布出去之前就装好，此后只读。
+	idleErr error
+
 	mu sync.Mutex
 	// idle 关掉之后 WhenIdle 才返回。
 	idle chan struct{}
@@ -97,7 +102,7 @@ func newChildAgent(id session.SessionID, agentScope *scope.Scope, live *coresess
 func (c *childAgent) WhenIdle(ctx context.Context) error {
 	select {
 	case <-c.idle:
-		return nil
+		return c.idleErr
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -195,6 +200,8 @@ type fakeFactory struct {
 	// disposeErr 非 nil 时每一个句柄的处置都报这个错。真的摘除和作用域释放照旧走完，
 	// 于是测试收尾还是干净的——这里要的只是那条失败往上汇总的路。
 	disposeErr error
+	// idleErr 非 nil 时每一个造出来的孩子静下来之后都报这个错，见 [childAgent.idleErr]。
+	idleErr error
 	// onPublished 在一个孩子已经公布、句柄还没交出去的那一刻跑，用来在「物化成功」
 	// 和「投递」这两步之间插进动作。管理器在这个窗口里没有别的接缝可挂。
 	onPublished func(session.SessionID)
@@ -293,6 +300,12 @@ func (f *fakeFactory) publish(
 	agentOptions agent.Options,
 	setup agent.Setup,
 ) (agent.Handle, error) {
+	// 在这个孩子公布出去之前先取走那份「静下来之后报什么」，此后 childAgent 上那个
+	// 字段就只被读了。摆到公布之后写会和守望那条线抢同一个字段。
+	f.mu.Lock()
+	idleFailure := f.idleErr
+	f.mu.Unlock()
+
 	agentScope, err := scope.New(scope.NewKey(string(id)), scope.Options{Parent: owner.Key()})
 	if err != nil {
 		return agent.Handle{}, err
@@ -317,6 +330,7 @@ func (f *fakeFactory) publish(
 	}
 	child := newChildAgent(id, agentScope, live)
 	child.options = agentOptions
+	child.idleErr = idleFailure
 
 	detach, err := f.agents.Enter(child, nil)
 	if err != nil {
@@ -627,8 +641,11 @@ func TestNewContinuationManagerRefusesAnIncompleteAssembly(t *testing.T) {
 	}
 }
 
-// 持久化和审批都可以不在场：管理器照样立得起来，只是起不了可续孩子。
-func TestNewContinuationManagerStandsWithoutPersistence(t *testing.T) {
+// barebonesManager 装一台只带那四样必填服务的管理器：没有持久化、没有审批、
+// 也没有日志器。
+func barebonesManager(t *testing.T) *ContinuationManager {
+	t.Helper()
+
 	agents, err := agent.NewRegistry(agent.RegistryOptions{})
 	if err != nil {
 		t.Fatalf("造 agent 注册表失败：%v", err)
@@ -646,6 +663,57 @@ func TestNewContinuationManagerStandsWithoutPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("造续接管理器失败：%v", err)
 	}
+	return manager
+}
+
+// 拥有它的那把作用域已经处置了：那笔「根离开注册表」的登记挂不上去，于是管理器
+// 立不起来。它要是照旧立起来，那些拆解期间关掉的准入闸再没有人来开。
+func TestNewContinuationManagerRefusesADisposedOwner(t *testing.T) {
+	agents, err := agent.NewRegistry(agent.RegistryOptions{})
+	if err != nil {
+		t.Fatalf("造 agent 注册表失败：%v", err)
+	}
+	sessions, err := coresession.NewStore(coresession.StoreOptions{Now: fixedClock()})
+	if err != nil {
+		t.Fatalf("造活会话表失败：%v", err)
+	}
+	owner, err := scope.New(scope.NewKey("subagents"), scope.Options{})
+	if err != nil {
+		t.Fatalf("造作用域失败：%v", err)
+	}
+	if err := owner.Dispose(context.Background()); err != nil {
+		t.Fatalf("处置作用域失败：%v", err)
+	}
+
+	if _, err := NewContinuationManager(ContinuationDeps{
+		Owner:    owner,
+		Agents:   agents,
+		Sessions: sessions,
+		Setups:   NewActivationSetupRegistry(),
+	}, &fakeHost{}); err == nil {
+		t.Fatal("往一把已经处置的作用域上装该失败")
+	}
+}
+
+// 没组装日志器时那几条 fail-soft 诊断落到进程默认日志器上，而不是掉进地板：
+// 拆解失败和结清没投出去只从这一条路说得出来。
+func TestContinuationManagerWarnsThroughTheDefaultLogger(t *testing.T) {
+	manager := barebonesManager(t)
+
+	var captured bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&captured, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	manager.warn("拆解失败了", "孩子", "child")
+	if !strings.Contains(captured.String(), "拆解失败了") {
+		t.Fatalf("该落在默认日志器上，实际 %q", captured.String())
+	}
+}
+
+// 持久化和审批都可以不在场：管理器照样立得起来，只是起不了可续孩子。
+func TestNewContinuationManagerStandsWithoutPersistence(t *testing.T) {
+	manager := barebonesManager(t)
 	store, err := manager.requirePersistence()
 	if code := codeOf(err); code != CodePersistenceUnavailable {
 		t.Fatalf("该报 %s，实际 %s", CodePersistenceUnavailable, code)
@@ -681,3 +749,7 @@ func TestDisposingTheOwnerDrainsBeforeReleasingTheActivationScope(t *testing.T) 
 		t.Fatal("排干该先取消那个孩子")
 	}
 }
+
+func (c *childAgent) Remove(llm.MessageID) {}
+
+func (c *childAgent) Replace(llm.MessageID, llm.Message) {}

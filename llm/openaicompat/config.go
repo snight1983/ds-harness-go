@@ -11,13 +11,13 @@ import (
 	"slices"
 	"time"
 
-	"ds-harness-go/credentials"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/credentials"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // DefaultStreamIdleTimeout 是一次流式读还挂着时，允许提供方空闲多久的默认值。
 //
-// 源: packages/llm/llm-pi-ai/src/config.ts:43
+// 源: packages/llm/llm-pi-ai/src/config.ts:42-43（DEFAULT_STREAM_IDLE_TIMEOUT_MS）
 const DefaultStreamIdleTimeout = 300 * time.Second
 
 // DefaultMaxRequestImageBytes 是每次请求里 base64 图片负载的默认上限。
@@ -33,22 +33,22 @@ const DefaultMaxRequestImageBytes = 20 * 1024 * 1024
 // DefaultRequestImagePixelBudget 是每个请求版本的默认总像素预算，
 // 正好放得下一张 2048px 的规范化附件。
 //
-// 源: packages/llm/llm-pi-ai/src/config.ts:56
+// 源: packages/llm/llm-pi-ai/src/config.ts:55-56（DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET）
 const DefaultRequestImagePixelBudget = 2048 * 2048
 
 // DefaultRequestImageMaxBytes 是每个请求版本在 base64 膨胀之前的默认原始字节上限。
 //
-// 源: packages/llm/llm-pi-ai/src/config.ts:58
+// 源: packages/llm/llm-pi-ai/src/config.ts:57-58（DEFAULT_REQUEST_IMAGE_MAX_BYTES）
 const DefaultRequestImageMaxBytes = 1024 * 1024
 
 // DefaultContextWindow 是配置没给上下文容量的模型按多大算。
 //
-// 源: packages/llm/llm-pi-ai/src/config.ts:61
+// 源: packages/llm/llm-pi-ai/src/config.ts:60-61（DEFAULT_CONTEXT_WINDOW）
 const DefaultContextWindow = 262_144
 
 // DefaultMaxTokens 是配置没给输出能力的模型按多大算。
 //
-// 源: packages/llm/llm-pi-ai/src/config.ts:64
+// 源: packages/llm/llm-pi-ai/src/config.ts:63-64（DEFAULT_MAX_TOKENS）
 const DefaultMaxTokens = 32_768
 
 // DefaultInput 交出配置没声明模态的模型按什么算。
@@ -72,7 +72,7 @@ func DefaultInput() []llm.ModelModality { return []llm.ModelModality{llm.Modalit
 // 剩下的字段逐条对着 DSH 走。
 //
 // 新增: 每个字段都带 json 标签，键名逐字照 DSH 的 schema（config.ts:88-176）。
-// 这个类型会作为一个设置命名空间的形状登记出去，而 [ds-harness-go/settings.Register]
+// 这个类型会作为一个设置命名空间的形状登记出去，而 [github.com/snight1983/ds-harness-go/settings.Register]
 // 是拿 encoding/json 把它来回过一遍的，理由同 [ModelProfile]。两个时限字段也因此
 // 从 [time.Duration] 改成毫秒整数：一个 time.Duration 在 JSON 里是**纳秒**，
 // 写配置的人要为 30 秒打出 30000000000。毫秒整数加 `Ms` 后缀是本仓库对 JSON 上
@@ -218,7 +218,7 @@ func (p *RetryPolicy) config() *llm.RetryPolicyConfig {
 // ResolvedProviderProfile 是一份验过的配置：路由已经盖上去，适配器自己拥有的
 // 那些默认值全都落实了。
 //
-// 源: packages/llm/llm-pi-ai/src/config.ts:179-210
+// 源: packages/llm/llm-pi-ai/src/config.ts:181-213（ResolvedPiAiProviderProfile）
 type ResolvedProviderProfile struct {
 	// Provider 是路由键，也就是配置里那个字典键。
 	Provider string
@@ -438,7 +438,7 @@ func resolveProfile(provider string, source ProviderProfile) (ResolvedProviderPr
 	//
 	// 新增: DSH 还要求它不超过 MAX_TIMER_DELAY_MS。那是 JS 的 setTimeout 把超过
 	// 32 位的延迟悄悄压成 1 毫秒这件实现细节，Go 的 [time.Timer] 没有这个悬崖，
-	// 所以那条上界不存在。理由和 [ds-harness-go/util/timeout.NewWatchdog] 上
+	// 所以那条上界不存在。理由和 [github.com/snight1983/ds-harness-go/util/timeout.NewWatchdog] 上
 	// 那条逐字相同。
 	streamIdleTimeout := time.Duration(source.StreamIdleTimeoutMs) * time.Millisecond
 	if streamIdleTimeout == 0 {

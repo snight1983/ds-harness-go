@@ -10,9 +10,9 @@ import (
 	"slices"
 	"strings"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
-	"ds-harness-go/sessionquery"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionquery"
 )
 
 // promptPrefix 是那段快照 JSON 前面的话，连同开标签。

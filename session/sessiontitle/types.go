@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // EventSessionTitle 是这个包往会话日志里写的那条事件。
@@ -87,7 +87,7 @@ const (
 //
 // 新增: DSH 那边是一个三支的可辨识联合。这里收成一个带 Kind 判别字段的结构体，
 // 而不是按本仓库处理 TS 联合的一贯做法（封闭接口加变体，成例是
-// [ds-harness-go/llm.ContentBlock]）。理由是三支里有两支**一个字段都没有**，
+// [github.com/snight1983/ds-harness-go/llm.ContentBlock]）。理由是三支里有两支**一个字段都没有**，
 // 只有 provider 那支带两个；为一个「三选一，其中两个是空壳」的值配一套类型
 // 开关，每一处读 Kind 的地方都要先解一次包，而它们全都只想读那一个判别值。
 //
@@ -104,7 +104,7 @@ type Source struct {
 
 // Clone 交出一份不共享指针的拷贝。
 //
-// 源: packages/session/session-title/src/index.ts:204-216（copySessionTitleSource）
+// 源: packages/session/session-title/src/index.ts:140-153（copySessionTitleSource）
 //
 // DSH 那边的理由是 JS 对象按引用共享，一份从日志里读出来的来源交出去之后会被
 // 收到它的人改掉。Go 这边结构体赋值就是复制，只有 Model 那个指针需要单独处理。
@@ -161,7 +161,7 @@ type UserMessage struct {
 
 // AutomaticMode 是一个生成器自己拥有的自动排期节奏。
 //
-// 源: packages/session/session-title/src/index.ts:123
+// 源: packages/session/session-title/src/index.ts:90-91（SessionTitleAutomaticMode）
 type AutomaticMode string
 
 const (
@@ -173,7 +173,7 @@ const (
 
 // ProviderRequest 是交给一次标题生成调用的那份不可变输入。
 //
-// 源: packages/session/session-title/src/index.ts:126-135
+// 源: packages/session/session-title/src/index.ts:93-103（SessionTitleProviderRequest）
 //
 // 新增: DSH 那个 signal: AbortSignal 字段在这里不存在——按本仓库一贯的规矩，
 // 取消走 [Provider.Generate] 的第一个 context.Context 参数。
@@ -190,7 +190,7 @@ type ProviderRequest struct {
 
 // ProviderResult 是生成器交出来的、还没经过服务归一化和接受的产物。
 //
-// 源: packages/session/session-title/src/index.ts:138-145
+// 源: packages/session/session-title/src/index.ts:105-113（SessionTitleProviderResult）
 type ProviderResult struct {
 	// Title 是提议的标题正文。
 	Title string
@@ -206,7 +206,7 @@ type ProviderResult struct {
 
 // Provider 是登记进服务的那个唯一可选的异步标题实现。
 //
-// 源: packages/session/session-title/src/index.ts:148-159
+// 源: packages/session/session-title/src/index.ts:115-127（SessionTitleProvider）
 //
 // 「唯一」是有意的：标题只有一个，两个生成器同时往里写只会互相盖掉。
 type Provider interface {
@@ -223,7 +223,7 @@ type Provider interface {
 
 // Config 是必填的兜底参数和标题长度上限。
 //
-// 源: packages/session/session-title/src/index.ts:79-86
+// 源: packages/session/session-title/src/index.ts:54-62（Config）
 type Config struct {
 	// FallbackMaxWords 是兜底标题最多取几个空白分隔的词。
 	FallbackMaxWords int
@@ -258,7 +258,7 @@ var ErrInvalidConfig = errors.New("sessiontitle: 配置不成立")
 
 // ErrInvalidTitle 表示一段用户输入的标题归一化之后什么都不剩。
 //
-// 源: packages/session/session-title/src/index.ts:110-112（SessionTitleInvalidError）
+// 源: packages/session/session-title/src/index.ts:80-88（SessionTitleInvalidError）
 //
 // 它是 [Service.Rename] 唯一一个「怪输入」的失败：把改名失败翻到线上去
 // （`title-invalid`）的调用方靠 errors.Is 认它，而活性和销毁那些失败是普通错误。
@@ -321,7 +321,7 @@ type Session interface {
 
 // CheckEventData 验一条标题事件负载上那条硬约束。
 //
-// 源: packages/session/session-title/src/invariant.ts:26-42
+// 源: packages/session/session-title/src/invariant.ts:41-47（apply）
 //
 // 约束是：MessageSeqs 为空 **当且仅当** Source.Kind 是 [SourceUser]。一次自动
 // 起名必须说得出自己读的是哪几句话，一次用户改名则一句都没读。

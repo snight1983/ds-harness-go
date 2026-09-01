@@ -24,10 +24,10 @@ import (
 	"strings"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/guard/repeattoolreminder"
-	"ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/guard/repeattoolreminder"
+	"github.com/snight1983/ds-harness-go/llm"
 )
 
 // harness 是一次测试要的全套家当：注册表、装好的这一层、和一个有身份的作用域。

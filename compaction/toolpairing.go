@@ -8,8 +8,8 @@ package compaction
 import (
 	"fmt"
 
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // SurfaceView 是算平衡要用到的那点表面状态。

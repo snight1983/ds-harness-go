@@ -10,6 +10,6 @@ package askuser
 //
 // 这个包**没有**要注册的不变量，DSH 自己在注释里写明了原因：这件面向模型的适配器
 // 没有自己的生命周期流，执行关系归它调用的那道能力接缝管
-// （[ds-harness-go/interaction/userquestions]）。所以这里只留下这个名字——一个包
+// （[github.com/snight1983/ds-harness-go/interaction/userquestions]）。所以这里只留下这个名字——一个包
 // 要在注册表里占住自己的所有权，得先有名字——而没有 RegisterInvariants。
 const PackageName = "@deepseek-ai/dsh-tool-ask-user"

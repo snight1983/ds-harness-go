@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/session"
-	"ds-harness-go/session/persistence"
-	"ds-harness-go/session/projection"
-	"ds-harness-go/storage"
-	"ds-harness-go/storage/domain"
-	"ds-harness-go/storage/storagetest"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/session/persistence"
+	"github.com/snight1983/ds-harness-go/session/projection"
+	"github.com/snight1983/ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )
 
 // fakeLive 是一个只把头和日志摆在那儿的活会话。

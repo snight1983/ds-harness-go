@@ -32,9 +32,9 @@ import (
 	"sync"
 	"testing"
 
-	"ds-harness-go/core/scope"
-	"ds-harness-go/preset/agentpresets"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/preset/agentpresets"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // writePreset 在 root 底下摆出一份预设目录，composition 是它那份组合文件的内容。

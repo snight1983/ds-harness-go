@@ -19,7 +19,7 @@ import (
 
 // CompositionFile 是那份让一个目录成为预设的组合文件。
 //
-// 源: packages/preset/agent-presets/src/discovery.ts:26
+// 源: packages/preset/agent-presets/src/discovery.ts:36-37（COMPOSITION_FILE）
 //
 // 名字保持和 DSH 逐字一致（`agent.cordis.yml`），这样两边的预设目录可以互换着看。
 // 里面那份文档的形状也一样：一个顶层的插件行列表。**行里的 `name` 在 Go 这边指的是
@@ -51,7 +51,7 @@ type compositionRow struct {
 
 // entryListProblem 说清 rows 为什么不是一份行列表，能是就给空串。
 //
-// 源: packages/preset/agent-presets/src/discovery.ts:55-76
+// 源: packages/preset/agent-presets/src/discovery.ts:62-98（entryListProblem）
 //
 // 一次**浅**的形状检查，刻意做得比装载器少：它不解算组装器名字、也不套用 config。
 // 它抓的是那种让装载器连开始都开始不了的手改。它必须接受装载器接受的一切，所以
@@ -134,7 +134,7 @@ func isFile(path string) bool {
 
 // ScanRoot 扫一个根，找出它下面的预设目录。
 //
-// 源: packages/preset/agent-presets/src/discovery.ts:139-170
+// 源: packages/preset/agent-presets/src/discovery.ts:275-323（scanRoot）
 //
 // 一个不存在的根交出零份预设而不是报错：用户根在第一份本地创作出现之前都不存在，
 // 而点了一个没有任何根供得出的默认值，在解算那一步已经会当场炸。
@@ -197,7 +197,7 @@ func orderOf(preset Preset) float64 {
 
 // DiscoverPresets 按优先级顺序扫过每一个根。
 //
-// 源: packages/preset/agent-presets/src/discovery.ts:177-186
+// 源: packages/preset/agent-presets/src/discovery.ts:325-343（discoverPresets）
 //
 // 靠前的根赢下重名的 id。
 func DiscoverPresets(roots []Root) ([]Preset, error) {

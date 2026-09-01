@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"sync"
 
-	"ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage"
 )
 
 // Config 是建一个后端要的东西。

@@ -9,7 +9,7 @@ import (
 	"context"
 	"sync"
 
-	"ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/invariants"
 )
 
 // WriteIntentDecider 为**下一次** [FileSystem.WriteText] 决定带什么守卫。

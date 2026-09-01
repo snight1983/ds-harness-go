@@ -18,11 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/fs"
-	"ds-harness-go/session"
-	"ds-harness-go/storage"
-	"ds-harness-go/storage/domain"
-	"ds-harness-go/storage/storagetest"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/storage"
+	"github.com/snight1983/ds-harness-go/storage/domain"
+	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )
 
 // quiet 是用例默认用的 logger：本包的日志是诊断用的，跑用例时不该刷屏。

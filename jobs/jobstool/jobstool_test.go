@@ -26,20 +26,20 @@ import (
 	"testing"
 	"time"
 
-	"ds-harness-go/core/agent"
-	"ds-harness-go/core/scope"
-	coresession "ds-harness-go/core/session"
-	"ds-harness-go/core/systemprompt"
-	"ds-harness-go/core/tools"
-	"ds-harness-go/invariants"
-	"ds-harness-go/jobs/jobs"
-	"ds-harness-go/llm"
-	"ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/core/agent"
+	"github.com/snight1983/ds-harness-go/core/scope"
+	coresession "github.com/snight1983/ds-harness-go/core/session"
+	"github.com/snight1983/ds-harness-go/core/systemprompt"
+	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/jobs/jobs"
+	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ---- 假件 ----
 
-// stubAgent 是一个只为满足 [ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
+// stubAgent 是一个只为满足 [github.com/snight1983/ds-harness-go/core/agent.Agent] 契约而存在的假 agent。
 //
 // 本包只读它的 ID、Status 和 Scope，投递则落在 followups / injects 上。
 type stubAgent struct {
@@ -62,8 +62,8 @@ func (a *stubAgent) Cancel(session.TurnEndCancelCause, agent.CancelOptions) {}
 func (a *stubAgent) Send(llm.Message, agent.InboxTarget, bool)              {}
 func (a *stubAgent) Steer(llm.Message)                                      {}
 
-func (a *stubAgent) Followup(message llm.Message) { a.followups = append(a.followups, message) }
-func (a *stubAgent) Inject(message llm.Message)   { a.injects = append(a.injects, message) }
+func (a *stubAgent) Followup(message llm.Message)           { a.followups = append(a.followups, message) }
+func (a *stubAgent) Inject(message llm.Message)             { a.injects = append(a.injects, message) }
 func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget) {}
 
 func (a *stubAgent) RunMaintenance(ctx context.Context, task func(context.Context) error) error {
@@ -1232,7 +1232,7 @@ func TestUninstallingReleasesEveryOwnerCleanup(t *testing.T) {
 	}
 }
 
-// TestOnlyHumanInputRefillsTheBudget 钉住那条判别：只有 [ds-harness-go/llm.SourceUser]
+// TestOnlyHumanInputRefillsTheBudget 钉住那条判别：只有 [github.com/snight1983/ds-harness-go/llm.SourceUser]
 // 算数。
 func TestOnlyHumanInputRefillsTheBudget(t *testing.T) {
 	t.Parallel()
@@ -1465,3 +1465,7 @@ func TestTheToolsRunThroughTheRealRuntime(t *testing.T) {
 		t.Fatalf("派发完那张表还有东西：%v", controller.outputLimits)
 	}
 }
+
+func (a *stubAgent) Remove(llm.MessageID) {}
+
+func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}

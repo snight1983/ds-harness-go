@@ -40,17 +40,17 @@
 // ctx.get——不给就是这个装配里没有那条能力，别的胳膊照装。
 //
 // 新增: DSH 用 `WeakMap<Session, ...>` 记挂起的选择，会话被回收时那一条跟着没了。
-// Go 没有弱引用，所以换成一张按 [ds-harness-go/session.SessionID] 索引的表，
+// Go 没有弱引用，所以换成一张按 [github.com/snight1983/ds-harness-go/session.SessionID] 索引的表，
 // 由装配方在会话散掉时调 [Controller.OnSessionDisposed] 清理（成例见
-// [ds-harness-go/session/sessiontitle.Service.OnSessionDisposed]）。不清理的后果
+// [github.com/snight1983/ds-harness-go/session/sessiontitle.Service.OnSessionDisposed]）。不清理的后果
 // 只是一条永远不会被读到的挂起记录，不会影响任何别的会话。
 //
 // 新增: DSH 的 exit 工具、`/plan` 命令、提示词段落都从一个结构类型的 agent 对象上
 // 直接摸到 `agent.session`。Go 这几处拿到的是一把不透明的
-// [ds-harness-go/core/scope.Key]，所以由装配方经 [Config.AgentOf] 交进来一条
+// [github.com/snight1983/ds-harness-go/core/scope.Key]，所以由装配方经 [Config.AgentOf] 交进来一条
 // 「从钥匙找 agent」的路（成例见
-// [ds-harness-go/interaction/commands.Options.LogOf]、
-// [ds-harness-go/todo.Config.Append]）。
+// [github.com/snight1983/ds-harness-go/interaction/commands.Options.LogOf]、
+// [github.com/snight1983/ds-harness-go/todo.Config.Append]）。
 //
 // 新增: DSH 的 `session.append` 抛异常，`set` 不接，让它一路抛给调用方。Go 里
 // [Controller.Set] 多一个返回的 error，理由和别处一样：一次没能落盘的状态翻转
