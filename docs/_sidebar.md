@@ -3,6 +3,7 @@
 - 入门
   - [总体架构](architecture.md)
   - [嵌入 Go 服务](embedding.md)
+  - [Go 包文档映射](packages.md)
 
 - 核心运行时
   - [Agent](modules/agent.md)
@@ -17,6 +18,32 @@
   - [存储、文件与附件](modules/storage.md)
   - [后台任务、目标与工作流](modules/workflow.md)
   - [协议适配](modules/protocol.md)
+
+- 详细模块
+  - [运行时上下文](modules/context.md)
+  - [上下文压缩](modules/compaction.md)
+  - [运行时设置](modules/settings.md)
+  - [计划与待办](modules/planning.md)
+  - [用户交互](modules/interaction.md)
+  - [运行时 Guard](modules/guards.md)
+  - [后台作业](modules/jobs.md)
+  - [长期目标](modules/goal.md)
+  - [耐久提醒](modules/schedule.md)
+  - [Ralph 工作流](modules/ralph.md)
+  - [Session 查询](modules/sessionquery.md)
+  - [Workspace](modules/workspace.md)
+  - [文件系统](modules/filesystem.md)
+  - [附件与图片](modules/attachment.md)
+  - [凭据](modules/credentials.md)
+  - [大结果外置](modules/spill.md)
+  - [Agent 预设与 Persona](modules/presets.md)
+  - [SDK 协议与服务端](modules/sdk.md)
+  - [ACP 接入](modules/acp.md)
+  - [MCP 客户端](modules/mcp.md)
+  - [不变量诊断](modules/invariants.md)
+  - [通用运行时工具](modules/utilities.md)
+  - [LLM 测试与回放](modules/llm-testing.md)
+  - [移植与文档门禁工具](modules/migration-tools.md)
 
 - 设计与移植
   - [详细设计](DESIGN.md)

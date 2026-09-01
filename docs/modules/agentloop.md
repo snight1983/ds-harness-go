@@ -197,3 +197,7 @@ turn/end
 | `core/agentloop/toolcalls.go` | 工具调用并发调度与结果收敛 |
 | `core/agentloop/runtimecontext.go` | 动态上下文事件连接 |
 | `core/agentloop/doc.go` | 包级设计与移植边界 |
+
+## 深入阅读
+
+[上下文压缩](compaction.md) · [计划与待办](planning.md) · [运行时 Guard](guards.md)

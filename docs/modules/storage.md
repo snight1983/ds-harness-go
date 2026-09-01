@@ -6,8 +6,8 @@
 
 ```mermaid
 flowchart TB
-    Session["活会话事件"] --> Wiring["宿主持久化接线\n当前不内置"]
-    Wiring --> Persistence["session/persistence"]
+    Session["活会话事件"] --> Coordinator["session/persistence Coordinator"]
+    Coordinator --> Persistence["session/persistence Backend"]
     Persistence --> SessionBackend["persistence.Store / Backend\n由宿主实现"]
 
     State["设置等运行时领域数据"] --> Hub["storage.Storage"]
@@ -40,19 +40,19 @@ flowchart TB
 
 ## 会话持久化
 
-`session/persistence` 定义会话存档、`Store` / `Backend` 接口、恢复与修复原语，以及独立的 `WriteBehind` 队列。它不包含监听活 Session 并自动落盘的完整协调器；宿主必须把 `core/session` 的创建、事件、Flush 和释放边界接到具体 `Store`。
+`session/persistence` 定义会话存档、`Store` / `Backend` 接口、恢复与修复原语、`WriteBehind` 队列和活会话 `Coordinator`。Coordinator 监听 `core/session.Store` 的创建、事件、Flush 和释放边界，负责按会话串行、攒批、准备缓存和关闭排干。
 
 ```mermaid
 sequenceDiagram
     participant S as core/session
-    participant H as 宿主持久化协调
-    participant P as session/persistence
-    participant B as persistence.Backend
+    participant H as session/persistence Coordinator
+    participant P as persistence.Backend
+    participant B as 文件 / 数据库 / 对象存储
 
     S->>H: 创建、事件或 Flush 边界
-    H->>P: Create / Append / Load / Flush
-    P->>B: 追加耐久事件批次
-    B-->>P: 批次已耐久提交
+    H->>P: LoadStored / AppendBatch / CommitRepair
+    P->>B: 读写具体介质
+    B-->>P: 介质提交结果
     P-->>H: 提交或恢复结果
     H-->>S: 完成屏障或准备恢复会话
 ```
@@ -60,10 +60,11 @@ sequenceDiagram
 - `Store` 创建会话头、追加连续事件、读取完整存档或指定 Seq 之后的尾部，并列出轻量快照。
 - `Load` 校验格式和事件前缀，修复可安全识别的崩溃尾部；不可解释的已提交损坏会失败。
 - `WriteBehind` 把调用方交入的连续批次串行写出，支持节流、Flush 屏障和关闭排空。
+- `Coordinator` 管理活会话游标、按身份串行、准备池、退场和后端关闭顺序。
 - 存档 revision 用于判断同一份物理日志在两次观察之间是否变化。
 - 写入失败必须返回协调方，不能只记录日志后假装提交成功。
 
-`session/persistence.Backend` 与 `storage.Backend` 是两条不同接口。当前 `storage/postgres` 实现的是通用 KV Backend，不会自动成为会话持久化后端；宿主需要提供 `session/persistence.Backend` 或直接实现其 `Store`，还要提供活会话协调接线。
+`session/persistence.Backend` 与 `storage.Backend` 是两条不同接口。当前 `storage/postgres` 实现的是通用 KV Backend，不会自动成为会话持久化后端；宿主需要提供 `session/persistence.Backend` 或直接实现完整 `Store`。使用 Backend 时可以复用内置 Coordinator，但具体介质和顶层接线仍由宿主负责。
 
 ## 文件系统
 
@@ -118,8 +119,12 @@ sequenceDiagram
 | `storage/domain/` | 领域 Facility、串行提交和领域事件 |
 | `storage/postgres/` | PostgreSQL 实现与 schema |
 | `storage/storagetest/` | Backend 一致性测试套件 |
-| `session/persistence/` | 会话事件、检查点和写入协调 |
+| `session/persistence/` | 会话 Backend/Store、Coordinator、准备池、修复和写入协调 |
 | `fs/` | 执行世界文件接口、路径与策略 |
 | `fs/objectstore/` | 对象存储文件实现 |
 | `attachment/` | 图片准入、保存和请求表示 |
 | `credentials/` | 凭据 Provider、记录和变化通知 |
+
+## 深入阅读
+
+[文件系统](filesystem.md) · [附件与图片](attachment.md) · [凭据](credentials.md) · [大结果外置](spill.md)

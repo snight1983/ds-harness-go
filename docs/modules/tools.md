@@ -189,3 +189,7 @@ Tools 模块不负责：
 | `guard/` | 超时和重复调用策略 |
 | `interaction/` | 审批、提问和命令 |
 | `mcp/` | MCP 工具桥接 |
+
+## 深入阅读
+
+[用户交互](interaction.md) · [运行时 Guard](guards.md) · [计划与待办](planning.md) · [MCP 客户端](mcp.md)

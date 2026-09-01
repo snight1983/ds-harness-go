@@ -122,7 +122,7 @@ Session ID 与 Agent ID 在运行时必须一致。
 
 ## 持久化
 
-`session/persistence` 定义会话存档结构、`Store` / `Backend` 接口和独立的 `WriteBehind` 队列：
+`session/persistence` 定义会话存档结构、`Store` / `Backend` 接口、`WriteBehind` 队列和活会话 `Coordinator`：
 
 - 创建持久化会话头。
 - 追加 Seq 连续的事件批次。
@@ -131,8 +131,10 @@ Session ID 与 Agent ID 在运行时必须一致。
 - 使用 revision 判断存档是否发生变化。
 - Write-behind 队列、节流、Flush 和关闭排空。
 - 校验并修复可安全判断的崩溃尾部。
+- 监听活 Session 的创建、事件、Flush 和释放，按会话身份串行写入。
+- 缓存并独占待恢复的 `Preparation`，发布或放弃时明确转移所有权。
 
-当前包没有提供监听活 Session 并自动完成 Create、Append、Flush、Detach 的顶层 PersistenceCoordinator，也没有内置生产会话后端。宿主必须完成这层接线，并提供满足 `core/agentloop.SessionPersistence` 的 `Prepare` / `List` 适配。持久化原语不解释模型、工具或业务事件的业务含义。
+`Coordinator` 已完成 Create、Append、Flush、退场排干、冷读修复和 `Prepare` 编排，但不等于具体介质，也不直接替代所有消费方接口。宿主必须提供生产 `Backend`，把 `core/session.Store` 注入并安装 Coordinator，再为 Agent Loop 适配 Preparation 的发布/释放与后端列表。持久化层不解释模型、工具或业务事件的业务含义。
 
 ## 检查点策略
 
@@ -192,8 +194,12 @@ Session 模块不负责：
 |---|---|
 | `session/` | 事件词汇、负载、日志校验与修复 |
 | `core/session/` | 活 Session 和 Store |
-| `session/persistence/` | 存档接口、写后队列和恢复原语；不含活会话协调器 |
+| `session/persistence/` | Backend/Store 接缝、Coordinator、写后队列、准备池和恢复原语 |
 | `session/projection/` | 当前状态计算注册表 |
 | `session/projectioncache/` | 当前状态检查点缓存 |
 | `session/checkpointpolicy/` | 持久化时机 |
 | `sessionquery/` | 会话与事件查询 |
+
+## 深入阅读
+
+[Session 查询](sessionquery.md) · [Workspace](workspace.md) · [上下文压缩](compaction.md)

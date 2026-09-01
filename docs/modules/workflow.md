@@ -105,3 +105,7 @@ flowchart LR
 | `goal/goaltool/`、`goal/goalcommand/` | 模型工具与宿主命令入口 |
 | `schedule/schedule/` | 耐久计划、时间解析和投递运行时 |
 | `workflow/toolralph/` | 固定多轮子 Agent 工作流 |
+
+## 深入阅读
+
+[后台作业](jobs.md) · [长期目标](goal.md) · [耐久提醒](schedule.md) · [Ralph 工作流](ralph.md)

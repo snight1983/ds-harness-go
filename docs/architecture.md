@@ -123,7 +123,7 @@ sequenceDiagram
 |---|---|---|
 | `llm` | `llm/openaicompat` | 自定义模型适配器 |
 | `storage` | `storage/postgres` | 自定义 KV 后端 |
-| `session/persistence.Store` | 无内置生产后端或完整协调器 | 自定义会话后端与活会话接线 |
+| `session/persistence` | `Coordinator`、写后队列和恢复编排；无内置生产 Backend | 自定义会话介质与顶层装配 |
 | `fs` | `fs/objectstore` | 自定义对象或文件后端 |
 | `spill.Store` | 无强制默认实现 | 自定义大结果外置服务 |
 | `attachment.Store` | 无强制默认实现 | 自定义附件存储 |
@@ -147,8 +147,8 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     Live["活 Session"] --> Events["事件日志"]
-    Events --> Wiring["宿主持久化协调\n当前不内置"]
-    Wiring --> SessionStore["session/persistence Store / Backend"]
+    Events --> Coordinator["session/persistence Coordinator"]
+    Coordinator --> SessionStore["session/persistence Backend"]
 
     Events --> Current["当前状态"]
     Current --> Cache["projectioncache 检查点"]
@@ -160,7 +160,7 @@ flowchart LR
     Restore --> Live
 ```
 
-会话日志后端和状态缓存 KV 后端是两条接口，不要求使用同一介质。宿主必须连接活 Session 的创建、事件、Flush 和释放边界；当前仓库没有提供完整 PersistenceCoordinator。持久化顺序必须保证事件先于对应的状态缓存落盘。缓存可以落后于日志，但不能领先于日志，否则恢复时会出现没有事实依据的状态。
+会话日志 Backend 和状态缓存 KV Backend 是两条接口，不要求使用同一介质。`session/persistence.Coordinator` 可以连接活 Session 的创建、事件、Flush 和释放边界，并负责按会话串行、写入攒批、准备池、崩溃修复提交和关闭排干；宿主仍需提供具体会话 Backend 并完成顶层装配。持久化顺序必须保证事件先于对应的状态缓存落盘。缓存可以落后于日志，但不能领先于日志，否则恢复时会出现没有事实依据的状态。
 
 ## 模块关系
 

@@ -96,3 +96,7 @@ Bridge 只拥有自己创建的 Agent。关闭时先停止接收请求、结算�
 | `acp/acp/` | ACP Bridge、内容准入、取消和审批 |
 | `mcp/host.go`、`mcp/connection.go` | MCP 连接、命名空间和重连 |
 | `mcp/bridge.go`、`mcp/content.go` | 工具注册、调用和结果内容转换 |
+
+## 深入阅读
+
+[SDK 协议与服务端](sdk.md) · [ACP 接入](acp.md) · [MCP 客户端](mcp.md)

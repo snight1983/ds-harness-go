@@ -104,3 +104,7 @@ flowchart LR
 | `context/instructions/` | 工作区指令发现、预算和增量对账 |
 | `context/timecontext/` | 时间上下文 |
 | `context/sessionref/` | 会话引用与上下文生成 |
+
+## 深入阅读
+
+[运行时上下文](context.md) · [Agent 预设与 Persona](presets.md) · [运行时设置](settings.md)

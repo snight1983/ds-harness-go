@@ -6,7 +6,7 @@
 
 项目是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的非官方 Go 服务端重构，参考其能力和行为语义，但不逐行翻译 TypeScript，也不隶属于 DeepSeek 或受其官方认可。Go 已有成熟机制的部分直接采用 Go 的实现方式；每项移植或排除决定都记录在 `docs/portmap/`。
 
-文档入口：[项目文档](docs/README.md) · [总体架构](docs/architecture.md) · [嵌入 Go 服务](docs/embedding.md)
+文档入口：[项目文档](docs/README.md) · [总体架构](docs/architecture.md) · [嵌入 Go 服务](docs/embedding.md) · [逐包文档映射](docs/packages.md)
 
 ## 项目边界
 
@@ -153,7 +153,10 @@ ds-harness-go/
 |   |-- projection/            根据事件整理当前状态
 |   |-- projectioncache/       当前状态缓存
 |   |-- checkpointpolicy/      检查点策略
-|   `-- stats/                 会话统计
+|   |-- stats/                 会话统计
+|   |-- sessiontitle/          会话标题
+|   |-- sessiontitlellm/       用模型拟会话标题
+|   `-- telemetry/             会话遥测
 |-- storage/
 |   |-- domain/                串行写入和领域存储
 |   |-- postgres/              PostgreSQL 后端
@@ -182,7 +185,7 @@ ds-harness-go/
 
 ## 当前状态
 
-项目仍处于开发阶段：核心运行时和主要扩展包已经落地，但尚未发布稳定版本，也尚未提供一行代码完成全部装配的顶层 Builder。会话持久化目前提供接口、写后队列和恢复原语，尚无内置生产后端及完整的活会话协调器；宿主需要按自身需求显式创建并连接各组件。
+项目仍处于开发阶段：核心运行时和主要扩展包已经落地，但尚未发布稳定版本，也尚未提供一行代码完成全部装配的顶层 Builder。会话持久化提供接口、写后队列、恢复原语和活会话协调器（`persistence.Coordinator`），但不含任何内置落盘后端——本仓库是一个空运行时，介质由装配它的人挑。宿主需要按自身需求显式创建并连接各组件。
 
 以下检查当前通过：
 
@@ -225,6 +228,7 @@ go run ./tools/portcheck
 - `docs/architecture.md`：总体分层、主流程和设计边界。
 - `docs/embedding.md`：嵌入现有 Go 服务的装配指南。
 - `docs/modules/`：主要模块的职责、架构、能力和边界。
+- `docs/packages.md`：每个可发布 Go 包到主文档的机器校验映射。
 - `docs/DESIGN.md`：详细运行时边界、持久化和移植设计。
 - `docs/portmap/rulings.md`：DSH 包级裁决。
 - `docs/portmap/decisions.md`：符号级裁决依据。

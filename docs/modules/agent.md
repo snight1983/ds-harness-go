@@ -276,3 +276,7 @@ Observer 通过 `scope.Scope` 登记并按 Agent 的载体作用域过滤：
 | `core/scope/scope.go` | 作用域身份、父链、事件准入和资源释放 |
 | `core/scope/layers.go` | 分层注册、继承与近层覆盖 |
 | `core/agentdefaultmodel/config.go` | 部署默认模型与动态设置覆盖 |
+
+## 深入阅读
+
+[运行时设置](settings.md) · [运行时上下文](context.md) · [Agent 预设与 Persona](presets.md)

@@ -92,7 +92,7 @@
 
 事件日志是权威事实。状态缓存只是加速恢复：缓存不可用时必须能够回退到事件重放。
 
-当前仓库提供 `session/persistence.Store` / `Backend`、`WriteBehind` 和恢复原语，但没有现成的顶层 PersistenceCoordinator。宿主需要把 `core/session.Store` 的生命周期 Observer 接到持久化实现，并为 Agent Loop 提供 `Prepare` / `List` 适配。
+当前仓库提供 `session/persistence.Store` / `Backend`、`WriteBehind`、恢复原语和 `Coordinator`。宿主为 `Coordinator` 注入具体 `Backend` 与 `core/session.Store`，再调用 `Install` 接上创建、事件、Flush 和释放观察者。`Coordinator.Prepare` 返回带释放语义的 `core/session.Preparation`；接入 Agent Loop 时仍需由装配层把 Preparation 的发布/释放和后端 `List` 适配到消费方接口。
 
 宿主不要直接修改会话事件切片、Inbox 内部切片或状态缓存记录。
 
@@ -151,7 +151,7 @@
 ## 当前限制
 
 - 没有顶层 Builder，宿主需要显式连接组件。
-- 没有内置生产会话后端和完整的活会话持久化协调器。
+- 没有内置生产会话持久化 Backend；`Coordinator` 只负责编排，不决定介质。
 - 没有任意代码执行、Shell、本地终端或本地文件工具。
 - PostgreSQL 集成测试需要真实数据库连接。
 - `tools/portcheck` 仍可能报告尚未完成最终裁决的 DSH 能力。

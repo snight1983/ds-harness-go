@@ -201,3 +201,7 @@ LLM 模块不负责：
 | `llm/openaicompat/` | OpenAI Chat Completions 兼容适配器 |
 | `llm/tokenmeter/` | 用量统计和估算 |
 | `llm/replay/`、`llm/mockserver/` | 测试录制、回放和假服务 |
+
+## 深入阅读
+
+[凭据](credentials.md) · [附件与图片](attachment.md) · [LLM 测试与回放](llm-testing.md)
