@@ -373,7 +373,24 @@ func (c *Coordinator) drain(ctx context.Context) error {
 	for len(c.chains) > 0 || len(c.retirements) > 0 {
 		c.idle.Wait()
 	}
+	remaining := make(map[*coresession.Session]*liveState, len(c.live))
+	for live, state := range c.live {
+		remaining[live] = state
+	}
 	c.mutex.Unlock()
+
+	// 静止之后再点一遍名：这一趟排干走完，就没有任何一条路会再写这些事件了。
+	// 手上还留着东西说明上面那几次刷没能把它们送下去，而一份短了一截的会话日志
+	// 事后看不出短——所以宁可让拆解报错，也不能一声不响地走完。见
+	// [ErrWritesAbandoned]。
+	//
+	// 这里只点名不封口：拆完还可能再装一次（热替换就是），而 c.live 里的表项
+	// 是跨那次重装留着的，封掉会让重装之后的写全部落进一个已经废掉的控制器。
+	for live, state := range remaining {
+		if state.writes.HasWork() {
+			failures = append(failures, fmt.Errorf("会话 %s：%w", live.ID(), ErrWritesAbandoned))
+		}
+	}
 
 	drainErr := errors.Join(failures...)
 	if drainErr != nil {

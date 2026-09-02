@@ -10,6 +10,7 @@
 //   - ctx 断掉之后那几圈重试原地空转。
 //   - 装观察者装到一半失败，已经装上的那几条却留在原地。
 //   - 排干失败时被一个关闭失败盖住，调用方看不见「有东西没写下去」。
+//   - 一趟排干走完了，手上却还压着没落盘的事件，而拆解一声不响地成功了。
 //   - 退场刷不下去却照样把状态划掉，之后谁也说不清存档停在哪儿。
 //
 // 源: packages/session/session-persistence/src/coordinator.ts
@@ -21,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/core/scope"
@@ -500,6 +502,73 @@ func TestCoordinator排干失败时关闭的错要让位(t *testing.T) {
 	err = undo(context.WithoutCancel(t.Context()))
 	if !errors.Is(err, appendBoom) {
 		t.Fatalf("调用方最该看见的是「有东西没写下去」，拿到 %v", err)
+	}
+}
+
+// 上面那一条钉的是「那次写自己的错要冒出来」。这一条钉的是它的另一半：那次写
+// 的错**报完了**，事件却还在队列里——而这一趟排干走完就再没有人会去写它们了。
+// 拆解要是在这时候一声不响地成功，磁盘上留下的是一份短了一截、事后看不出短的
+// 会话日志。见 [ErrWritesAbandoned]。
+func TestCoordinator排干走完还压着事件就要点名(t *testing.T) {
+	t.Parallel()
+
+	backend := newMemoryBackend()
+	store, err := coresession.NewStore(coresession.StoreOptions{})
+	if err != nil {
+		t.Fatalf("造不出活会话表：%v", err)
+	}
+	coordinator, err := NewCoordinator(
+		CoordinatorDeps{Backend: backend, Sessions: store}, CoordinatorOptions{})
+	if err != nil {
+		t.Fatalf("造不出编排器：%v", err)
+	}
+	undo, err := coordinator.Install(t.Context(), scope.NewRoot())
+	if err != nil {
+		t.Fatalf("装不上：%v", err)
+	}
+
+	id := session.SessionID("排干之后还剩着")
+	live, err := store.Create(t.Context(), scope.NewRoot(), id, coresession.CreateOptions{})
+	if err != nil {
+		t.Fatalf("造不出活会话：%v", err)
+	}
+	// 先让入册落定：这一条要试的是「写路径好着，只是最后那一批送不下去」，
+	// 不是「这个会话从一开始就废了」。
+	if err := coordinator.flush(live); err != nil {
+		t.Fatalf("刷盘失败：%v", err)
+	}
+
+	// 从这里开始写不下去，于是这条事件会一直留在那条攒批的队列里。
+	backend.fail(nil, nil, nil, errors.New("写不下去"))
+	if _, err := live.Append(session.Event{
+		Type:      session.EventUserMessage,
+		Data:      userEvent(t, 0, "甲").Data,
+		SurfaceOp: session.AppendOp{},
+	}); err != nil {
+		t.Fatalf("追加失败：%v", err)
+	}
+
+	err = undo(context.WithoutCancel(t.Context()))
+
+	if !errors.Is(err, ErrWritesAbandoned) {
+		t.Fatalf("排干走完还压着事件时应当报 ErrWritesAbandoned，拿到 %v", err)
+	}
+	// 点得出是哪个会话：一句「有东西没写下去」帮不了要去捞现场的人。
+	if !strings.Contains(err.Error(), string(id)) {
+		t.Fatalf("这句话里应当点出是哪个会话：%v", err)
+	}
+	// 那条写自己的错不该被这条哨兵盖住——两条都要在。
+	if !strings.Contains(err.Error(), "写不下去") {
+		t.Fatalf("那次写自己的错也该留在里面：%v", err)
+	}
+
+	// 拆完之后那条事件仍然在手上：点名不等于丢掉，调用方修好之后还刷得下去。
+	backend.fail(nil, nil, nil, nil)
+	if err := coordinator.flush(live); err != nil {
+		t.Fatalf("修好之后应当还刷得下去：%v", err)
+	}
+	if len(backend.storedEvents(id)) == 0 {
+		t.Fatal("那条事件应当在重试之后真的落了盘")
 	}
 }
 

@@ -356,12 +356,26 @@ func (c *Coordinator) retire(live *coresession.Session) {
 //
 // 刷不下去就到此为止，不把状态划掉：划掉等于把那些还没落盘的事件连同它们的
 // 游标一起丢了，之后谁也说不清磁盘上那份存档停在哪儿。
+//
+// 新增: 划掉之前先 [WriteBehind.Close] 封一次。刷完到划掉之间是有缝的——那一趟
+// 刷跑在 retire 自己的 goroutine 上，缝里落进来的 Enqueue 会排进一个马上就要
+// 被划掉的控制器里，然后随着表项一起消失。封不上就说明缝里真进了东西，
+// 那时候和刷不下去一样处理：不划，留着。
 func (c *Coordinator) retireCore(live *coresession.Session) error {
 	if err := c.flush(live); err != nil {
 		return err
 	}
 	id := live.ID()
 	return c.serialize(c.background, id, func() error {
+		c.mutex.Lock()
+		state, tracked := c.live[live]
+		c.mutex.Unlock()
+		if tracked {
+			if err := state.writes.Close(); err != nil {
+				return fmt.Errorf("会话 %s 退场：%w", id, err)
+			}
+		}
+
 		c.mutex.Lock()
 		defer c.mutex.Unlock()
 		delete(c.live, live)

@@ -7,6 +7,8 @@ package persistence
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -83,7 +85,18 @@ type WriteBehind struct {
 	// 停下来是有意的：一批写不下去的事件，立刻按原节奏再试一遍只会以同样的
 	// 理由再失败一次，而且每失败一次就多喊一声。下一次 Enqueue 会把它重新开起来。
 	automaticPaused bool
+	// closed 表示这个控制器已经封了：没有任何一条自动的路会再写它。
+	closed bool
 }
+
+// ErrWritesAbandoned 表示一条写路径走到尽头时，手上还有事件没落盘。
+//
+// 新增: 上游没有这条哨兵。[WriteBehind.HasWork] 那句「销毁之前要等它变假」在
+// DSH 那边只是一句注释，谁忘了排空，最后那一批就无声无息地没了——而**一份少了
+// 最后几条事件的会话日志和一份完整的长得一模一样**：它读得开、折得出状态、
+// seq 也连续，只是停在了别的地方，事后没有任何一处看得出来它本该更长。
+// 这条哨兵把那件事变成一个说得出口的失败。
+var ErrWritesAbandoned = errors.New("session/persistence: 写路径关闭时还有事件没落盘")
 
 // flushBarrier 是一次 Flush 的会合点，并发的调用方共用同一个。
 type flushBarrier struct {
@@ -120,6 +133,19 @@ func (w *WriteBehind) HasWork() bool {
 // （或者动它负载那段字节）都影响不到将要落盘的内容。
 func (w *WriteBehind) Enqueue(event session.Event) {
 	w.mu.Lock()
+
+	if w.closed {
+		// 封住之后没有任何一条自动的路会把它写下去。仍然收进队列，是为了让
+		// [WriteBehind.HasWork] 说得出「还有东西没落盘」；同时当场喊一声，
+		// 因为无声地把它丢掉正是这条哨兵要消灭的那种失败。
+		w.pending = append(w.pending, cloneEvent(event))
+		report := w.report
+		w.mu.Unlock()
+		if report != nil {
+			report(fmt.Errorf("%w：写路径已经封了，seq %d 这条不会落盘", ErrWritesAbandoned, event.Seq))
+		}
+		return
+	}
 	defer w.mu.Unlock()
 
 	wasEmpty := len(w.pending) == 0
@@ -163,6 +189,42 @@ func (w *WriteBehind) Flush() error {
 
 	w.drainBarrier(barrier, overlapping)
 	return barrier.err
+}
+
+// Close 封掉这个控制器：此后 Enqueue 进来的事件不再有人写，会被当场报出去。
+//
+// 新增: 上游没有这个方法，见 [ErrWritesAbandoned]。
+//
+// 它**自己不写盘**：调用方先 [WriteBehind.Flush] 排空，再 Close 封口。分成两步
+// 是因为 Close 常常在一段串行区里调（会话退场那条路就是），而写盘自己也要占
+// 同一把串行锁——在那里面再排空一次就是死锁。
+//
+// 手上还有活儿时返回一个包着 [ErrWritesAbandoned] 的错误，并且**不封**：
+// 封了的话，一个决定「先不拆、留着重试」的调用方手上这个控制器也已经废了。
+//
+// 已经封住之后再调是空操作。关闭常常同时来自正常收尾和错误清理两条路，
+// 谁先到是不确定的，所以幂等是必需的。
+//
+// Flush 在封住之后仍然写得动，那是留给恢复的口子：封掉的是「会有人自动来排空」
+// 这个承诺，不是写下去的能力。
+func (w *WriteBehind) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		return nil
+	}
+	if len(w.pending) > 0 || w.active != nil {
+		inFlight := 0
+		if w.active != nil {
+			inFlight = 1
+		}
+		return fmt.Errorf("%w：还排着 %d 条，另有 %d 次写在飞",
+			ErrWritesAbandoned, len(w.pending), inFlight)
+	}
+	w.cancelTimerLocked()
+	w.closed = true
+	return nil
 }
 
 // CancelAutomaticWait 取消当前那个自动窗口，但不排空已经留住的活儿。
