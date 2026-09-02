@@ -36,6 +36,16 @@ import (
 // 否则真正的失败会淹没在一片「连不上库」里。
 const dsnEnv = "DSH_POSTGRES_DSN"
 
+// requireEnv 是「这一轮不许跳过」的开关。
+//
+// 新增: 跳过在开发机上是对的，在 CI 上是个洞。CI 里这批用例是**唯一**跑得到
+// 这个后端的地方，而它们跳不跳过只取决于一个环境变量在不在。service container
+// 没起来、端口没映上、DSN 拼错——这三种情况下 DSH_POSTGRES_DSN 都是空的，
+// 整包安静跳过，job 照样绿，看板上写着「Postgres 后端契约 ✓」而实际一行没跑。
+//
+// 设了这个变量就把跳过变成失败：CI 里声明「我这轮就是要跑真库」，跑不成就得红。
+const requireEnv = "DSH_REQUIRE_POSTGRES"
+
 // schemaCounter 保证同一次 go test 里每份介质拿到不同的 schema 名。
 var schemaCounter atomic.Int64
 
@@ -54,6 +64,12 @@ func requireDSN(t *testing.T) string {
 
 	dsn := os.Getenv(dsnEnv)
 	if dsn == "" {
+		if os.Getenv(requireEnv) != "" {
+			t.Fatalf("设了 %s 却没有 %s：这一轮声明了要跑真库，"+
+				"但连接串是空的——多半是 service container 没起来或端口没映上。"+
+				"这里必须失败，不能跳过，否则一整批后端用例会一行不跑地报绿。",
+				requireEnv, dsnEnv)
+		}
 		t.Skipf("没有设 %s，跳过：这个后端的每一行都要一个真的 Postgres 才执行得到", dsnEnv)
 	}
 	return dsn

@@ -233,7 +233,7 @@ go run ./tools/portcheck
 
 门禁校验溯源注释时要读 DSH 源码，当前基准快照是 `deepseek-harness-dsh-v0.1.2-alpha.3`，默认从 `-dsh-root` 指向的目录读取。快照放在别处时用 `-dsh-root` 指定；指向不存在的目录只会让每条注释都报「出处不存在」，那是路径错了，不是移植漏了。
 
-PostgreSQL 后端测试需要设置真实数据库连接环境变量；未提供连接时，对应集成测试会跳过。
+PostgreSQL 后端测试需要设置真实数据库连接环境变量；未提供连接时，对应集成测试会跳过。跳过在开发机上是对的，在 CI 上是个洞——连接串为空和后端一行没跑，在结果上都是绿的。所以 CI 里额外设 `DSH_REQUIRE_POSTGRES=1`，声明「这一轮就是要跑真库」，此时缺 DSN 会失败而不是跳过。
 
 ## 开发与核验
 
@@ -254,6 +254,10 @@ go run ./tools/doccheck
 go run ./tools/consumercheck
 go run ./tools/portcheck
 ```
+
+这串命令同时由 `.github/workflows/ci.yml` 在每次 push 和 PR 上跑一遍，分成三个 job：`gates`（格式、构建、vet、测试、竞态、三道门禁）、`postgres`（起一个 `postgres:16` service container，跑那批只有真库才执行得到的后端契约）、`cross`（linux / darwin / windows 三个目标各编一次）。分开是因为它们红的时候含义不同：代码有问题、真库跑不通、换个平台编不过，混在一个 job 里说不清是哪一类。
+
+`portcheck` 的溯源注释验真需要 DSH 上游快照，路径由 `DSH_ROOT` 环境变量给出。CI 上没有那份快照，所以显式传 `-no-provenance` 只跑裁决表门禁；工具会打一行横幅说明这一轮没有对过源码，不静默降级。
 
 交叉编译要关掉 cgo。本仓库自己不用 cgo，但只要机器上装了 C 工具链，`go build` 就会拿本机的 gcc 去编 runtime 里那几个 cgo 文件，报出一串跟本仓库无关的 `sigset_t` 错误。`CGO_ENABLED=0` 是在验「纯 Go 代码能不能为目标平台编出来」这个真问题。
 

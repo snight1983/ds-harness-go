@@ -1,0 +1,158 @@
+name: CI
+
+# 门禁在本地是一串手敲的命令（见 README「开发与核验」）。手敲的问题不是敲错，
+# 是**没敲**：一次改动只跑了 go test、没跑 -race，没人看得见。这个 workflow
+# 把那一串搬到每次 push 和 PR 上，让「跑没跑」不再取决于记性。
+#
+# 分成三个 job 而不是一个，因为它们失败的含义不同：
+#   gates    —— 代码本身有问题；
+#   postgres —— 只有真库才执行得到的那部分后端契约，本地默认跳过；
+#   cross    —— module 本身没问题，但换个 GOOS 编不过。
+# 混在一起的话，一个红叉说不清是哪一类。
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # 仓库检出里的换行是 LF（.gitattributes 规定），gofmt 直接比即可，不需要本地
+  # 那套剥 \r 的绕法——那是 Windows 工作区 core.autocrlf 的产物。
+  GOTOOLCHAIN: local
+
+jobs:
+  gates:
+    name: 门禁
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # gofmt 不带 -w：CI 的活是**报告**格式问题，不是替人改。改了也无处可去。
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l . )"
+          if [ -n "$unformatted" ]; then
+            echo "以下文件没格式化："
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+      # -race 单独一步：它比普通 test 慢一截，混在一起的话看不出时间花在哪，
+      # 也看不出是竞态失败还是逻辑失败。
+      - name: go test -race
+        run: go test -race ./...
+
+      # fuzz 目标在 go test 里只跑种子语料，那等于四个普通用例。真正的价值在于
+      # 生成新输入，所以这里每个目标单独跑一小段。时间短是有意的：CI 要的是
+      # 「今天这次改动没把不变量弄坏」，长跑挖新 bug 是另一件事，不该卡住每个 PR。
+      #
+      # -fuzz 一次只接一个目标，所以只能逐个来。
+      - name: fuzz 冒烟
+        run: |
+          set -e
+          go test ./sdk/sdkprotocol/ -run '^$' -fuzz FuzzLineStreamReadObject -fuzztime=30s
+          go test ./sdk/sdkprotocol/ -run '^$' -fuzz FuzzObjectParams -fuzztime=20s
+          go test ./session/persistence/jsonl/ -run '^$' -fuzz FuzzScanLog -fuzztime=30s
+          go test ./session/persistence/jsonl/ -run '^$' -fuzz FuzzEncodeSegment -fuzztime=20s
+          go test ./llm/openaicompat/ -run '^$' -fuzz FuzzStreamChunks -fuzztime=30s
+
+      - name: doccheck
+        run: go run ./tools/doccheck
+
+      - name: consumercheck
+        run: go run ./tools/consumercheck
+
+      # CI 上没有 DSH 上游快照，溯源注释的出处校验做不了，所以显式传
+      # -no-provenance。这不是静默降级：工具自己会打一行横幅说这轮没对过源码。
+      # 裁决表本身（七千多行的 PENDING/PORTED/SKIP 账本）照常全量校验。
+      - name: portcheck（不含溯源验真）
+        run: go run ./tools/portcheck -no-provenance
+
+  postgres:
+    name: Postgres 后端契约
+    runs-on: ubuntu-latest
+
+    # storage/postgres 的每条用例都要一个真库，没有 DSH_POSTGRES_DSN 就整包跳过。
+    # 本地跳过是合理的（不能要求每个人装 Postgres），但一直跳过就等于这个后端
+    # 没有测试。CI 是唯一能保证它真的跑过的地方。
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dsh
+          POSTGRES_PASSWORD: dsh
+          POSTGRES_DB: dsh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dsh"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go test ./storage/...
+        env:
+          DSH_POSTGRES_DSN: postgres://dsh:dsh@127.0.0.1:5432/dsh?sslmode=disable
+          # 声明「这一轮就是要跑真库」。DSN 为空时用例会失败而不是跳过——
+          # 否则 service container 没起来的那次，这个 job 会一行不跑地报绿。
+          DSH_REQUIRE_POSTGRES: "1"
+        run: go test ./storage/... -count=1
+
+      # 契约用例每条一个新 schema，并发跑会互相踩连接数上限，所以 -race 这轮
+      # 单独再来一次，仍然指向同一个库。
+      - name: go test -race ./storage/...
+        env:
+          DSH_POSTGRES_DSN: postgres://dsh:dsh@127.0.0.1:5432/dsh?sslmode=disable
+          # 声明「这一轮就是要跑真库」。DSN 为空时用例会失败而不是跳过——
+          # 否则 service container 没起来的那次，这个 job 会一行不跑地报绿。
+          DSH_REQUIRE_POSTGRES: "1"
+        run: go test -race ./storage/... -count=1
+
+  cross:
+    name: 交叉编译
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # CGO_ENABLED=0 是必须的：开着的话本机 C 工具链会去编 runtime 里的 cgo
+      # 文件，报一串和本仓库无关的错。
+      - name: go build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+        run: go build ./...
