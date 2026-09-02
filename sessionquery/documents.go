@@ -73,7 +73,7 @@ func BuildEventSearchDocuments(id session.SessionID, events []session.Event) ([]
 // 只收录上过表面的那些 seq。没被收录的就是从来没上过表面的，由
 // [surfaceOf] 补成 [SurfaceLogOnly]。
 func classifySurface(events []session.Event) (map[int]EventSurface, error) {
-	folded, err := session.FoldSurface(events)
+	folded, err := session.FoldSurface(events, session.LogBaseSeq(events))
 	if err != nil {
 		return nil, wrap(CodeInvalidSurface, err, "会话表面折不出来")
 	}

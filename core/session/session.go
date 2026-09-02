@@ -36,6 +36,15 @@ type Options struct {
 	// 新增: DSH 直接调 Date.now()。做成可替换的理由和本仓库
 	// session/telemetry 那一处逐字相同——不然测试里断言不了时间戳。
 	Now func() int64
+
+	// BaseSeq 是 Seed 第一条事件应有的 seq，也是这份日志的起点；默认 0。
+	//
+	// 新增: 存储会从最老的一头弹出事件（见 docs/session-log-limit.md），一份续跑
+	// 起来的日志因此可能从 500 起。它由**装配方显式给**，不从 `Seed[0].Seq` 推：
+	// 推的话就等于放弃对第一条的校验，一份 seq 写错了的 seed 会被读成「起点在那儿」
+	// 而不是被拒——分叉一个子会话时那正是最需要拦住的错。起点是存储那一侧的事实，
+	// 只有拿着存档的人说得出来。
+	BaseSeq int
 }
 
 // Session 是一个事件溯源的会话：一份只增不改的
@@ -58,7 +67,14 @@ type Session struct {
 	firstLiveSeq int
 	now          func() int64
 
-	// log 是那份只增不改的日志，索引恒等于 seq。
+	// baseSeq 是 log[0] 的 seq，也就是这份日志现存最早一条的序号。
+	//
+	// 新增: 上游把「下标就是 seq」当成不变量，于是这个值恒为 0、根本不存在。
+	// 本仓库的存储会从最老的一头弹出事件（见 docs/session-log-limit.md），一份续跑
+	// 起来的日志因此可能从 500 起。少了这个字段，[Session.Append] 会把下一条的
+	// seq 算成 len(log) 而不是 500+len(log)，新事件**静默撞掉**已有的那一段。
+	baseSeq int
+	// log 是那份只增不改的日志，下标加上 baseSeq 等于 seq。
 	log []sessionlog.Event
 	// surface 是表面的唯一增量持有者，同时也是追加边界上的校验器。
 	surface *sessionlog.SurfaceFolder
@@ -115,15 +131,19 @@ func NewSession(id sessionlog.SessionID, options Options) (*Session, error) {
 // **不复制**：调用方交出的是刚从存储里读出来、别处没有别名的一份图。
 // 想留着自己那一份就用 [NewSession]。
 //
+// baseSeq 是 seed 第一条应有的 seq，也就是这份存档的起点，见 [Options.BaseSeq]；
+// 存储那一侧由 StoredPrefix 的同名字段交出来。
+//
 // 新增: DSH 在这条路上验完之后原地 freezeRestoredObject。Go 里「不许改」由
 // 「调用方交出了所有权」兑现，见包文档。
 func RestoreSession(
 	id sessionlog.SessionID,
 	seed []sessionlog.Event,
+	baseSeq int,
 	header sessionlog.SessionHeader,
 	now func() int64,
 ) (*Session, error) {
-	return newSession(id, Options{Seed: seed, Header: &header, Now: now}, true)
+	return newSession(id, Options{Seed: seed, BaseSeq: baseSeq, Header: &header, Now: now}, true)
 }
 
 // newSession 是两条构造路径共用的那一段。
@@ -134,7 +154,11 @@ func newSession(id sessionlog.SessionID, options Options, restore bool) (*Sessio
 	if now == nil {
 		now = func() int64 { return time.Now().UnixMilli() }
 	}
-	session := &Session{now: now, surface: sessionlog.NewSurfaceFolder(0)}
+	baseSeq := options.BaseSeq
+	if baseSeq < 0 {
+		return nil, fmt.Errorf("%w: 日志的起点不能是负数，给的是 %d", ErrInvalidSeed, baseSeq)
+	}
+	session := &Session{now: now, baseSeq: baseSeq, surface: sessionlog.NewSurfaceFolder(baseSeq)}
 
 	// 恢复路径先验头：这条路上头是和事件一起从存储里读出来的，头不对就说明
 	// 这份归档整个不该打开，没必要再去验后面几千条事件。新建路径的头是调用方
@@ -166,10 +190,10 @@ func newSession(id sessionlog.SessionID, options Options, restore bool) (*Sessio
 			if err := validateSupportedRequestHeader(event.Type, event.Data, location, ErrInvalidSeed); err != nil {
 				return nil, err
 			}
-			if event.Seq != index {
+			if event.Seq != baseSeq+index {
 				return nil, fmt.Errorf(
-					"%w: %s has seq %d (expected %d); seed must be contiguous from 0",
-					ErrInvalidSeed, location, event.Seq, index,
+					"%w: %s has seq %d (expected %d); seed must be contiguous from %d",
+					ErrInvalidSeed, location, event.Seq, baseSeq+index, baseSeq,
 				)
 			}
 			// seed 里每一条都走和一次活追加、和一次整段折叠完全相同的那道转移。
@@ -181,7 +205,7 @@ func newSession(id sessionlog.SessionID, options Options, restore bool) (*Sessio
 		}
 	}
 
-	session.firstLiveSeq = len(session.log)
+	session.firstLiveSeq = baseSeq + len(session.log)
 	if !restore {
 		header, err := snapshotSessionHeader(id, options.Header, now)
 		if err != nil {
@@ -242,13 +266,27 @@ func (s *Session) Header() sessionlog.SessionHeader { return s.header }
 // 它在标记落盘之前就是准的。
 func (s *Session) FirstLiveSeq() int { return s.firstLiveSeq }
 
-// Seq 是下一条事件的序号，恒等于日志长度（seq = 日志长度 这条连续性契约）。
+// Seq 是下一条事件的序号：起点加上日志长度。
 //
 // 源: packages/core/session/src/index.ts:564-566
+//
+// 新增: 上游这里写的是 `this.log.length`，连注释都把「seq 等于日志长度」当成契约。
+// 本仓库的日志会从最老的一头被弹掉一截（见 docs/session-log-limit.md），长度因此
+// 不再等于下一个序号，这里改成从 [Session.BaseSeq] 起算。
 func (s *Session) Seq() int {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return len(s.log)
+	return s.baseSeq + len(s.log)
+}
+
+// BaseSeq 是这份日志现存最早一条事件的序号；日志为空时等于 [Session.Seq]。
+//
+// 新增: 见 [Session.baseSeq]。拿 seq 去切 [Session.Events] 交出来那份切片的一方
+// 必须先减掉它，而且减完要核 `events[index].Seq == seq`。
+func (s *Session) BaseSeq() int {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.baseSeq
 }
 
 // Events 是这份只增不改日志的一份快照。
@@ -384,7 +422,7 @@ func (s *Session) commit(candidate sessionlog.Event) (
 	}
 
 	event = candidate.Clone()
-	event.Seq = len(s.log)
+	event.Seq = s.baseSeq + len(s.log)
 	event.Time = s.now()
 
 	if _, _, err := s.surface.Push(event); err != nil {
@@ -533,9 +571,24 @@ func (s *Session) DeriveMessages() ([]llm.Message, error) {
 		s.derivedGeneration = generation
 	}
 	for _, seq := range nodes[s.derivedNodes:] {
-		// 表面节点是从这份日志里长出来的，seq 按构造必然是一个合法下标。
-		message, ok, err := sessionlog.DeriveEventMessage(s.log[seq])
+		// 表面节点存的是事件 **seq**，不是日志下标——这两件事只在起点为 0 时
+		// 才碰巧一样（`session/surface.go` 往节点里塞的是 plan.seq）。这份日志
+		// 会从最老的一头被弹出事件，起点因此可能是 500，直接拿 seq 去切就越界。
+		//
+		// 减完还要校验（docs/session-log-limit.md 原则第 2 条）：表面是从这份
+		// 日志逐条折出来的，每个节点都该指得回一条现存的事件，对不上就是这两份
+		// 东西分了岔，如实报错。
+		index := seq - s.baseSeq
+		if index < 0 || index >= len(s.log) || s.log[index].Seq != seq {
+			s.discardDerivedLocked()
+			return nil, fmt.Errorf(
+				"%w: 表面节点指着 seq %d，这份日志里没有它（起点 %d，共 %d 条）",
+				ErrCorruptLog, seq, s.baseSeq, len(s.log),
+			)
+		}
+		message, ok, err := sessionlog.DeriveEventMessage(s.log[index])
 		if err != nil {
+			s.discardDerivedLocked()
 			return nil, err
 		}
 		// 一个表面节点必是那五种会产出消息的类型之一，但一条内容为空的
@@ -547,6 +600,17 @@ func (s *Session) DeriveMessages() ([]llm.Message, error) {
 	}
 	s.derivedNodes = len(nodes)
 	return slices.Clone(s.derived), nil
+}
+
+// discardDerivedLocked 把派生缓存丢掉，让下一次调用从头折。
+//
+// 新增: 缓存是「已经折到第几个节点」加上折出来的那串消息，两者必须同进同退。
+// 半路失败时如果只是把错误抛出去，已经追加进 s.derived 的那几条就留在了缓存里，
+// 而 s.derivedNodes 没跟着走——下一次调用会从同一个节点重折一遍，把它们**再
+// 追加一次**。丢掉整份缓存代价只是下一次多折一趟，而它是幂等的。
+func (s *Session) discardDerivedLocked() {
+	s.derived = nil
+	s.derivedNodes = 0
 }
 
 // DeriveEventMessage 是 [github.com/snight1983/ds-harness-go/session.DeriveEventMessage] 挂在会话上的

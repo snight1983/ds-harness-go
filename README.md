@@ -108,7 +108,7 @@ sequenceDiagram
     participant Host as 宿主 / 协议层
     participant Agent as core/agent
     participant Inbox as Agent Inbox
-    participant Loop as core/agentloop
+    participant AgentLoop as core/agentloop
     participant Context as 提示词与当前历史
     participant LLM as llm
     participant Tools as core/tools
@@ -118,24 +118,24 @@ sequenceDiagram
     Host->>Agent: Followup / Steer / Inject
     Agent->>Session: 追加 inbox/spliced 事件
     Agent->>Inbox: 更新待办状态
-    Agent->>Loop: 唤醒驱动
-    Loop->>Inbox: 认领输入
-    Loop->>Session: 记录回合开始与用户消息
+    Agent->>AgentLoop: 唤醒驱动
+    AgentLoop->>Inbox: 认领输入
+    AgentLoop->>Session: 记录回合开始与用户消息
 
     loop 每个模型步骤
-        Loop->>Context: 组装系统提示词和模型历史
+        AgentLoop->>Context: 组装系统提示词和模型历史
         Context->>Session: 读取根据事件整理的当前状态
-        Context-->>Loop: 返回模型上下文
-        Loop->>LLM: 发送模型请求
-        LLM-->>Loop: 返回文本或工具调用
+        Context-->>AgentLoop: 返回模型上下文
+        AgentLoop->>LLM: 发送模型请求
+        LLM-->>AgentLoop: 返回文本或工具调用
 
         alt 模型请求工具
-            Loop->>Tools: 校验、审批并执行
-            Tools-->>Loop: 返回工具结果
-            Loop->>Session: 记录步骤、工具调用和结果
+            AgentLoop->>Tools: 校验、审批并执行
+            Tools-->>AgentLoop: 返回工具结果
+            AgentLoop->>Session: 记录步骤、工具调用和结果
         else 模型完成回答
-            Loop->>Session: 记录最终响应与回合结束
-            Loop-->>Agent: 状态回到 idle
+            AgentLoop->>Session: 记录最终响应与回合结束
+            AgentLoop-->>Agent: 状态回到 idle
         end
     end
 
@@ -149,9 +149,9 @@ sequenceDiagram
 | 运行时接口或协调层 | 可替换实现 |
 |---|---|
 | `llm` | `llm/openaicompat` 或宿主自定义适配器 |
-| `storage` | `storage/postgres` 或宿主存储后端 |
+| `storage` | `datastore/kvstore` 或宿主存储后端 |
 | `fs` | `fs/objectstore`，面向 S3、MinIO 等对象存储 |
-| `session/persistence.Store` | 宿主提供会话后端与活会话持久化接线 |
+| `session/persistence.Store` | `datastore/sessionstore` 或宿主自己的会话后端 |
 | `sdk/sdkserver` | 宿主自己的传输层与进程模型 |
 
 运行时不通过接口名称推断部署方式。`fs` 是文件能力抽象，不等于访问服务器本地磁盘；`sdk/sdkserver` 提供协议服务能力，不强制宿主采用指定 HTTP 框架。模型、存储、对象存储和传输实现均由宿主选择。
@@ -162,13 +162,16 @@ sequenceDiagram
 ds-harness-go/
 |-- core/
 |   |-- agent/                 Agent 接口、注册表和生命周期事件
+|   |-- agentdefaultmodel/     没自带模型选择的 Agent 用哪个模型
 |   |-- agentloop/             回合、步骤和工具调用循环
+|   |-- scope/                 作用域：身份、父子链和所有权边界
 |   |-- session/               运行中的会话对象
 |   |-- systemprompt/          系统提示词组装
 |   `-- tools/                 工具定义、校验和运行时
 |-- llm/
 |   |-- openaicompat/          OpenAI 兼容模型适配
 |   |-- llmretry/              重试策略
+|   |-- mockserver/            测试用的模型服务端
 |   |-- replay/                响应录制与回放
 |   `-- tokenmeter/            Token 统计
 |-- session/
@@ -180,10 +183,14 @@ ds-harness-go/
 |   |-- sessiontitle/          会话标题
 |   |-- sessiontitlellm/       用模型拟会话标题
 |   `-- telemetry/             会话遥测
+|-- sessionquery/              会话与事件查询，及给模型用的查询工具
 |-- storage/
 |   |-- domain/                串行写入和领域存储
-|   |-- postgres/              PostgreSQL 后端
 |   `-- storagetest/           后端一致性测试套件
+|-- datastore/                 唯一操作数据库的地方
+|   |-- dbtest/                挑选测试跑在哪种库上
+|   |-- kvstore/               记录集接到通用键值后端
+|   `-- sessionstore/          日志集接到会话持久化后端
 |-- context/                   指令、会话引用和时间上下文
 |-- compaction/                上下文压缩
 |-- skill/                     Skill 注册表和加载工具
@@ -191,15 +198,25 @@ ds-harness-go/
 |-- interaction/               审批、提问和命令
 |-- jobs/                      后台任务
 |-- goal/                      长期目标和自动续行
-|-- schedule/                  定时任务
+|-- plan/                      计划模式
+|-- todo/                      待办清单
+|-- schedule/                  定时提醒
 |-- workflow/                  固定工作流
+|-- guard/                     运行时护栏：重复调用提醒和超时策略
 |-- mcp/                       MCP 客户端桥接
 |-- sdk/                       SDK 协议与服务端
 |-- acp/                       ACP 适配
 |-- fs/                        文件接口与对象存储后端
-|-- preset/                    Agent 预设和人格
+|-- attachment/                附件与图片
+|-- spill/                     大结果外置
+|-- credentials/               凭据
+|-- preset/                    Agent 预设、人格和预设仓库
 |-- settings/                  动态设置
 |-- workspace/                 工作区注册表
+|-- invariants/                不变量诊断
+|-- util/                      通用运行时工具
+|-- example/                   可运行的最小宿主示例
+|-- cmd/                       可执行入口
 |-- tools/                     移植裁决与门禁工具
 `-- docs/                      设计和能力映射文档
 ```
@@ -208,7 +225,9 @@ ds-harness-go/
 
 ## 当前状态
 
-项目仍处于开发阶段：核心运行时和主要扩展包已经落地，但尚未发布稳定版本，也尚未提供一行代码完成全部装配的顶层 Builder。会话持久化提供接口、写后队列、恢复原语和活会话协调器（`persistence.Coordinator`），但不含任何内置落盘后端——本仓库是一个空运行时，介质由装配它的人挑。宿主需要按自身需求显式创建并连接各组件。
+项目仍处于开发阶段：核心运行时和主要扩展包已经落地，但尚未发布稳定版本，也尚未提供一行代码完成全部装配的顶层 Builder。会话持久化提供接口、写后队列、恢复原语和活会话协调器（`persistence.Coordinator`），落盘实现在 `datastore/sessionstore`；连接池由装配方 `sql.Open` 出来传进去，驱动仍是部署期的选择。换别的介质就自己实现 `persistence.Backend`。宿主需要按自身需求显式创建并连接各组件。
+
+数据库那一摊整个收在 `datastore` 底下：它是唯一 import `database/sql`、唯一挂驱动、唯一写 SQL 的地方，`session` 和 `storage` 两棵树里不许出现任何一处提到数据库。这条界线由 `tools/dbcheck` 把着，详见[持久化抽象层](docs/modules/datastore.md)。
 
 以下检查当前通过：
 
@@ -219,9 +238,10 @@ go test ./...
 go test -race ./...
 go run ./tools/doccheck
 go run ./tools/consumercheck
+go run ./tools/dbcheck
 ```
 
-`tools/consumercheck` 在临时目录里建一个仓库外的模块，用公开 module path 把全部 79 个可发布包引进去，编译、vet，再跑一遍最小闭环。它是 module path 和「每个公开包都对外可引」这两件事唯一测得到的地方。
+`tools/consumercheck` 在临时目录里建一个仓库外的模块，用公开 module path 把全部可发布包引进去，编译、vet，再跑一遍最小闭环。它是 module path 和「每个公开包都对外可引」这两件事唯一测得到的地方。
 
 移植完整性门禁以此命令为准：
 
@@ -233,7 +253,9 @@ go run ./tools/portcheck
 
 门禁校验溯源注释时要读 DSH 源码，当前基准快照是 `deepseek-harness-dsh-v0.1.2-alpha.3`，默认从 `-dsh-root` 指向的目录读取。快照放在别处时用 `-dsh-root` 指定；指向不存在的目录只会让每条注释都报「出处不存在」，那是路径错了，不是移植漏了。
 
-PostgreSQL 后端测试需要设置真实数据库连接环境变量；未提供连接时，对应集成测试会跳过。跳过在开发机上是对的，在 CI 上是个洞——连接串为空和后端一行没跑，在结果上都是绿的。所以 CI 里额外设 `DSH_REQUIRE_POSTGRES=1`，声明「这一轮就是要跑真库」，此时缺 DSN 会失败而不是跳过。
+`datastore` 那批用例每一行都要一个真的数据库才执行得到，所以它们缺省跑在一个临时目录里的 SQLite 库文件上——`go test ./...` 就整批执行，不必先起一台库。设 `DSH_POSTGRES_DSN` 把同一批用例体换到 Postgres 上再跑一遍：两种方言都要过，因为这批用例压的正是两边会分歧的地方。
+
+CI 上再设 `DSH_REQUIRE_POSTGRES=1`，声明「这一轮就是要跑真库」；此时缺 DSN 会失败而不是悄悄退回 SQLite——service container 没起来正是长那个样子，不拦住的话一整批本该压两种方言的用例只压了一种。
 
 ## 开发与核验
 
@@ -252,10 +274,11 @@ Remove-Item Env:GOOS
 Remove-Item Env:CGO_ENABLED
 go run ./tools/doccheck
 go run ./tools/consumercheck
+go run ./tools/dbcheck
 go run ./tools/portcheck
 ```
 
-这串命令同时由 `.github/workflows/ci.yml` 在每次 push 和 PR 上跑一遍，分成三个 job：`gates`（格式、构建、vet、测试、竞态、三道门禁）、`postgres`（起一个 `postgres:16` service container，跑那批只有真库才执行得到的后端契约）、`cross`（linux / darwin / windows 三个目标各编一次）。分开是因为它们红的时候含义不同：代码有问题、真库跑不通、换个平台编不过，混在一个 job 里说不清是哪一类。
+这串命令同时由 `.github/workflows/ci.yml` 在每次 push 和 PR 上跑一遍，分成三个 job：`gates`（格式、构建、vet、测试、竞态、四道门禁）、`postgres`（起一个 `postgres:16` service container，跑那批只有真库才执行得到的后端契约）、`cross`（linux / darwin / windows 三个目标各编一次）。分开是因为它们红的时候含义不同：代码有问题、真库跑不通、换个平台编不过，混在一个 job 里说不清是哪一类。
 
 `portcheck` 的溯源注释验真需要 DSH 上游快照，路径由 `DSH_ROOT` 环境变量给出。CI 上没有那份快照，所以显式传 `-no-provenance` 只跑裁决表门禁；工具会打一行横幅说明这一轮没有对过源码，不静默降级。
 

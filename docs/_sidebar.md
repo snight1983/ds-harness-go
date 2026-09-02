@@ -9,6 +9,8 @@
   - [Agent](modules/agent.md)
   - [Agent Loop](modules/agentloop.md)
   - [Session](modules/session.md)
+  - [会话日志与派生状态](modules/session-tree.md)
+  - [活会话](modules/core-session.md)
   - [LLM](modules/llm.md)
   - [Tools](modules/tools.md)
 
@@ -16,6 +18,7 @@
   - [Skill、提示词与预设](modules/skill.md)
   - [多 Agent](modules/subagent.md)
   - [存储、文件与附件](modules/storage.md)
+  - [持久化抽象层](modules/datastore.md)
   - [后台任务、目标与工作流](modules/workflow.md)
   - [协议适配](modules/protocol.md)
 
@@ -47,6 +50,7 @@
 
 - 设计与移植
   - [详细设计](DESIGN.md)
+  - [会话日志上限](session-log-limit.md)
   - [性能与压力基线](performance-baseline.md)
   - [包级移植裁决](portmap/rulings.md)
   - [符号级裁决](portmap/decisions.md)

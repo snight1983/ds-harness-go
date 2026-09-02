@@ -50,8 +50,8 @@ type standingMount struct {
 	scope *scope.Scope
 	// dispose 是这份组合的摘除函数。
 	dispose func(context.Context) error
-	// stamp 是这一代所依据的那份组合文件的戳。
-	stamp compositionStamp
+	// stamp 是这一代所依据的那份组合文件的戳，见 [readCompositionStamp]。
+	stamp string
 }
 
 // Roster 是这套部署那些 agent 预设的名册。
@@ -67,6 +67,10 @@ type standingMount struct {
 // 不该互相看得见对方装了什么。
 type Roster struct {
 	config Config
+	// store 是这份名册读写预设内容的那道缝，构造时从配置里取出来放在手边。
+	//
+	// 新增: 名册对「内容住在哪儿」只透过 [Store] 说话，理由见 store.go。
+	store Store
 	// roots 是发现和创作真正会扫的那些根，构造时算一次。
 	//
 	// 源: packages/preset/agent-presets/src/index.ts:99-104
@@ -124,6 +128,9 @@ func New(config Config, defaults DefaultSource) (*Roster, error) {
 	if config.Default == "" {
 		return nil, fmt.Errorf("%w: 需要一个默认预设 id", ErrInvalidConfig)
 	}
+	if config.Store == nil {
+		return nil, fmt.Errorf("%w: 需要一个预设存储", ErrInvalidConfig)
+	}
 	for index, root := range config.Roots {
 		if root.Path == "" {
 			return nil, fmt.Errorf("%w: 第 %d 个根没给路径", ErrInvalidConfig, index+1)
@@ -134,6 +141,7 @@ func New(config Config, defaults DefaultSource) (*Roster, error) {
 	}
 	return &Roster{
 		config:       config,
+		store:        config.Store,
 		roots:        config.resolvedRoots(),
 		defaults:     defaults,
 		standingRoot: scope.NewRoot(),
@@ -183,8 +191,8 @@ func (r *Roster) Authorable() bool {
 // List 是配置的那些根此刻供得出的每一份预设，同 id 靠前的根赢。
 //
 // 源: packages/preset/agent-presets/src/index.ts:199-201
-func (r *Roster) List() ([]Preset, error) {
-	return DiscoverPresets(r.roots)
+func (r *Roster) List(ctx context.Context) ([]Preset, error) {
+	return DiscoverPresets(ctx, r.store, r.roots)
 }
 
 // Resolve 按 id 解算一份预设；id 传空串表示用 [Roster.DefaultID]。
@@ -193,12 +201,12 @@ func (r *Roster) List() ([]Preset, error) {
 //
 // 一份**坏掉的**预设照样解算得出来——删它、读它、把它报出来，三件事都要这一行——
 // 装载那几条路在解算**之后**才经 resolveMountable 拒了它。
-func (r *Roster) Resolve(id string) (Preset, error) {
+func (r *Roster) Resolve(ctx context.Context, id string) (Preset, error) {
 	wanted := id
 	if wanted == "" {
 		wanted = r.DefaultID()
 	}
-	presets, err := r.List()
+	presets, err := r.List(ctx)
 	if err != nil {
 		return Preset{}, err
 	}
@@ -222,8 +230,8 @@ func (r *Roster) Resolve(id string) (Preset, error) {
 // 在这里失败而不是掉进装载器里失败，让每一种装不了的形状得到同一个答案——幽灵目录、
 // 解不动的 YAML、一行都没有的清单——而且不为一份发现早就读成不可用的组合花掉一次
 // 装载尝试。
-func (r *Roster) resolveMountable(id string) (Preset, error) {
-	preset, err := r.Resolve(id)
+func (r *Roster) resolveMountable(ctx context.Context, id string) (Preset, error) {
+	preset, err := r.Resolve(ctx, id)
 	if err != nil {
 		return Preset{}, err
 	}
@@ -247,7 +255,7 @@ func (r *Roster) Mount(ctx context.Context, agentKey *scope.Key, id string) (Pre
 	if agentKey == nil {
 		return Preset{}, errors.New("agent-presets: 组装 agent 需要一把作用域键，那正是它认进预设的凭据")
 	}
-	preset, err := r.resolveMountable(id)
+	preset, err := r.resolveMountable(ctx, id)
 	if err != nil {
 		return Preset{}, err
 	}
@@ -365,7 +373,7 @@ func (r *Roster) LiveMounts() []Mount {
 // 不必恢复任何东西就做得到：保证那份装载在，只是组装了插件，没起 agent、没起会话、
 // 也没起任何一轮。
 func (r *Roster) StandingKeyFor(ctx context.Context, id string) (*scope.Key, error) {
-	preset, err := r.resolveMountable(id)
+	preset, err := r.resolveMountable(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +399,7 @@ func (r *Roster) Recompose(ctx context.Context, agentKey *scope.Key, id string) 
 	if agentKey == nil {
 		return Preset{}, errors.New("agent-presets: 改组装需要一把作用域键")
 	}
-	preset, err := r.resolveMountable(id)
+	preset, err := r.resolveMountable(ctx, id)
 	if err != nil {
 		return Preset{}, err
 	}
@@ -421,12 +429,12 @@ func (r *Roster) Recompose(ctx context.Context, agentKey *scope.Key, id string) 
 // Read 读一份预设的组合文本，原样交出。
 //
 // 源: packages/preset/agent-presets/src/index.ts:361-363
-func (r *Roster) Read(id string) (string, error) {
-	preset, err := r.Resolve(id)
+func (r *Roster) Read(ctx context.Context, id string) (string, error) {
+	preset, err := r.Resolve(ctx, id)
 	if err != nil {
 		return "", err
 	}
-	return ReadComposition(preset)
+	return ReadComposition(ctx, r.store, preset)
 }
 
 // Copy 靠整份复制一份已有的预设，建出一份本地创作的。
@@ -438,15 +446,15 @@ func (r *Roster) Read(id string) (string, error) {
 // 副本**不**为了验证而装一遍——一个今天装得起来的源产出的副本今天也装得起来。
 //
 // name 传空串表示不给名字，回落到显示 id。
-func (r *Roster) Copy(from, id, name string) error {
-	source, err := r.Resolve(from)
+func (r *Roster) Copy(ctx context.Context, from, id, name string) error {
+	source, err := r.Resolve(ctx, from)
 	if err != nil {
 		return err
 	}
 	// 名册这道检查拒的是**任何一个根**供得出的 id——包括发出去的那些，因为一个和
 	// 发出去的预设同名的用户目录会被它遮蔽。copyComposition 里那道磁盘检查只看得见
 	// 可写根。
-	presets, err := r.List()
+	presets, err := r.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -455,7 +463,7 @@ func (r *Roster) Copy(from, id, name string) error {
 			return &PresetExistsError{PresetID: id}
 		}
 	}
-	if _, err := CopyComposition(r.roots, source, id, name); err != nil {
+	if _, err := CopyComposition(ctx, r.store, r.roots, source, id, name); err != nil {
 		return err
 	}
 	// 这个 id 底下要是还坐着一份装好的组合，那它只可能是**过期**的（它那份预设是在
@@ -469,11 +477,11 @@ func (r *Roster) Copy(from, id, name string) error {
 //
 // 源: packages/preset/agent-presets/src/index.ts:400-416
 func (r *Roster) Remove(ctx context.Context, id string) error {
-	preset, err := r.Resolve(id)
+	preset, err := r.Resolve(ctx, id)
 	if err != nil {
 		return err
 	}
-	if err := DeleteComposition(r.roots, preset); err != nil {
+	if err := DeleteComposition(ctx, r.store, r.roots, preset); err != nil {
 		return err
 	}
 	// 跑在这份被删预设上的那些会话留着它们的常驻装载；只有新会话看到的名册里没有它了。
@@ -512,8 +520,11 @@ func (r *Roster) ensureStanding(ctx context.Context, preset Preset) (*standingMo
 			// 的东西：文件变了就在这里为这个和之后的会话开下一代。戳读不出来时**继续
 			// 服务当前这一代**——一份装载必须熬得过它那个文件消失，为一次 stat 让会话
 			// 失败是说不过去的。
-			current, readable := readCompositionStamp(preset.Path)
-			if !readable || sameStamp(mounted.stamp, current) {
+			current, readable := readCompositionStamp(ctx, r.store, preset.Path)
+			// 两个戳都是空串时也留在当前这一代：那表示这份介质**答不出**身份
+			// （见 [Entry.Stamp]），而那时唯一诚实的做法是不换代——为一份看不出
+			// 变没变过的组合每次都开一代，等于把单飞整个作废。
+			if !readable || mounted.stamp == current {
 				return mounted, nil
 			}
 			// TODO: 等最后一个认进这一代的 agent 走光之后回收它。那棵子树不是惰性的，
@@ -572,7 +583,7 @@ func (r *Roster) composeStanding(ctx context.Context, preset Preset) (*standingM
 	}
 	// 在读文件**之前**盖戳：一次和装载抢跑的编辑因此让戳显得过期、而不是悄悄显得
 	// 当前，于是下一个会话会去换代，而不是信任一份比它的戳还老的组合。
-	stamp, readable := readCompositionStamp(preset.Path)
+	stamp, readable := readCompositionStamp(ctx, r.store, preset.Path)
 	if !readable {
 		_ = standing.Dispose(ctx)
 		return nil, &PresetMountError{
@@ -580,7 +591,7 @@ func (r *Roster) composeStanding(ctx context.Context, preset Preset) (*standingM
 			Reason:   fmt.Sprintf("composition file is unreadable: %s", preset.Path),
 		}
 	}
-	dispose, err := mountComposition(ctx, standing, preset, r.config.Composers)
+	dispose, err := mountComposition(ctx, r.store, standing, preset, r.config.Composers)
 	if err != nil {
 		_ = standing.Dispose(ctx)
 		return nil, err

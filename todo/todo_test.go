@@ -651,7 +651,7 @@ func TestARestoredStateThatDoesNotFitIsRejected(t *testing.T) {
 	// 版本对得上、形状也对得上：这一行能直接用，不必重折。
 	good, err := registry.Restore(projection.Checkpoint{
 		todo.ProjectionKey: {Ver: 2, Seq: 0, Val: json.RawMessage(`[{"content":"存过的","status":"completed"}]`)},
-	}, events, 1)
+	}, events, 1, 0)
 	if err != nil {
 		t.Fatalf("一行能用的检查点不该报错：%v", err)
 	}
@@ -663,7 +663,7 @@ func TestARestoredStateThatDoesNotFitIsRejected(t *testing.T) {
 	// 值全是零」，它会被继续往前折成垃圾，而且一路上不报任何错。
 	if _, err := registry.Restore(projection.Checkpoint{
 		todo.ProjectionKey: {Ver: 2, Seq: 0, Val: json.RawMessage(`[{"content":"a","status":"pending","extra":1}]`)},
-	}, events, 1); err == nil {
+	}, events, 1, 0); err == nil {
 		t.Fatal("多一个字段就该报错，而不是默默地读成零值")
 	}
 }

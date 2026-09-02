@@ -13,9 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/snight1983/ds-harness-go/core/scope"
 
@@ -126,11 +124,12 @@ func rowConfig(node *yaml.Node) (json.RawMessage, error) {
 // 剩下的那一道：第二道在这个设计里违反不了，理由见包文档。
 func mountComposition(
 	ctx context.Context,
+	store Store,
 	standing *scope.Scope,
 	preset Preset,
 	composers ComposerSet,
 ) (func(context.Context) error, error) {
-	content, err := os.ReadFile(preset.Path)
+	content, err := store.ReadFile(ctx, preset.Path)
 	if err != nil {
 		return nil, &PresetMountError{
 			PresetID: preset.ID,
@@ -214,33 +213,22 @@ type Mount struct {
 	Key *scope.Key
 }
 
-// compositionStamp 是一代常驻装载所依据的那份组合文件的身份。
+// readCompositionStamp 读一份组合文件此刻的身份戳；这个文件给不出身份时第二个
+// 返回值是 false。
 //
-// 源: packages/preset/agent-presets/src/index.ts:537-543
-type compositionStamp struct {
-	// modTime 是修改时间。
-	modTime time.Time
-	// size 是字节数，用来在同一个时间刻度里区分两次编辑。
-	size int64
-}
-
-// readCompositionStamp 读一份组合文件的戳；stat 不出来时第二个返回值是 false。
+// 源: packages/preset/agent-presets/src/index.ts:546-555（readCompositionStamp）
 //
-// 源: packages/preset/agent-presets/src/index.ts:546-555
+// 新增: DSH 那边这个戳是 `statSync` 出来的「修改时间 + 大小」，一个只有本地文件系统
+// 答得出的二元组。这里换成 [Entry.Stamp] 那个不透明的串——本地适配层照旧拿那两个数
+// 拼，一个对象存储拿 ETag——因为这里唯一拿它做的事是「和上一次比一比」（见
+// [Roster.ensureStanding]），压根不需要它可解释。
 //
-// 被删了、被换成了一个读不了的项、或者别的 stat 不出来的情形，对调用方是同一件事：
+// 被删了、被换成了一个读不出内容的项、或者别的看不成的情形，对调用方是同一件事：
 // 这个文件给不出可以拿来比的身份。
-func readCompositionStamp(path string) (compositionStamp, bool) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return compositionStamp{}, false
+func readCompositionStamp(ctx context.Context, store Store, file string) (string, bool) {
+	entry, found, err := store.Stat(ctx, file)
+	if err != nil || !found {
+		return "", false
 	}
-	return compositionStamp{modTime: info.ModTime(), size: info.Size()}, true
-}
-
-// sameStamp 判两个戳说的是不是同一份文件状态。
-//
-// 源: packages/preset/agent-presets/src/index.ts:558-560
-func sameStamp(left, right compositionStamp) bool {
-	return left.modTime.Equal(right.modTime) && left.size == right.size
+	return entry.Stamp, true
 }

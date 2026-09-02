@@ -75,6 +75,13 @@ type StoredPrefix struct {
 	Meta session.SessionHeader
 	// Events 是这份存档里 seq 连续的那段合法事件。
 	Events []session.Event
+	// BaseSeq 是这份存档现存最早一条事件的 seq；存档为空时是下一条要写的 seq。
+	//
+	// 新增: 上游把「日志从 seq 0 起」当成不变量，于是这个值处处是常数 0，不需要
+	// 交换。本仓库的日志会从最老的一头弹出事件（见 docs/session-log-limit.md），
+	// 起点因此是个变量。它必须由后端说出来而不是由 `Events[0].Seq` 推断：
+	// 一份空存档推不出任何东西，而恰恰是那时候调用方要靠它决定下一条写在哪儿。
+	BaseSeq int
 	// Revision 是恰好这一份前缀被观察到的变更令牌。
 	Revision Revision
 	// TornMarker 非 nil 表示后面还挂着一截写坏的尾巴，值是后端自己的截断凭据。
@@ -97,4 +104,11 @@ type StoredSuffix struct {
 	Meta session.SessionHeader
 	// Events 是 seq 不小于请求水位的那些事件。
 	Events []session.Event
+	// BaseSeq 是**整份存档**现存最早一条事件的 seq，不是这一截后缀的起点；
+	// 存档为空时是下一条要写的 seq。
+	//
+	// 新增: 理由同 [StoredPrefix.BaseSeq]。这里带的是整份存档的起点而不是后缀的
+	// 起点，因为读的一方要拿它回答的是「请求的水位是被弹掉了，还是压根没写过」
+	// ——那是关于整份存档的问题，后缀自己答不了。
+	BaseSeq int
 }

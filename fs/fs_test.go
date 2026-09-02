@@ -1,4 +1,5 @@
-// 本文件验这条接缝的契约：十二个原语各自答应了什么。
+// 本文件验这条接缝的契约：必答的十个原语，加上可选那道接缝上的两个，
+// 各自答应了什么。
 //
 // 源: packages/fs/fs/tests/service.spec.ts:85-161
 //
@@ -119,12 +120,21 @@ func TestResolveJoinsRelativePathsOntoTheGivenBase(t *testing.T) {
 //
 // 值相不相等是后端自己的事（这个内存后端就让它们相等）；
 // 这条用例钉的是**两个方法都在**，因为需要一条能交给子进程的路径时
-// 必须去问 [FileSystem.ProcessPath]，不许直接把 [TargetKey] 当路径用。
+// 必须去问 [OSPathFileSystem.ProcessPath]，不许直接把 [TargetKey] 当路径用。
+//
+// 走的是那道可选接缝的类型断言，也就是真实调用方唯一该走的那条路：
+// 断言得过才有这两个方法，断言不过是「这个部署上没有这条路」而不是一次崩溃。
 func TestProcessPathAndTargetKeyAreDifferentThings(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	target := resolved(t, backend, "a b.txt")
+	concrete := newFakeFS()
+	target := resolved(t, concrete, "a b.txt")
+
+	var plain FileSystem = concrete
+	backend, ok := plain.(OSPathFileSystem)
+	if !ok {
+		t.Fatal("这个内存后端的目标在操作系统里也有名字，该认下这道可选接缝")
+	}
 
 	if got := backend.ProcessPath(target); got != "a b.txt" {
 		t.Errorf("进程路径该是 %q，实际 %q", "a b.txt", got)

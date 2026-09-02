@@ -25,12 +25,23 @@ storage.Backend
 
 | 能力 | 接口 |
 |---|---|
-| 路径解析 | `Resolve`、`ProcessPath`、`FileURL`、`Contains` |
+| 路径解析 | `Resolve`、`Contains` |
 | 元数据与读取 | `Stat`、`Lstat`、`ReadText`、`ReadBytes`、`StreamText` |
 | 目录 | `ListDir` |
 | 条件写入 | `WriteText`、`WriteIntent`、`WriteOutcome` |
 | 条件编辑 | `EditText`、`EditIntent`、`EditOutcome` |
 | 策略 | `Policy.DecideWriteIntent`、`DecideEditIntent`、`NotifyObserved` |
+| 可选：操作系统里的名字 | `OSPathFileSystem.ProcessPath`、`FileURL` |
+
+## 为什么进程路径和 file: URI 单独成一道可选接缝
+
+`FileSystem` 上的十个方法是**每个后端都做得到**的。`ProcessPath` 和 `FileURL` 不是：它们要求目标在操作系统的文件命名空间里也有一个名字，而本仓库唯一的生产后端 `fs/objectstore.Store` 架在对象存储上——一个对象没有进程能打开的路径，也没有 `file:` URI。
+
+上游 DSH 把十二个方法一起写在抽象类上，因为它那边每一个后端都架在真的文件系统上。这里不是。强制实现只剩三种写法，三种都是坏的：交回对象键或 `s3://` 串是一次静默的说谎，调用方会把它交给一次 `open()` 然后在很远的地方失败；交回空串是同一个谎，只是失败得更晚；panic 则把「这个后端没有这项能力」这件**静态**的事实推迟到运行期才说，而且是用一个能带走整个进程的方式说——这个包是嵌在长期运行的服务里跑的。
+
+所以语义交给类型系统：做得到的后端实现 `fs.OSPathFileSystem`，做不到的不实现，调用方类型断言，断言不过就是「这条路在这个部署上走不通」，一个 error 而不是一次崩溃。同样的手法见 `session/persistence.SeekableBackend`。
+
+本仓库目前没有调用方：会用到它的消费方（起子进程、拼命令行）整支在裁决里是范围外。这道接缝留着是为了宿主自己挂本地后端时有个说得清的位置。
 
 ## 一致性与安全
 

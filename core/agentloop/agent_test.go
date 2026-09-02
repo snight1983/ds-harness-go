@@ -1843,6 +1843,49 @@ func TestAnInterruptedStreamWithNothingYetWritesNoMessage(t *testing.T) {
 	}
 }
 
+// TestAPanicInsideTheTurnBodyFailsTheTurnInsteadOfTheProcess 钉住回合正文里的
+// panic 被收成这个回合的一次失败。
+//
+// 这个包是嵌在别人的长期运行的服务里跑的，而驱动跑在自己那条 goroutine 上：
+// 一个没人接的 panic 是**整个进程**没，同一进程里所有其他用户的会话跟着一起没。
+// 一个客户端手上的坏存档不该有这个本事。
+func TestAPanicInsideTheTurnBodyFailsTheTurnInsteadOfTheProcess(t *testing.T) {
+	t.Parallel()
+
+	world := newLoopWorld(t, loopSetup{})
+	world.onRequest = func(int) {
+		panic("运行时自己炸了")
+	}
+	world.run(t, "把它炸掉")
+
+	// 相收回 idle：驱动照常收工，这个 agent 还能接着用。
+	if status := world.loop.Status(); status != agent.StatusIdle {
+		t.Errorf("该回到 idle，实际 %q", status)
+	}
+	// turn/end 照样写下去了，读日志的人看得出这个回合是怎么收场的。
+	if kind := onlyTurnEndKind(t, world.live); kind != sessionlog.ReasonError {
+		t.Errorf("该以 error 收场，实际 %q", kind)
+	}
+	failures := world.reportedFailures()
+	if len(failures) != 1 {
+		t.Fatalf("该广播一次 agent/error，实际 %d 条", len(failures))
+	}
+	if !strings.Contains(failures[0].Err.Error(), "运行时自己炸了") {
+		t.Errorf("诊断里该留着 panic 的值，实际 %v", failures[0].Err)
+	}
+	if failures[0].Turn != 1 {
+		t.Errorf("失败该记在第 1 个回合上，实际 %d", failures[0].Turn)
+	}
+
+	// 炸过一次之后这个 agent 还能再跑一个回合——「失败」和「报废」不是一回事。
+	world.onRequest = nil
+	world.setScript(textReply("我还在"))
+	world.run(t, "还在么")
+	if got := len(world.requestsSent()); got != 2 {
+		t.Errorf("炸过之后该还能再派发一次请求，实际 %d 次", got)
+	}
+}
+
 // ---- 请求头与路由元数据 ----
 
 // TestTheHeaderAnchorIsWrittenOnceThenOnlyOnChange 钉住一个循环实例只写一次锚点，

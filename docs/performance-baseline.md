@@ -13,13 +13,13 @@
 
 ```
 go test ./core/session/ ./core/agent/ ./core/scope/ \
-        ./session/persistence/ ./session/persistence/jsonl/ ./sdk/sdkprotocol/ \
+        ./session/persistence/ ./sdk/sdkprotocol/ \
         -run '^$' -bench . -benchmem -timeout 3600s
 ```
 
 `-run '^$'` 把单元测试挡在外面，只留基准。整组跑完在下面那台机器上约十二分钟，其中 `core/scope` 和 `core/agent` 占了大头。只关心某一组时按包跑即可。
 
-几个 benchmark 内部会周期性地重建被测对象（长会话的日志、jsonl 的存档、收件箱的事件日志都只增不改），这样在时间制的 `-benchtime` 下不会把内存吃光。想拉长采样时间可以放心加 `-benchtime 5s`。
+几个 benchmark 内部会周期性地重建被测对象（长会话的日志、收件箱的事件日志都只增不改），这样在时间制的 `-benchtime` 下不会把内存吃光。想拉长采样时间可以放心加 `-benchtime 5s`。
 
 ## 测量环境
 
@@ -76,11 +76,9 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
 - **`List` 每次整份拷贝，按定义线性。** 记在这里是为了让「轮询这张表」的调用方知道账单：1000 个 agent 一次 7.3 µs、16 KB。
 - **收件箱每条消息约 5.6 µs**，因为每一次 `Append` 都要往会话日志里写一条 `inbox/spliced` 事件——含一次 JSON 排布和一次会话追加。它比「往切片上加一个元素」贵得多是设计如此：耐久的事实永远在日志上。收件箱本身按设计不加锁（只被自己那个 agent 的循环碰），这组数也是将来有人给它加锁时的对照。
 
-## 持久化（`session/persistence`、`session/persistence/jsonl`）
+## 持久化（`session/persistence`）
 
-分两层量。协调层是纯内存的，写入器是空实现——真的 fsync 会把这一层要量的协调成本整个盖住。存储层则真的落盘、真的 fsync。
-
-协调层：
+只量协调层。它是纯内存的，写入器是空实现——真的落盘会把这一层要量的协调成本整个盖住。
 
 | Benchmark | 结果 |
 |---|---|
@@ -89,28 +87,11 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
 | `WriteBehindFlushBatch/10` | 2.16 µs |
 | `WriteBehindFlushBatch/100` | 17.9 µs |
 
-存储层（真 I/O）：
-
-| Benchmark | 1 | 10 | 100 |
-|---|---|---|---|
-| `StoreAppendBatch` | 479 µs | 458 µs | 753 µs |
-| 折成每事件 | 479 µs | 45.8 µs | 7.5 µs |
-
-| Benchmark | 1k | 10k |
-|---|---|---|
-| `StoreLoad` | 10.3 ms | 105 ms |
-
-| Benchmark | 10 | 100 | 1000 |
-|---|---|---|---|
-| `BackendList` | 836 µs | 8.54 ms | 3.71 s ⚠ |
-
 判读：
 
-- **攒批买到的是 64 倍。** 一批的总耗时几乎不随批大小变（479 µs → 753 µs），因为钱全花在那一次 fsync 上。折成每事件成本，从 479 µs 掉到 7.5 µs。这就是写回窗口存在的全部理由，也是它的实测价值。攒批窗口的最大延迟一旦被调小到失去攒批效果，这个比值会塌回 1。
-- **续跑一段长会话，一万条事件读回来要 0.1 秒**，走的是完整恢复路径（逐行解码、seq 连续性校验、断尾修复判定），不是裸读文件。
-- **`BackendList` 随会话数线性，且 1000 那一档极不稳定。** 它要打开根下每一份存档读它的头。同一档在一次 5 次采样的冒烟跑里是 460 ms，在完整跑里 `b.N=1` 是 3.71 秒——差了八倍。原因是 Windows 上大量小文件的打开成本受文件系统缓存状态和杀毒软件实时扫描影响极大。**这一档的绝对值不要用来做任何判断**，只用来确认它是线性的。要拿它做回归比较，就得在同一次进程里、同一个缓存状态下跑前后两版。
+- **攒批是为了把每事件成本摊掉。** 这四个数只是攒批本身的开销，摊掉的那笔在介质那一侧——协调层量不到它，所以这里给不出攒批的收益倍数。要那个数就得在一个真的后端上量。
 
-这一组的数字全部跟着盘走：同一份代码在机械盘、SSD 和 tmpfs 上能差两个数量级。
+**介质那一侧现在没有基线。** 原先这里有一组走真 I/O 的数（`StoreAppendBatch`、`StoreLoad`、`BackendList`），它们出自那个一会话一文件的 JSONL 后端，那个包已经删掉了（`docs/session-log-limit.md` 的计划第 9 步）。现在唯一的第一方后端是 `datastore/sessionstore`，它要一个真的 Postgres 才跑得到，而基线机上没有——所以这一档留白，等有人在一台配得起库的机器上补。留白比留一组量的是另一份介质的数好：后者会被当成现在这条路的参照。
 
 ## SDK 洪泛（`sdk/sdkprotocol`）
 

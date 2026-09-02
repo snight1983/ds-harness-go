@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"iter"
 	"math"
+	"runtime/debug"
 	"sync"
 
 	"github.com/snight1983/ds-harness-go/core/agent"
@@ -595,6 +596,25 @@ func (a *ReactLoopAgent) wakeDriver(wakeAfterAbort bool) {
 		// 关在 kick 之后：kick 收尾时可能又起一个驱动并装上新的 activityDone，
 		// 那一份必须先就位，WhenIdle 才跟得住这次接力。
 		defer close(done)
+		// 新增: 最后一道网。回合正文那一层已经兜过一次
+		//（见 [ReactLoopAgent.runTurnBody]），这里接的是漏出来的那些——kick 自己的
+		// 收尾、turn 里正文之外的几段。它们炸了这个 agent 就地报废，但一个
+		// goroutine 里没人接的 panic 是**整个进程**没，而这个包是嵌在别人的服务里
+		// 跑的：一个 agent 的事故不许变成所有用户的事故。
+		//
+		// 这一层只报，不试图把相收回 idle——走到这儿说明状态机自己的收尾都没跑完，
+		// 它手上那些字段处在什么样子无从知道，再去动只会把一次事故变成一次说谎。
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				_ = a.deps.Agents.ReportError(agent.TurnError{
+					Agent: a,
+					Err: fmt.Errorf(
+						"core/agentloop: agent %q 的驱动 panic 了，这个 agent 就此停住：%v\n%s",
+						string(a.id), recovered, debug.Stack(),
+					),
+				})
+			}
+		}()
 		a.kick()
 	}()
 }
@@ -716,7 +736,7 @@ func (a *ReactLoopAgent) turn() (bool, error) {
 	a.phase.turn = turn
 	a.mutex.Unlock()
 
-	reason, exit, bodyErr := a.turnBody(ctx, turn)
+	reason, exit, bodyErr := a.runTurnBody(ctx, turn)
 
 	// turn/end 无条件写：一个开了却没关的回合，读日志的人看不出它是怎么收场的。
 	//
@@ -749,6 +769,51 @@ func (a *ReactLoopAgent) turn() (bool, error) {
 	a.phase.step = 0
 	a.mutex.Unlock()
 	return true, nil
+}
+
+// runTurnBody 跑回合正文，把正文里冒出来的 panic 收成一条普通的失败。
+//
+// 新增: 上游是 TypeScript，那边一个抛出去的异常会被 agent 边界的 try/catch 接住，
+// 于是「正文炸了」和「正文返回了一条错误」本来就是同一条路。Go 里 panic 沿栈往上冲，
+// 而驱动跑在自己那个 goroutine 上（见 [ReactLoopAgent.wakeDriver]）——没人接就是
+// **整个进程**没，不是这一个会话没。一个嵌在长期运行的服务里的组件不能这样：
+// 一个客户端手上的坏存档不该掀掉所有其他用户的会话。
+//
+// 兜在这一层而不是 goroutine 根上，是为了让 turn/end 照样写得下去。从这里交出去的
+// 错误走的是和别的正文失败完全相同的那条路：写 turn/end、报一次 agent/error、
+// 驱动收工、相回到 idle。兜在根上的话这个回合会在日志里永远开着，而读日志的人
+// 看不出它是怎么收场的。
+//
+// 收场原因取 [github.com/snight1983/ds-harness-go/session.ErrorTurnEnd]，和
+// turnBody 自己那个 fail 一模一样——对读日志的人来说「正文报了错」和「正文炸了」
+// 是同一件事，两者都是这个回合没走完。
+//
+// 报错不走 [ReactLoopAgent.reportError]，因为它要拿 [ReactLoopAgent.mutex]，
+// 而 panic 有可能正是在持锁的那一小段里发生的，那时候再去要一次就是死锁。
+// 直接找注册表报，turn 是参数上现成的，step 交 0——精确到哪一步不值得拿一次
+// 可能永远等下去的加锁去换。
+//
+// 兜不住的只剩一种：panic 恰好发生在本 agent 持着自己那把锁的时候。那几段都是
+// 纯字段读写加一次收件箱认领，炸的可能性极低；真炸了这个 agent 从此卡住，但
+// **进程还活着**，别人的会话照跑。
+func (a *ReactLoopAgent) runTurnBody(
+	ctx context.Context,
+	turn int,
+) (reason sessionlog.TurnEndReason, exit turnExit, err error) {
+	defer func() {
+		recovered := recover()
+		if recovered == nil {
+			return
+		}
+		err = fmt.Errorf(
+			"core/agentloop: agent %q 的第 %d 个回合正文 panic 了：%v\n%s",
+			string(a.id), turn, recovered, debug.Stack(),
+		)
+		reason = sessionlog.ErrorTurnEnd{Error: llm.NormalizeFailure(err)}
+		exit = turnExitStop
+		_ = a.deps.Agents.ReportError(agent.TurnError{Agent: a, Turn: turn, Err: err})
+	}()
+	return a.turnBody(ctx, turn)
 }
 
 // turnBody 跑一个已经开了的回合里那一串步骤，交出这个回合的收场原因。

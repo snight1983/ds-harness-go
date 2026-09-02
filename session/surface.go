@@ -227,24 +227,46 @@ type surfaceState struct {
 }
 
 // replacementRange 在不改动当前折叠状态的前提下定位一次替换的区间。
+// 第四个返回值为假表示这个区间在现存的表面上一点都不剩了。
 //
 // 源: packages/core/session/src/surface.ts:246-266
-func (s *surfaceState) replacementRange(op ReplaceOp) (startIndex, endIndex int, shadowed []int, err error) {
+//
+// 新增: 上游一个端点定位不到就一律违规，靠的是「日志一条不删，所以表面上少了东西
+// 只能是日志坏了」。本仓库的日志会从最老的一头弹出事件（见 docs/session-log-limit.md），
+// 所以一个定位不到的端点得先分两种（原则第 4 条）：它落在 baseSeq 之前，就是**被弹掉了**
+// ——正常损耗，不是违规；它不小于 baseSeq 却仍然不在表面上，才是这份日志真的坏了。
+//
+// 起点被弹掉时区间往前收到表面的最前端：现存的每个节点的 seq 都不小于 baseSeq，
+// 也就都晚于那个被弹掉的起点，所以它们要么本来就在这个区间里、要么就在它右边，
+// 而右边那一半由终点的下标切掉。收多了收少了都由 [assertProvenance] 兜住——
+// 它要求这条事件的 sourceEventSeqs 列出每一个被盖掉的节点。
+//
+// 终点也被弹掉时（这时起点必然也被弹掉了）整个区间都没了，交回假，
+// 调用方把这次替换降级成一次追加。
+func (s *surfaceState) replacementRange(op ReplaceOp, baseSeq int) (
+	startIndex, endIndex int, shadowed []int, spans bool, err error,
+) {
 	startIndex = slices.Index(s.nodes, op.Start)
 	if startIndex == -1 {
-		return 0, 0, nil, fmt.Errorf("%w：表面替换的起始 seq %d 不在表面上",
-			ErrSurfaceViolation, op.Start)
+		if op.Start >= baseSeq {
+			return 0, 0, nil, false, fmt.Errorf("%w：表面替换的起始 seq %d 不在表面上",
+				ErrSurfaceViolation, op.Start)
+		}
+		startIndex = 0
 	}
 	endIndex = slices.Index(s.nodes, op.End)
 	if endIndex == -1 {
-		return 0, 0, nil, fmt.Errorf("%w：表面替换的结束 seq %d 不在表面上",
-			ErrSurfaceViolation, op.End)
+		if op.End >= baseSeq {
+			return 0, 0, nil, false, fmt.Errorf("%w：表面替换的结束 seq %d 不在表面上",
+				ErrSurfaceViolation, op.End)
+		}
+		return 0, 0, nil, false, nil
 	}
 	if startIndex > endIndex {
-		return 0, 0, nil, fmt.Errorf("%w：表面替换的起始 seq %d（下标 %d）排在结束 seq %d（下标 %d）后面",
+		return 0, 0, nil, false, fmt.Errorf("%w：表面替换的起始 seq %d（下标 %d）排在结束 seq %d（下标 %d）后面",
 			ErrSurfaceViolation, op.Start, startIndex, op.End, endIndex)
 	}
-	return startIndex, endIndex, slices.Clone(s.nodes[startIndex : endIndex+1]), nil
+	return startIndex, endIndex, slices.Clone(s.nodes[startIndex : endIndex+1]), true, nil
 }
 
 // assertToolResultRewrite 把一次工具结果的替换限制成「只改当前那一条结果的内容」。
@@ -262,8 +284,13 @@ func assertToolResultRewrite(event Event, shadowedSeqs []int, events []Event, ba
 		return fmt.Errorf("%w：工具结果的表面替换必须恰好重写当前的一个节点，实际 %d 个",
 			ErrSurfaceViolation, len(shadowedSeqs))
 	}
+	// 减完起点当场校验对上的还是同一条（原则第 2 条）：seq 减 baseSeq 是下标，
+	// 这个等式只在事件连续时成立，而连续是 [planSurfaceEvent] 一条条验出来的，
+	// 不是这里能假定的。
 	index := shadowedSeqs[0] - baseSeq
-	if index < 0 || index >= len(events) || events[index].Type != EventToolResult {
+	if index < 0 || index >= len(events) ||
+		events[index].Seq != shadowedSeqs[0] ||
+		events[index].Type != EventToolResult {
 		return fmt.Errorf("%w：工具结果的表面替换必须指向当前的一条 tool/result", ErrSurfaceViolation)
 	}
 
@@ -370,12 +397,18 @@ func planSurfaceEvent(
 	if !ok {
 		return surfacePlan{}, fmt.Errorf("%w：认不得的表面操作 %q", ErrSurfaceViolation, operation.SurfaceOpKind())
 	}
-	startIndex, endIndex, shadowed, err := state.replacementRange(replace)
+	startIndex, endIndex, shadowed, spans, err := state.replacementRange(replace, baseSeq)
 	if err != nil {
 		return surfacePlan{}, err
 	}
 	if err := assertProvenance(event, shadowed); err != nil {
 		return surfacePlan{}, err
+	}
+	if !spans {
+		// 要盖的东西全被弹掉了。这条事件自己还在，照旧要上表面——降级成一次追加。
+		// 它没盖住任何东西，所以也不进 [SurfaceFoldResult.Replacements]。
+		// 工具结果那道重写检查在这里跳过：被它重写的那条原件已经没了，无从比起。
+		return surfacePlan{kind: OpAppend, seq: event.Seq}, nil
 	}
 	if err := assertToolResultRewrite(event, shadowed, events, baseSeq); err != nil {
 		return surfacePlan{}, err
@@ -421,13 +454,18 @@ func applySurfacePlan(state *surfaceState, plan surfacePlan) (SurfaceFoldReplace
 //
 // 源: packages/core/session/src/surface.ts:387-395
 //
-// 事件必须按连续的 seq 顺序给，且第一条的 seq 是 0。
+// 事件必须按连续的 seq 顺序给，第一条的 seq 就是 baseSeq。
 // 违反表面元数据、来源引用、区间或工具结果重写规则时返回 [ErrSurfaceViolation]。
-func FoldSurface(events []Event) (SurfaceFoldResult, error) {
+//
+// 新增: 上游这里拿下标当绝对 seq、并写死起点 0，靠的是「日志从 0 起、一条不删」。
+// 本仓库的日志会从最老的一头弹出事件（见 docs/session-log-limit.md 的原则第 1 条），
+// 起点因此得由调用方说出来——增量那条路（[SurfaceFolder]）本来就有这个数，
+// 只有整折这条写死了。
+func FoldSurface(events []Event, baseSeq int) (SurfaceFoldResult, error) {
 	state := &surfaceState{}
 	var replacements []SurfaceFoldReplacement
 	for index, event := range events {
-		plan, err := planSurfaceEvent(state, event, index, events, 0)
+		plan, err := planSurfaceEvent(state, event, baseSeq+index, events, baseSeq)
 		if err != nil {
 			return SurfaceFoldResult{}, err
 		}

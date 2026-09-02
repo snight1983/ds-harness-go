@@ -49,9 +49,9 @@ func CurrentSurfaceEvents(id session.SessionID, events []session.Event) ([]sessi
 	for _, seq := range analysis.currentSeqs {
 		event, ok := eventAtSeq(events, seq)
 		if !ok || !session.IsSurfaceEvent(event) {
-			// 走不到：analyzeEventLog 已经验过 seq 连续，FoldSurface 交出来的
-			// 节点也只可能是表面事件。留着是因为下标寻址这件事一旦哪天
-			// 换了实现（比如允许稀疏日志），这里是唯一会先炸的地方。
+			// 这些 seq 是 FoldSurface 从**这一份**日志上折出来的，所以每一个都
+			// 还在里面，而且只可能是表面事件。走到这里就是这份日志真的坏了——
+			// 按原则第 4 条，落在现存范围内却找不到的那一种要报错。
 			return nil, fail(CodeInvalidSurface, "会话 %q 的表面节点 %d 不是一条表面事件", id, seq)
 		}
 		surface = append(surface, event.Clone())
@@ -92,7 +92,9 @@ func TraceEvent(id session.SessionID, events []session.Event, seq int) (EventTra
 
 	replacedBy, shadowed := analysis.replacedBy[seq]
 	return EventTrace{
-		Target:            analysis.records[seq],
+		// records 和 events 一条对一条、同序，所以同一个下标。上面那次
+		// eventAtSeq 已经用同样的算法定过位并验过 seq 对得上。
+		Target:            analysis.records[seq-session.LogBaseSeq(events)],
 		ReplacedBy:        replacedBy,
 		Shadowed:          shadowed,
 		ReplacementChain:  replacementChain,
@@ -231,7 +233,7 @@ func buildDescendants(
 //
 // 源: packages/session-query/session-query/src/tracing.ts:174-214
 func analyzeEventLog(id session.SessionID, events []session.Event) (eventLogAnalysis, error) {
-	folded, err := session.FoldSurface(events)
+	folded, err := session.FoldSurface(events, session.LogBaseSeq(events))
 	if err != nil {
 		return eventLogAnalysis{}, wrap(CodeInvalidSurface, err, "会话 %q 的表面折不出来", id)
 	}
@@ -276,13 +278,19 @@ func analyzeEventLog(id session.SessionID, events []session.Event) (eventLogAnal
 //
 // 源: packages/session-query/session-query/src/tracing.ts:66-72（`events[seq]` 加一次 seq 校验）
 //
-// DSH 直接拿 seq 当下标，再验一次 `event.seq === seq`——它靠的是「日志从 0 开始
-// 连续」这条契约，那次校验就是在防契约被破坏。这里保留同样的做法和同样的校验。
+// 新增: DSH 直接拿 seq 当下标，靠的是「日志从 0 开始连续」这条契约。本仓库的日志
+// 会从最老的一头弹出事件（见 docs/session-log-limit.md），起始 seq 是个变量，所以
+// 先减起点再当下标（原则第 2 条）；减完那次 `event.Seq != seq` 的校验照旧留着。
+//
+// 交回假是「这份日志里没有这个 seq」，不区分被弹掉了还是压根没有过——两种要不要
+// 报错由调用方决定，因为它取决于这个 seq 是谁给的：用户点名的一条是「找不到」，
+// 而从这份日志自己折出来的表面节点找不到，才是这份日志真的坏了。
 func eventAtSeq(events []session.Event, seq int) (session.Event, bool) {
-	if seq < 0 || seq >= len(events) {
+	index := seq - session.LogBaseSeq(events)
+	if index < 0 || index >= len(events) {
 		return session.Event{}, false
 	}
-	event := events[seq]
+	event := events[index]
 	if event.Seq != seq {
 		return session.Event{}, false
 	}

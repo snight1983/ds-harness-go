@@ -30,6 +30,15 @@ var ErrInvalidSeed = errors.New("core/session: 构造 seed 不合法")
 // ErrInvalidAppend 是这一次追加不合法，日志**没有**变。
 var ErrInvalidAppend = errors.New("core/session: 这次追加不合法")
 
+// ErrCorruptLog 是活日志和从它折出来的表面对不上了。
+//
+// 新增: 上游没有这一条，因为它那边「seq 恒等于下标」，对不上是不可能的。本仓库的
+// 日志会从最老的一头弹出事件（见 docs/session-log-limit.md），于是 seq 和下标差着
+// 一个起点，凡是按 seq 取事件的地方都得减完再校验。校验不过说明这两份东西已经
+// 分了岔，报错而不是 panic——一个在服务端长期跑着的组件不该因为一份坏存档
+// 把整个进程带走。
+var ErrCorruptLog = errors.New("core/session: 活日志和表面对不上")
+
 // ErrSessionExists 是这个标识上已经有一个活着的会话了。
 var ErrSessionExists = errors.New("core/session: 同名会话已存在")
 

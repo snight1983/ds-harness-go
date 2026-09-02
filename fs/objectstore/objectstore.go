@@ -41,9 +41,16 @@
 // 代价写明：一个真的要保留 CRLF 字节的文件，走文本这条路会被改掉。
 // 需要原样字节的调用方走 [Store.ReadBytes]——那条路一个字节都不碰。
 //
-// # 两个方法在这里没有意义，它们 panic
+// # 这个后端故意不实现 [fs.OSPathFileSystem]
 //
-// [Store.ProcessPath] 和 [Store.FileURL] 直接 panic，见各自的方法注释。
+// 那道可选接缝上的两个方法（进程能打开的路径、file: URI）在对象存储上不是「还没做」，
+// 是**不存在的问题**：这里没有子进程，也没有文件系统命名空间，一个对象既没有路径
+// 也没有 file: URI。
+//
+// 之前这两个方法在这里是 panic 的实现——那把「这个后端没有这项能力」这件**静态**的
+// 事实推迟到运行期才说，而且是用一个能带走整个进程的方式说，而这个包是嵌在长期运行的
+// 服务里跑的。现在语义交给类型系统：[Store] 不实现那道接缝，调用方类型断言不过，
+// 拿到的是一个 error 而不是一次崩溃。理由的完整版在 [fs.OSPathFileSystem] 上。
 //
 // # 并发写靠的是条件写，不是锁
 //
@@ -198,37 +205,6 @@ func New(config Config) (*Store, error) {
 		store.chunkBytes = defaultChunkBytes
 	}
 	return store, nil
-}
-
-// ProcessPath 实现 [fs.FileSystem]，但在这个后端上没有意义，所以它 panic。
-//
-// 接缝对这个方法的要求是「**这个执行世界里的子进程能打开的**规范绝对路径」。
-// 对象存储上不存在这样的路径：那里没有子进程，也没有文件系统命名空间。
-//
-// 三个选项里选了 panic：
-//
-//   - 返回对象键或者 s3:// URL——那是一次静默的说谎。调用方会把它交给一个
-//     命令行参数或者一次 open()，然后在离这里很远的地方失败，
-//     而现场只剩一条「找不到文件」。
-//   - 返回空串——同样是说谎，只是失败得更晚。
-//   - panic——调用方在**第一次**用错的地方就停下，而且停在正确的那一行。
-//
-// 这不是「没实现完」。这个方法在这个后端上不是缺席的能力，是一个不存在的问题：
-// 会调它的消费方（起进程、跑命令）在本仓库的裁决里整支都是范围外。
-func (s *Store) ProcessPath(target fs.Target) string {
-	panic(fmt.Sprintf(
-		"objectstore: 对象存储上没有子进程能打开的路径，ProcessPath 在这个后端上不可用（目标 %q）",
-		target.DisplayPath))
-}
-
-// FileURL 实现 [fs.FileSystem]，但在这个后端上没有意义，所以它 panic。
-//
-// 理由和 [Store.ProcessPath] 逐字相同：接缝要的是 `file:` URI，而一个对象没有
-// `file:` URI。给一个 `s3://` 串回去只会让拿它当 `file:` 用的人在别处失败。
-func (s *Store) FileURL(target fs.Target) string {
-	panic(fmt.Sprintf(
-		"objectstore: 对象没有 file: URI，FileURL 在这个后端上不可用（目标 %q）",
-		target.DisplayPath))
 }
 
 // Contains 实现 [fs.FileSystem]：判断 child 是不是 parent 本身或者它的后代。

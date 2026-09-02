@@ -122,8 +122,8 @@ sequenceDiagram
 | 接口或协调层 | 内置实现 | 宿主可替换 |
 |---|---|---|
 | `llm` | `llm/openaicompat` | 自定义模型适配器 |
-| `storage` | `storage/postgres` | 自定义 KV 后端 |
-| `session/persistence` | `Coordinator`、写后队列和恢复编排；无内置生产 Backend | 自定义会话介质与顶层装配 |
+| `storage` | `datastore/kvstore` | 自定义 KV 后端 |
+| `session/persistence` | `Coordinator`、写后队列和恢复编排，生产 Backend 是 `datastore/sessionstore` | 自定义会话介质与顶层装配 |
 | `fs` | `fs/objectstore` | 自定义对象或文件后端 |
 | `spill.Store` | 无强制默认实现 | 自定义大结果外置服务 |
 | `attachment.Store` | 无强制默认实现 | 自定义附件存储 |
@@ -158,9 +158,12 @@ flowchart LR
     SessionStore --> Restore["恢复事件"]
     Cache --> Restore
     Restore --> Live
+
+    SessionStore -.-> DS["datastore"]
+    KVBackend -.-> DS
 ```
 
-会话日志 Backend 和状态缓存 KV Backend 是两条接口，不要求使用同一介质。`session/persistence.Coordinator` 可以连接活 Session 的创建、事件、Flush 和释放边界，并负责按会话串行、写入攒批、准备池、崩溃修复提交和关闭排干；宿主仍需提供具体会话 Backend 并完成顶层装配。持久化顺序必须保证事件先于对应的状态缓存落盘。缓存可以落后于日志，但不能领先于日志，否则恢复时会出现没有事实依据的状态。
+会话日志 Backend 和状态缓存 KV Backend 是两条接口，不要求使用同一介质。两条上仓库自带的实现都落在 `datastore` 底下——那是唯一 import `database/sql`、唯一写 SQL 的地方，`session` 和 `storage` 两棵树里不许出现任何一处提到数据库，界线由 `tools/dbcheck` 把着（见[持久化抽象层](modules/datastore.md)）。`session/persistence.Coordinator` 可以连接活 Session 的创建、事件、Flush 和释放边界，并负责按会话串行、写入攒批、准备池、崩溃修复提交和关闭排干；宿主仍需提供具体会话 Backend 并完成顶层装配。持久化顺序必须保证事件先于对应的状态缓存落盘。缓存可以落后于日志，但不能领先于日志，否则恢复时会出现没有事实依据的状态。
 
 ## 模块关系
 
@@ -174,6 +177,7 @@ flowchart LR
 | [Skill](modules/skill.md) | `skill`、`preset/*`、`context/*`、`core/systemprompt` |
 | [Subagent](modules/subagent.md) | `subagent/*` |
 | [Storage](modules/storage.md) | `storage/*`、`session/persistence`、`fs/*`、`attachment`、`credentials` |
+| [持久化抽象层](modules/datastore.md) | `datastore`、`datastore/kvstore`、`datastore/sessionstore` |
 | [Workflow](modules/workflow.md) | `jobs/*`、`goal/*`、`schedule/*`、`workflow/*` |
 | [Protocol](modules/protocol.md) | `sdk/*`、`acp/*`、`mcp` |
 

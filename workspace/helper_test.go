@@ -185,8 +185,6 @@ func (f *fakeFS) Stat(_ context.Context, target fs.Target) (fs.Info, bool, error
 	return fs.Info{}, false, nil
 }
 
-func (f *fakeFS) ProcessPath(fs.Target) string { panic("workspace 的用例不该用到 ProcessPath") }
-func (f *fakeFS) FileURL(fs.Target) string     { panic("workspace 的用例不该用到 FileURL") }
 func (f *fakeFS) Contains(fs.Target, fs.Target) bool {
 	panic("workspace 的用例不该用到 Contains")
 }

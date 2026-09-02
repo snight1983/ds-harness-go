@@ -277,8 +277,11 @@ func (c *Coordinator) buildPreparedSource(id session.SessionID, stored StoredPre
 		return nil, err
 	}
 	live, err := c.sessions.PrepareRestored(id, coresession.RestoreOptions{
-		Seed:   balanced,
-		Header: stored.Meta,
+		Seed: balanced,
+		// 新增: 存档的起点由后端说出来，续跑起来的日志因此接着原来的 seq 往下写，
+		// 而不是从 0 重来、把已有的那一段撞掉。见 docs/session-log-limit.md。
+		BaseSeq: stored.BaseSeq,
+		Header:  stored.Meta,
 	})
 	if err != nil {
 		return nil, err
@@ -287,6 +290,8 @@ func (c *Coordinator) buildPreparedSource(id session.SessionID, stored StoredPre
 		inspection: Inspection{Meta: live.Header(), Events: balanced},
 		live:       live,
 		revision:   stored.Revision,
+		baseSeq:    stored.BaseSeq,
+		nextSeq:    nextSeqOf(balanced, stored.BaseSeq),
 		// 记的是**那个会话**此刻的日志长度，不是 balanced 的长度：一份 seed
 		// 后面还会被补上一条 session/end-seed 标记，两者差一。这个数之后用来
 		// 判断「这个待发布的会话有没有被写过」，所以必须是会话自己的口径。
@@ -305,7 +310,6 @@ func (c *Coordinator) buildPreparedSource(id session.SessionID, stored StoredPre
 // 令牌推新了，再拿旧视图去配新令牌是错的）。
 func (c *Coordinator) commitPrepared(ctx context.Context, source *preparedSource) (*commitResult, error) {
 	id := source.inspection.Meta.ID
-	cursor := len(source.inspection.Events)
 
 	c.mutex.Lock()
 	existing := c.states[id]
@@ -337,7 +341,9 @@ func (c *Coordinator) commitPrepared(ctx context.Context, source *preparedSource
 		c.states[id] = state
 	}
 	state.meta = source.inspection.Meta
-	state.cursor = cursor
+	state.baseSeq = source.baseSeq
+	state.nextSeq = source.nextSeq
+	state.started = true
 	state.materialized = true
 	return &commitResult{source: source, state: state}, nil
 }

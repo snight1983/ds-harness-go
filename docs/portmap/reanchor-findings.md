@@ -4,25 +4,25 @@
 
 做法：给每条 `// 源:` 注释找一个锚点符号（注释自带的 `（名字）`、这条注释所文档化的 Go 声明经裁决表反查出的上游名、或退化的大小写不敏感匹配），去上游文件里按名字重新定位，算出真实跨度再和注释里写的比。跨度含紧邻上方的 JSDoc 块，终点靠括号配平。
 
-溯源注释共 **4617** 条。
+溯源注释共 **4686** 条。
 
 ## 汇总
 
 | 状态 | 条数 | 含义 |
 |---|---:|---|
-| `DRIFT` | 1120 | 既不相等也不包含，**真漂移** |
-| `MOVED` | 3 | 锚点搬到了裁决表记的另一个文件里 |
-| `NOT_FOUND` | 1765 | 锚点符号在该上游文件里找不到 |
+| `DRIFT` | 1127 | 既不相等也不包含，**真漂移** |
+| `MOVED` | 0 | 锚点搬到了裁决表记的另一个文件里 |
+| `NOT_FOUND` | 1783 | 锚点符号在该上游文件里找不到 |
 | `AMBIGUOUS` | 151 | 同名声明在该文件里出现多次，定不了 |
-| `NO_ANCHOR` | 577 | 判不出锚点（多为整段溯源、结构体字段上的注释） |
-| `CONTAINS` | 82 | 引的范围完全包含算出来的（文件头部那种整体溯源，不算错） |
-| `OK` | 919 | 引的范围和算出来的一致 |
+| `NO_ANCHOR` | 589 | 判不出锚点（多为整段溯源、结构体字段上的注释） |
+| `CONTAINS` | 83 | 引的范围完全包含算出来的（文件头部那种整体溯源，不算错） |
+| `OK` | 953 | 引的范围和算出来的一致 |
 
 ### DRIFT 按 Go 顶层目录
 
 | 顶层目录 | DRIFT |
 |---|---:|
-| core | 156 |
+| core | 155 |
 | session | 148 |
 | subagent | 143 |
 | llm | 128 |
@@ -31,14 +31,14 @@
 | compaction | 54 |
 | skill | 44 |
 | interaction | 34 |
+| acp | 30 |
 | preset | 30 |
 | jobs | 29 |
 | context | 24 |
 | mcp | 23 |
 | schedule | 21 |
-| acp | 18 |
-| sdk | 18 |
 | workspace | 17 |
+| sdk | 15 |
 | settings | 15 |
 | workflow | 14 |
 | spill | 12 |
@@ -46,8 +46,8 @@
 | guard | 9 |
 | plan | 8 |
 | attachment | 6 |
-| storage | 6 |
 | credentials | 5 |
+| storage | 5 |
 | util | 5 |
 | fs | 3 |
 
@@ -57,43 +57,55 @@
 
 | 锚点来路 | DRIFT | 可自动改 |
 |---|---:|---|
-| 注释锚点 | 8 | 是 |
+| 注释锚点 | 19 | 是 |
 | 裁决表+路径一致 | 240 | 是 |
 | 裁决表 | 81 | 否——只出报告，等人看 |
-| Go 声明名 | 791 | 否——只出报告，等人看 |
+| Go 声明名 | 787 | 否——只出报告，等人看 |
 
 DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内」——那一类多半不是行号漂了，而是这条注释引的是某个大函数内部的一小段，而锚点只能从外层声明名反查出来，改成整个函数的跨度反而把它引丢了，所以 `-fix` 也不碰。
 
-但其中 **53** 条是终点一模一样、起点只早了不超过 3 行——那是漏掉紧邻上方 JSDoc 抬头，不是引了内部片段，锚点够硬的话 `-fix` 会改。
+但其中 **54** 条是终点一模一样、起点只早了不超过 3 行——那是漏掉紧邻上方 JSDoc 抬头，不是引了内部片段，锚点够硬的话 `-fix` 会改。
 
-把两道闸都过掉之后，`-fix` 实际会改 **0** 条。
+把两道闸都过掉之后，`-fix` 实际会改 **12** 条。
 
 ## DRIFT（逐条）
 
 引的范围既不等于也不包含算出来的范围。「可改」那一列为空的要人工逐条过。
 
-共 1120 条。
+共 1127 条。
 
 | Go 位置 | 上游文件 | 引的范围 | 算出的范围 | 锚点符号 | 锚点来路 | 可改 | 备注 |
 |---|---|---:|---:|---|---|:-:|---|
-| `acp/acp/bridge.go:40` | packages/acp/acp/src/index.ts | 61-63 | 64-67 | `invalidParams` | Go 声明名 |  | - |
-| `acp/acp/bridge.go:52` | packages/acp/acp/src/index.ts | 66-68 | 69-72 | `internalError` | Go 声明名 |  | - |
-| `acp/acp/bridge.go:134` | packages/acp/acp/src/index.ts | 121-129 | 92-436 | `apply` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `acp/acp/bridge.go:175` | packages/acp/acp/src/index.ts | 222-285 | 92-436 | `apply` | 裁决表 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `acp/acp/bridge.go:280` | packages/acp/acp/src/index.ts | 148-156 | 124-133 | `notify` | Go 声明名 |  | - |
-| `acp/acp/bridge.go:607` | packages/acp/acp/src/index.ts | 290-302 | 176-370 | `Initialize` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `acp/acp/bridge.go:628` | packages/acp/acp/src/index.ts | 304-306 | 192-370 | `Authenticate` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `acp/acp/bridge.go:637` | packages/acp/acp/src/index.ts | 308-333 | 196-370 | `NewSession` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `acp/acp/bridge.go:836` | packages/acp/acp/src/index.ts | 425-439 | 366-370 | `Cancel` | Go 声明名・放宽大小写 |  | - |
-| `acp/acp/bridge.go:905` | packages/acp/acp/src/index.ts | 451-510 | 394-422 | `Quiesce` | Go 声明名・放宽大小写 |  | - |
+| `acp/acp/bridge.go:41` | packages/acp/acp/src/index.ts | 61-63 | 64-67 | `invalidParams` | Go 声明名 |  | - |
+| `acp/acp/bridge.go:53` | packages/acp/acp/src/index.ts | 66-68 | 69-72 | `internalError` | Go 声明名 |  | - |
+| `acp/acp/bridge.go:152` | packages/acp/acp/src/index.ts | 121-129 | 92-436 | `apply` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `acp/acp/bridge.go:180` | packages/acp/acp/src/index.ts | 107 | 104 | `activating` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:201` | packages/acp/acp/src/index.ts | 222-285 | 92-436 | `apply` | 裁决表 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `acp/acp/bridge.go:312` | packages/acp/acp/src/index.ts | 148-156 | 124-133 | `notify` | Go 声明名 |  | - |
+| `acp/acp/bridge.go:332` | packages/acp/acp/src/session.ts | 229-268 | 343-392 | `onSessionEvent` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:467` | packages/acp/acp/src/session.ts | 270-284 | 214-237 | `topologyChanged` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:532` | packages/acp/acp/src/session.ts | 286-296 | 394-404 | `onInboxClaimed` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:739` | packages/acp/acp/src/index.ts | 176-190 | 176-370 | `Initialize` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `acp/acp/bridge.go:778` | packages/acp/acp/src/index.ts | 304-306 | 192-370 | `Authenticate` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `acp/acp/bridge.go:787` | packages/acp/acp/src/index.ts | 308-333 | 196-370 | `NewSession` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `acp/acp/bridge.go:828` | packages/acp/acp/src/index.ts | 136-141 | 114-116 | `assertOpen` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:1122` | packages/acp/acp/src/index.ts | 425-439 | 366-370 | `Cancel` | Go 声明名・放宽大小写 |  | - |
+| `acp/acp/bridge.go:1151` | packages/acp/acp/src/index.ts | 335-386 | 238-370 | `resumeSession` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:1285` | packages/acp/acp/src/session.ts | 60-72 | 74-91 | `selectionFor` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:1299` | packages/acp/acp/src/index.ts | 388-425 | 291-370 | `listSessions` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:1392` | packages/acp/acp/src/index.ts | 427-441 | 346-370 | `closeSession` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:1426` | packages/acp/acp/src/session.ts | 462-520 | 426-471 | `close` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:1483` | packages/acp/acp/src/index.ts | 443-455 | 332-370 | `setSessionConfigOption` | 注释锚点 | ✓ | - |
+| `acp/acp/bridge.go:1549` | packages/acp/acp/src/index.ts | 451-510 | 394-422 | `Quiesce` | Go 声明名・放宽大小写 |  | - |
 | `acp/acp/codec.go:15` | packages/acp/acp/src/codec.ts | 14-34 | 9-34 | `turnEndToStopReason` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `acp/acp/config.go:25` | packages/acp/acp/src/invariant.ts | 10 | 12-13 | `name` | 裁决表 |  | - |
-| `acp/acp/config.go:155` | packages/acp/acp/src/index.ts | 121-129 | 86-90 | `Config` | 裁决表 |  | - |
+| `acp/acp/config.go:31` | packages/acp/acp/src/invariant.ts | 10 | 12-13 | `name` | 裁决表 |  | - |
+| `acp/acp/config.go:222` | packages/acp/acp/src/index.ts | 121-129 | 86-90 | `Config` | 裁决表 |  | - |
 | `acp/acp/content.go:92` | packages/acp/acp/src/content.ts | 42-44 | 41-44 | `imageMediaType` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `acp/acp/content.go:103` | packages/acp/acp/src/content.ts | 47-60 | 46-60 | `decodeImage` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `acp/acp/content.go:159` | packages/acp/acp/src/content.ts | 63-80 | 62-79 | `assertImageRoute` | Go 声明名 |  | - |
 | `acp/acp/content.go:228` | packages/acp/acp/src/content.ts | 108-110 | 106-109 | `resourceLinkText` | Go 声明名 |  | - |
 | `acp/acp/invariant.go:21` | packages/acp/acp/src/invariant.ts | 28-29 | 23-29 | `apply` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `acp/acp/modelcontrol.go:224` | packages/acp/acp/src/model-control.ts | 87-94 | 188-195 | `Options` | Go 声明名・放宽大小写 |  | - |
 | `attachment/admission.go:15` | packages/attachment/attachment/src/admission.ts | 8-15 | 14-21 | `decodeBase64` | Go 声明名 |  | - |
 | `attachment/attachment.go:123` | packages/attachment/attachment/src/index.ts | 53-75 | 56-78 | `ValidateImageBatch` | Go 声明名・放宽大小写 |  | - |
 | `attachment/attachment.go:164` | packages/attachment/attachment/src/index.ts | 77-89 | 80-92 | `SaveImages` | Go 声明名・放宽大小写 |  | - |
@@ -218,26 +230,25 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/agentloop/agent.go:1210` | packages/core/agent-loop/src/agent.ts | 422-514 | 440-544 | `buildRequest` | Go 声明名 |  | - |
 | `core/agentloop/invariant.go:191` | packages/core/agent-loop/src/invariant.ts | 45-52 | 44-49 | `headerMatches` | Go 声明名 |  | - |
 | `core/agentloop/loop.go:55` | packages/core/agent-loop/src/index.ts | 213-233 | 269-290 | `applyLauncherIdentities` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:196` | packages/core/agent-loop/src/index.ts | 132-139 | 188-195 | `resolveMaxParallelToolCalls` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:209` | packages/core/agent-loop/src/index.ts | 141-147 | 197-203 | `assertAgentOptions` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:224` | packages/core/agent-loop/src/index.ts | 277-293 | 333-349 | `validateConfiguredAgents` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:314` | packages/core/agent-loop/src/index.ts | 55-57 | 110-112 | `isActive` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:323` | packages/core/agent-loop/src/index.ts | 59-63 | 114-118 | `track` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:343` | packages/core/agent-loop/src/index.ts | 65-70 | 120-125 | `trackStartup` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:357` | packages/core/agent-loop/src/index.ts | 77-79 | 132-135 | `waitWhileActive` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:368` | packages/core/agent-loop/src/index.ts | 81-89 | 560-583 | `dispose` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:396` | packages/core/agent-loop/src/index.ts | 92-130 | 148-162 | `raceAbort` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:504` | packages/core/agent-loop/src/index.ts | 318-382 | 310-328 | `Config` | 裁决表 |  | - |
-| `core/agentloop/loop.go:640` | packages/core/agent-loop/src/index.ts | 330-334 | 190 | `maxParallelToolCalls` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:735` | packages/core/agent-loop/src/index.ts | 384-404 | 447-467 | `reportConfiguredStartupFailure` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:784` | packages/core/agent-loop/src/index.ts | 406-428 | 469-491 | `restoreOrCreateConfigured` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:827` | packages/core/agent-loop/src/index.ts | 430-451 | 493-514 | `waitForDrainingConfiguredIdentity` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:895` | packages/core/agent-loop/src/index.ts | 453-575 | 516-641 | `prepare` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:903` | packages/core/agent-loop/src/index.ts | 583 | 516-641 | `prepare` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `core/agentloop/loop.go:1118` | packages/core/agent-loop/src/index.ts | 580-587 | 643-661 | `Create` | Go 声明名・放宽大小写 |  | - |
-| `core/agentloop/loop.go:1144` | packages/core/agent-loop/src/index.ts | 589-604 | 663-685 | `CreateAgent` | Go 声明名・放宽大小写 |  | - |
-| `core/agentloop/loop.go:1171` | packages/core/agent-loop/src/index.ts | 606-622 | 687-708 | `setupAndPublish` | Go 声明名 |  | - |
-| `core/agentloop/loop.go:1224` | packages/core/agent-loop/src/index.ts | 637-710 | 724-773 | `resumeWith` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:198` | packages/core/agent-loop/src/index.ts | 132-139 | 188-195 | `resolveMaxParallelToolCalls` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:211` | packages/core/agent-loop/src/index.ts | 141-147 | 197-203 | `assertAgentOptions` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:226` | packages/core/agent-loop/src/index.ts | 277-293 | 333-349 | `validateConfiguredAgents` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:316` | packages/core/agent-loop/src/index.ts | 55-57 | 110-112 | `isActive` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:325` | packages/core/agent-loop/src/index.ts | 59-63 | 114-118 | `track` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:345` | packages/core/agent-loop/src/index.ts | 65-70 | 120-125 | `trackStartup` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:359` | packages/core/agent-loop/src/index.ts | 77-79 | 132-135 | `waitWhileActive` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:370` | packages/core/agent-loop/src/index.ts | 81-89 | 560-583 | `dispose` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:398` | packages/core/agent-loop/src/index.ts | 92-130 | 148-162 | `raceAbort` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:506` | packages/core/agent-loop/src/index.ts | 318-382 | 310-328 | `Config` | 裁决表 |  | - |
+| `core/agentloop/loop.go:642` | packages/core/agent-loop/src/index.ts | 330-334 | 190 | `maxParallelToolCalls` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:737` | packages/core/agent-loop/src/index.ts | 384-404 | 447-467 | `reportConfiguredStartupFailure` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:786` | packages/core/agent-loop/src/index.ts | 406-428 | 469-491 | `restoreOrCreateConfigured` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:829` | packages/core/agent-loop/src/index.ts | 430-451 | 493-514 | `waitForDrainingConfiguredIdentity` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:897` | packages/core/agent-loop/src/index.ts | 453-575 | 516-641 | `prepare` | Go 声明名 |  | - |
+| `core/agentloop/loop.go:905` | packages/core/agent-loop/src/index.ts | 583 | 516-641 | `prepare` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `core/agentloop/loop.go:1120` | packages/core/agent-loop/src/index.ts | 580-587 | 643-661 | `Create` | Go 声明名・放宽大小写 |  | - |
+| `core/agentloop/loop.go:1146` | packages/core/agent-loop/src/index.ts | 589-604 | 663-685 | `CreateAgent` | Go 声明名・放宽大小写 |  | - |
+| `core/agentloop/loop.go:1237` | packages/core/agent-loop/src/index.ts | 637-710 | 724-773 | `resumeWith` | Go 声明名 |  | - |
 | `core/agentloop/runtimecontext.go:166` | packages/core/agent-loop/src/runtime-context.ts | 59-75 | 58-75 | `Project` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `core/agentloop/toolcalls.go:26` | packages/core/agent-loop/src/tool-calls.ts | 19-23 | 20-24 | `plannedCall` | Go 声明名・放宽大小写 |  | - |
 | `core/agentloop/toolcalls.go:48` | packages/core/agent-loop/src/tool-calls.ts | 32-38 | 33-39 | `groupOutcome` | Go 声明名・放宽大小写 |  | - |
@@ -250,25 +261,25 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/session/preparation.go:23` | packages/core/session/src/preparation.ts | 14-48 | 14-49 | `SessionPreparation` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `core/session/preparation.go:57` | packages/core/session/src/preparation.ts | 41-47 | 10-11 | `Release` | Go 声明名・放宽大小写 |  | - |
 | `core/session/session.go:21` | packages/core/session/src/index.ts | 471-479 | 261 | `Config` | 裁决表・放宽大小写 |  | - |
-| `core/session/session.go:44` | packages/core/session/src/index.ts | 416-425 | 415-756 | `Session` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `core/session/session.go:211` | packages/core/session/src/index.ts | 444-446 | 912 | `ID` | Go 声明名・放宽大小写 |  | - |
-| `core/session/session.go:228` | packages/core/session/src/index.ts | 452-470 | 448-470 | `FirstLiveSeq` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `core/session/session.go:247` | packages/core/session/src/index.ts | 564-566 | 231 | `Seq` | Go 声明名・放宽大小写 |  | - |
-| `core/session/session.go:256` | packages/core/session/src/index.ts | 553-562 | 40-84 | `Events` | Go 声明名 |  | - |
-| `core/session/session.go:305` | packages/core/session/src/index.ts | 568-657 | 567-653 | `Append` | Go 声明名・放宽大小写 |  | - |
-| `core/session/session.go:464` | packages/core/session/src/index.ts | 664-687 | 660-678 | `RequestHeader` | Go 声明名・放宽大小写 |  | - |
-| `core/session/session.go:486` | packages/core/session/src/index.ts | 689-706 | 684-697 | `RequestContext` | 裁决表・放宽大小写 |  | - |
-| `core/session/session.go:513` | packages/core/session/src/index.ts | 708-748 | 706-745 | `DeriveMessages` | Go 声明名・放宽大小写 |  | - |
+| `core/session/session.go:53` | packages/core/session/src/index.ts | 416-425 | 415-756 | `Session` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `core/session/session.go:235` | packages/core/session/src/index.ts | 444-446 | 912 | `ID` | Go 声明名・放宽大小写 |  | - |
+| `core/session/session.go:252` | packages/core/session/src/index.ts | 452-470 | 448-470 | `FirstLiveSeq` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `core/session/session.go:271` | packages/core/session/src/index.ts | 564-566 | 231 | `Seq` | Go 声明名・放宽大小写 |  | - |
+| `core/session/session.go:294` | packages/core/session/src/index.ts | 553-562 | 40-84 | `Events` | Go 声明名 |  | - |
+| `core/session/session.go:343` | packages/core/session/src/index.ts | 568-657 | 567-653 | `Append` | Go 声明名・放宽大小写 |  | - |
+| `core/session/session.go:502` | packages/core/session/src/index.ts | 664-687 | 660-678 | `RequestHeader` | Go 声明名・放宽大小写 |  | - |
+| `core/session/session.go:524` | packages/core/session/src/index.ts | 689-706 | 684-697 | `RequestContext` | 裁决表・放宽大小写 |  | - |
+| `core/session/session.go:551` | packages/core/session/src/index.ts | 708-748 | 706-745 | `DeriveMessages` | Go 声明名・放宽大小写 |  | - |
 | `core/session/store.go:129` | packages/core/session/src/index.ts | 786-800 | 784-1153 | `SessionStore` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `core/session/store.go:366` | packages/core/session/src/index.ts | 847-902 | 841-887 | `Prepare` | Go 声明名・放宽大小写 |  | - |
-| `core/session/store.go:437` | packages/core/session/src/index.ts | 904-947 | 889-945 | `Enter` | Go 声明名・放宽大小写 |  | - |
-| `core/session/store.go:488` | packages/core/session/src/index.ts | 936-946 | 932-943 | `detach` | Go 声明名 |  | - |
-| `core/session/store.go:541` | packages/core/session/src/index.ts | 960-1000 | 959-994 | `Announce` | Go 声明名・放宽大小写 |  | - |
-| `core/session/store.go:591` | packages/core/session/src/index.ts | 1002-1011 | 996-1005 | `emitDisposed` | Go 声明名 |  | - |
-| `core/session/store.go:621` | packages/core/session/src/index.ts | 1013-1050 | 1007-1037 | `Flush` | Go 声明名・放宽大小写 |  | - |
-| `core/session/store.go:665` | packages/core/session/src/index.ts | 1060-1062 | 1048-1055 | `Get` | Go 声明名・放宽大小写 |  | - |
-| `core/session/store.go:679` | packages/core/session/src/index.ts | 1064-1070 | 1057-1063 | `List` | Go 声明名・放宽大小写 |  | - |
-| `core/session/store.go:696` | packages/core/session/src/index.ts | 1052-1058 | 1039-1046 | `liveEntryFor` | Go 声明名 |  | - |
+| `core/session/store.go:376` | packages/core/session/src/index.ts | 847-902 | 841-887 | `Prepare` | Go 声明名・放宽大小写 |  | - |
+| `core/session/store.go:452` | packages/core/session/src/index.ts | 904-947 | 889-945 | `Enter` | Go 声明名・放宽大小写 |  | - |
+| `core/session/store.go:503` | packages/core/session/src/index.ts | 936-946 | 932-943 | `detach` | Go 声明名 |  | - |
+| `core/session/store.go:556` | packages/core/session/src/index.ts | 960-1000 | 959-994 | `Announce` | Go 声明名・放宽大小写 |  | - |
+| `core/session/store.go:606` | packages/core/session/src/index.ts | 1002-1011 | 996-1005 | `emitDisposed` | Go 声明名 |  | - |
+| `core/session/store.go:636` | packages/core/session/src/index.ts | 1013-1050 | 1007-1037 | `Flush` | Go 声明名・放宽大小写 |  | - |
+| `core/session/store.go:680` | packages/core/session/src/index.ts | 1060-1062 | 1048-1055 | `Get` | Go 声明名・放宽大小写 |  | - |
+| `core/session/store.go:694` | packages/core/session/src/index.ts | 1064-1070 | 1057-1063 | `List` | Go 声明名・放宽大小写 |  | - |
+| `core/session/store.go:711` | packages/core/session/src/index.ts | 1052-1058 | 1039-1046 | `liveEntryFor` | Go 声明名 |  | - |
 | `core/session/validate.go:67` | packages/core/session/src/index.ts | 95-134 | 93-134 | `validateSessionHeader` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `core/session/validate.go:118` | packages/core/session/src/index.ts | 148-155 | 147-155 | `snapshotSessionHeader` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `core/systemprompt/prompt.go:91` | packages/core/system-prompt/src/index.ts | 53-73 | 52-74 | `PromptSection` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
@@ -301,12 +312,12 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/tools/pipeline.go:574` | packages/core/tools/src/index.ts | 1647-1653 | 1639-1645 | `applyFinalContent` | Go 声明名 |  | - |
 | `core/tools/pipeline.go:604` | packages/core/tools/src/index.ts | 1655-1675 | 1647-1667 | `notifyResult` | Go 声明名 |  | - |
 | `core/tools/pipeline.go:627` | packages/core/tools/src/index.ts | 1364-1451 | 1355-1442 | `createExecution` | Go 声明名 |  | - |
-| `core/tools/pipeline.go:650` | packages/core/tools/src/index.ts | 1793-1822 | 1783-1814 | `createSuccessResult` | Go 声明名 |  | - |
-| `core/tools/pipeline.go:722` | packages/core/tools/src/index.ts | 525-527 | 517-520 | `projectionError` | Go 声明名 |  | - |
-| `core/tools/pipeline.go:732` | packages/core/tools/src/index.ts | 1826-1843 | 1816-1835 | `normalizeDispatchResult` | Go 声明名 |  | - |
-| `core/tools/pipeline.go:785` | packages/core/tools/src/index.ts | 1275-1285 | 1260-1276 | `ExecutionMode` | Go 声明名・放宽大小写 |  | - |
-| `core/tools/pipeline.go:813` | packages/core/tools/src/index.ts | 1515-1522 | 1508-1516 | `cancellationResult` | Go 声明名 |  | - |
-| `core/tools/pipeline.go:888` | packages/core/tools/src/index.ts | 625-631 | 617-623 | `failureMessageFromContent` | Go 声明名 |  | - |
+| `core/tools/pipeline.go:659` | packages/core/tools/src/index.ts | 1793-1822 | 1783-1814 | `createSuccessResult` | Go 声明名 |  | - |
+| `core/tools/pipeline.go:731` | packages/core/tools/src/index.ts | 525-527 | 517-520 | `projectionError` | Go 声明名 |  | - |
+| `core/tools/pipeline.go:741` | packages/core/tools/src/index.ts | 1826-1843 | 1816-1835 | `normalizeDispatchResult` | Go 声明名 |  | - |
+| `core/tools/pipeline.go:794` | packages/core/tools/src/index.ts | 1275-1285 | 1260-1276 | `ExecutionMode` | Go 声明名・放宽大小写 |  | - |
+| `core/tools/pipeline.go:822` | packages/core/tools/src/index.ts | 1515-1522 | 1508-1516 | `cancellationResult` | Go 声明名 |  | - |
+| `core/tools/pipeline.go:897` | packages/core/tools/src/index.ts | 625-631 | 617-623 | `failureMessageFromContent` | Go 声明名 |  | - |
 | `core/tools/presentation.go:24` | packages/core/tools/src/presentation.ts | 15 | 10-15 | `ToolCallKind` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `core/tools/presentation.go:40` | packages/core/tools/src/presentation.ts | 23-26 | 17-26 | `FileLocation` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `core/tools/presentation.go:52` | packages/core/tools/src/presentation.ts | 34-40 | 28-40 | `FileDiff` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
@@ -328,12 +339,12 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/tools/runtime.go:134` | packages/core/tools/src/index.ts | 733-736 | 724-728 | `IsEmpty` | Go 声明名・放宽大小写 |  | - |
 | `core/tools/runtime.go:143` | packages/core/tools/src/index.ts | 739-745 | 730-737 | `admits` | Go 声明名 |  | - |
 | `core/tools/runtime.go:167` | packages/core/tools/src/index.ts | 651-670 | 646-667 | `Config` | 裁决表 |  | - |
-| `core/tools/runtime.go:194` | packages/core/tools/src/index.ts | 783-789 | 776-1854 | `ToolRuntime` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `core/tools/runtime.go:290` | packages/core/tools/src/index.ts | 1069-1097 | 1055-1089 | `Restrict` | Go 声明名・放宽大小写 |  | - |
-| `core/tools/runtime.go:363` | packages/core/tools/src/index.ts | 690-699 | 973 | `view` | Go 声明名 |  | - |
-| `core/tools/runtime.go:454` | packages/core/tools/src/index.ts | 1205-1207 | 1186-1197 | `Get` | Go 声明名・放宽大小写 |  | - |
-| `core/tools/runtime.go:477` | packages/core/tools/src/index.ts | 1012-1014 | 1158 | `KnownNames` | Go 声明名・放宽大小写 |  | - |
-| `core/tools/runtime.go:487` | packages/core/tools/src/index.ts | 1210-1224 | 1246-1258 | `schemaOf` | Go 声明名 |  | - |
+| `core/tools/runtime.go:213` | packages/core/tools/src/index.ts | 783-789 | 776-1854 | `ToolRuntime` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `core/tools/runtime.go:320` | packages/core/tools/src/index.ts | 1069-1097 | 1055-1089 | `Restrict` | Go 声明名・放宽大小写 |  | - |
+| `core/tools/runtime.go:393` | packages/core/tools/src/index.ts | 690-699 | 973 | `view` | Go 声明名 |  | - |
+| `core/tools/runtime.go:484` | packages/core/tools/src/index.ts | 1205-1207 | 1186-1197 | `Get` | Go 声明名・放宽大小写 |  | - |
+| `core/tools/runtime.go:507` | packages/core/tools/src/index.ts | 1012-1014 | 1158 | `KnownNames` | Go 声明名・放宽大小写 |  | - |
+| `core/tools/runtime.go:517` | packages/core/tools/src/index.ts | 1210-1224 | 1246-1258 | `schemaOf` | Go 声明名 |  | - |
 | `credentials/invariant.go:16` | packages/credentials/credentials/src/invariant.ts | 9 | 11-12 | `name` | 裁决表 |  | - |
 | `credentials/memory_provider_test.go:30` | packages/credentials/credentials/tests/memory.ts | 13-17 | 13-92 | `memoryCredentials` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `credentials/notifier.go:148` | packages/credentials/credentials/src/index.ts | 280-287 | 273-280 | `NotifyRecordUpdated` | Go 声明名・放宽大小写 |  | - |
@@ -472,8 +483,8 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `jobs/localjobs/registry.go:670` | packages/jobs/jobs-local/src/index.ts | 398-406 | 394-406 | `notifyChanged` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `jobs/localjobs/registry.go:703` | packages/jobs/jobs-local/src/index.ts | 416-440 | 408-440 | `settle` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `jobs/localjobs/registry.go:741` | packages/jobs/jobs-local/src/index.ts | 448-464 | 442-464 | `ensureOwnerCleanup` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `jobs/localjobs/registry.go:783` | packages/jobs/jobs-local/src/index.ts | 467-475 | 466-475 | `disposeOwned` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `jobs/localjobs/registry.go:881` | packages/jobs/jobs-local/src/index.ts | 507-531 | 502-531 | `cancelForTeardown` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `jobs/localjobs/registry.go:784` | packages/jobs/jobs-local/src/index.ts | 467-475 | 466-475 | `disposeOwned` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `jobs/localjobs/registry.go:882` | packages/jobs/jobs-local/src/index.ts | 507-531 | 502-531 | `cancelForTeardown` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `llm/apikey.go:66` | packages/llm/llm/src/api-key.ts | 36-41 | 25-41 | `normalizeApiKey` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `llm/assembler.go:17` | packages/llm/llm/src/assembler.ts | 15-23 | 16-24 | `partialBlock` | Go 声明名・放宽大小写 |  | - |
 | `llm/assembler.go:80` | packages/llm/llm/src/assembler.ts | 44-95 | 45-96 | `Push` | Go 声明名・放宽大小写 |  | - |
@@ -686,22 +697,19 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `schedule/schedule/types.go:42` | packages/schedule/schedule/src/index.ts | 35 | 35-36 | `name` | 裁决表 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `sdk/sdkprotocol/invariant.go:21` | packages/sdk/protocol/src/invariant.ts | 29 | 24-30 | `apply` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `sdk/sdkprotocol/transport.go:32` | packages/sdk/protocol/src/transport.ts | 34-49 | 30-49 | `JsonRpcTransportPeer` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `sdk/sdkprotocol/transport.go:76` | packages/sdk/protocol/src/transport.ts | 62-269 | 56-269 | `JsonRpcLineTransport` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `sdk/sdkprotocol/transport.go:117` | packages/sdk/protocol/src/transport.ts | 87-92 | 84-92 | `Close` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `sdk/sdkprotocol/transport.go:181` | packages/sdk/protocol/src/transport.ts | 272-274 | 271-274 | `objectParams` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `sdk/sdkprotocol/transport.go:242` | packages/sdk/protocol/src/transport.ts | 87-92 | 84-92 | `Close` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `sdk/sdkprotocol/types.go:53` | packages/sdk/protocol/src/types.ts | 16-25 | 15-27 | `InitializeParams` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `sdk/sdkprotocol/types.go:78` | packages/sdk/protocol/src/types.ts | 30 | 31-32 | `ServerInfo` | Go 声明名・放宽大小写 |  | - |
-| `sdk/sdkserver/config.go:22` | packages/sdk/server/src/invariant.ts | 10 | 12-13 | `name` | 裁决表 |  | - |
+| `sdk/sdkprotocol/transport.go:112` | packages/sdk/protocol/src/transport.ts | 62-269 | 56-269 | `JsonRpcLineTransport` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `sdk/sdkprotocol/transport.go:176` | packages/sdk/protocol/src/transport.ts | 87-92 | 84-92 | `Close` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `sdk/sdkprotocol/transport.go:266` | packages/sdk/protocol/src/transport.ts | 272-274 | 271-274 | `objectParams` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `sdk/sdkprotocol/transport.go:360` | packages/sdk/protocol/src/transport.ts | 87-92 | 84-92 | `Close` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `sdk/sdkprotocol/types.go:57` | packages/sdk/protocol/src/types.ts | 16-27 | 15-27 | `InitializeParams` | 裁决表+路径一致 | ✓ | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `sdk/sdkprotocol/types.go:91` | packages/sdk/protocol/src/types.ts | 30 | 31-32 | `ServerInfo` | Go 声明名・放宽大小写 |  | - |
+| `sdk/sdkserver/config.go:23` | packages/sdk/server/src/invariant.ts | 10 | 12-13 | `name` | 裁决表 |  | - |
 | `sdk/sdkserver/invariant.go:21` | packages/sdk/server/src/invariant.ts | 28-29 | 23-29 | `apply` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `sdk/sdkserver/server.go:123` | packages/sdk/server/src/server.ts | 111-125 | 130-169 | `Initialize` | Go 声明名・放宽大小写 |  | - |
-| `sdk/sdkserver/server.go:177` | packages/sdk/server/src/server.ts | 237-239 | 294-296 | `hasAdapterFor` | Go 声明名 |  | - |
-| `sdk/sdkserver/server.go:192` | packages/sdk/server/src/server.ts | 132-143 | 171-193 | `Prompt` | Go 声明名・放宽大小写 |  | - |
-| `sdk/sdkserver/server.go:214` | packages/sdk/server/src/server.ts | 203-216 | 259-272 | `getOrCreateSession` | Go 声明名 |  | - |
-| `sdk/sdkserver/server.go:246` | packages/sdk/server/src/server.ts | 218-235 | 274-292 | `createSession` | Go 声明名 |  | - |
-| `sdk/sdkserver/server.go:284` | packages/sdk/server/src/server.ts | 150-181 | 201-209 | `Shutdown` | Go 声明名・放宽大小写 |  | - |
-| `sdk/sdkserver/server.go:295` | packages/sdk/server/src/server.ts | 155-181 | 211-237 | `performShutdown` | Go 声明名 |  | - |
-| `sdk/sdkserver/server.go:366` | packages/sdk/server/src/server.ts | 190-201 | 239-257 | `HandleRequest` | Go 声明名・放宽大小写 |  | - |
+| `sdk/sdkserver/server.go:405` | packages/sdk/server/src/server.ts | 203-216 | 259-272 | `getOrCreateSession` | Go 声明名 |  | - |
+| `sdk/sdkserver/server.go:437` | packages/sdk/server/src/server.ts | 218-235 | 274-292 | `createSession` | Go 声明名 |  | - |
+| `sdk/sdkserver/server.go:480` | packages/sdk/server/src/server.ts | 150-181 | 201-209 | `Shutdown` | Go 声明名・放宽大小写 |  | - |
+| `sdk/sdkserver/server.go:491` | packages/sdk/server/src/server.ts | 155-181 | 211-237 | `performShutdown` | Go 声明名 |  | - |
+| `sdk/sdkserver/server.go:563` | packages/sdk/server/src/server.ts | 190-201 | 239-257 | `HandleRequest` | Go 声明名・放宽大小写 |  | - |
 | `session/checkpointpolicy/policy.go:24` | packages/session/session-checkpoint-policy/src/index.ts | 63-83 | 52-83 | `apply` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/chunkrow.go:67` | packages/core/session/src/chunk-rows.ts | 96-123 | 110-145 | `classify` | Go 声明名 |  | - |
 | `session/chunkrow.go:150` | packages/core/session/src/chunk-rows.ts | 136-151 | 157-173 | `continues` | Go 声明名 |  | - |
@@ -715,56 +723,56 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `session/invariant.go:294` | packages/core/session/src/invariant.ts | 169-187 | 243-249 | `Apply` | Go 声明名・放宽大小写 |  | - |
 | `session/invariant.go:312` | packages/core/session/src/invariant.ts | 207-214 | 243-249 | `apply` | 裁决表 |  | - |
 | `session/persistence/coordinator.go:29` | packages/session/session-persistence/src/coordinator.ts | 84-89 | 84-90 | `PersistenceCoordinatorOptions` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/persistence/coordinator.go:106` | packages/session/session-persistence/src/coordinator.ts | 218-235 | 221-239 | `sessionState` | Go 声明名・放宽大小写 |  | - |
-| `session/persistence/coordinator.go:176` | packages/session/session-persistence/src/coordinator.ts | 588-1362 | 579-1443 | `PersistenceCoordinator` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/persistence/coordinator.go:116` | packages/session/session-persistence/src/coordinator.ts | 218-235 | 221-239 | `sessionState` | Go 声明名・放宽大小写 |  | - |
+| `session/persistence/coordinator.go:201` | packages/session/session-persistence/src/coordinator.ts | 588-1362 | 579-1443 | `PersistenceCoordinator` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/persistence/coordinator_chain.go:64` | packages/session/session-persistence/src/coordinator.ts | 1010-1033 | 1086-1115 | `serialize` | Go 声明名 |  | - |
 | `session/persistence/coordinator_chain.go:93` | packages/session/session-persistence/src/coordinator.ts | 993-998 | 1074-1080 | `waitForRetirement` | Go 声明名 |  | - |
 | `session/persistence/coordinator_chain.go:122` | packages/session/session-persistence/src/coordinator.ts | 632-643 | 633-647 | `Create` | Go 声明名・放宽大小写 |  | - |
 | `session/persistence/coordinator_chain.go:136` | packages/session/session-persistence/src/coordinator.ts | 645-659 | 669-682 | `createCore` | Go 声明名 |  | - |
-| `session/persistence/coordinator_chain.go:161` | packages/session/session-persistence/src/coordinator.ts | 665-680 | 686-704 | `Append` | Go 声明名・放宽大小写 |  | - |
-| `session/persistence/coordinator_chain.go:179` | packages/session/session-persistence/src/coordinator.ts | 682-711 | 706-734 | `appendCore` | Go 声明名 |  | - |
-| `session/persistence/coordinator_chain.go:225` | packages/session/session-persistence/src/coordinator.ts | 1036-1044 | 1117-1126 | `adopt` | Go 声明名 |  | - |
-| `session/persistence/coordinator_chain.go:258` | packages/session/session-persistence/src/coordinator.ts | 832-838 | 903-921 | `ReadFrom` | Go 声明名・放宽大小写 |  | - |
-| `session/persistence/coordinator_chain.go:283` | packages/session/session-persistence/src/coordinator.ts | 840-869 | 923-952 | `readFromCore` | Go 声明名 |  | - |
-| `session/persistence/coordinator_chain.go:328` | packages/session/session-persistence/src/coordinator.ts | 872-888 | 954-971 | `readStoredPrefix` | Go 声明名 |  | - |
+| `session/persistence/coordinator_chain.go:162` | packages/session/session-persistence/src/coordinator.ts | 665-680 | 686-704 | `Append` | Go 声明名・放宽大小写 |  | - |
+| `session/persistence/coordinator_chain.go:180` | packages/session/session-persistence/src/coordinator.ts | 682-711 | 706-734 | `appendCore` | Go 声明名 |  | - |
+| `session/persistence/coordinator_chain.go:280` | packages/session/session-persistence/src/coordinator.ts | 1036-1044 | 1117-1126 | `adopt` | Go 声明名 |  | - |
+| `session/persistence/coordinator_chain.go:313` | packages/session/session-persistence/src/coordinator.ts | 832-838 | 903-921 | `ReadFrom` | Go 声明名・放宽大小写 |  | - |
+| `session/persistence/coordinator_chain.go:338` | packages/session/session-persistence/src/coordinator.ts | 840-869 | 923-952 | `readFromCore` | Go 声明名 |  | - |
+| `session/persistence/coordinator_chain.go:382` | packages/session/session-persistence/src/coordinator.ts | 872-888 | 954-971 | `readStoredPrefix` | Go 声明名 |  | - |
 | `session/persistence/coordinator_prepare.go:19` | packages/session/session-persistence/src/coordinator.ts | 720-747 | 736-771 | `Prepare` | Go 声明名・放宽大小写 |  | - |
 | `session/persistence/coordinator_prepare.go:69` | packages/session/session-persistence/src/coordinator.ts | 756-775 | 773-799 | `Load` | Go 声明名・放宽大小写 |  | - |
 | `session/persistence/coordinator_prepare.go:102` | packages/session/session-persistence/src/coordinator.ts | 787-819 | 801-843 | `Inspect` | Go 声明名・放宽大小写 |  | - |
-| `session/persistence/coordinator_prepare.go:231` | packages/session/session-persistence/src/coordinator.ts | 892-931 | 973-1013 | `prepareCore` | Go 声明名 |  | - |
-| `session/persistence/coordinator_prepare.go:282` | packages/session/session-persistence/src/coordinator.ts | 934-963 | 1015-1045 | `commitPrepared` | Go 声明名 |  | - |
-| `session/persistence/coordinator_prepare.go:328` | packages/session/session-persistence/src/coordinator.ts | 966-971 | 1047-1053 | `isPreparedSourceCurrent` | Go 声明名 |  | - |
-| `session/persistence/coordinator_prepare.go:347` | packages/session/session-persistence/src/coordinator.ts | 974-985 | 1055-1067 | `loadLiveSnapshot` | Go 声明名 |  | - |
-| `session/persistence/coordinator_prepare.go:384` | packages/session/session-persistence/src/coordinator.ts | 988-990 | 1069-1072 | `inspectLive` | Go 声明名 |  | - |
+| `session/persistence/coordinator_prepare.go:250` | packages/session/session-persistence/src/coordinator.ts | 892-931 | 973-1013 | `prepareCore` | Go 声明名 |  | - |
+| `session/persistence/coordinator_prepare.go:306` | packages/session/session-persistence/src/coordinator.ts | 934-963 | 1015-1045 | `commitPrepared` | Go 声明名 |  | - |
+| `session/persistence/coordinator_prepare.go:353` | packages/session/session-persistence/src/coordinator.ts | 966-971 | 1047-1053 | `isPreparedSourceCurrent` | Go 声明名 |  | - |
+| `session/persistence/coordinator_prepare.go:372` | packages/session/session-persistence/src/coordinator.ts | 974-985 | 1055-1067 | `loadLiveSnapshot` | Go 声明名 |  | - |
+| `session/persistence/coordinator_prepare.go:409` | packages/session/session-persistence/src/coordinator.ts | 988-990 | 1069-1072 | `inspectLive` | Go 声明名 |  | - |
 | `session/persistence/coordinator_write.go:18` | packages/session/session-persistence/src/coordinator.ts | 1164-1183 | 1244-1264 | `initFor` | Go 声明名 |  | - |
 | `session/persistence/coordinator_write.go:57` | packages/session/session-persistence/src/coordinator.ts | 1186-1208 | 1266-1289 | `attachPrepared` | Go 声明名 |  | - |
-| `session/persistence/coordinator_write.go:110` | packages/session/session-persistence/src/coordinator.ts | 1237-1294 | 1305-1375 | `onCreated` | Go 声明名 |  | - |
-| `session/persistence/coordinator_write.go:228` | packages/session/session-persistence/src/coordinator.ts | 1302-1324 | 1377-1405 | `adoptLivePrefix` | Go 声明名 |  | - |
-| `session/persistence/coordinator_write.go:288` | packages/session/session-persistence/src/coordinator.ts | 1215-1222 | 1291-1303 | `seedMatchesPersisted` | Go 声明名 |  | - |
-| `session/persistence/coordinator_write.go:321` | packages/session/session-persistence/src/coordinator.ts | 1140-1151 | 1220-1232 | `retire` | Go 声明名 |  | - |
-| `session/persistence/coordinator_write.go:355` | packages/session/session-persistence/src/coordinator.ts | 1154-1161 | 1234-1242 | `retireCore` | Go 声明名 |  | - |
-| `session/persistence/coordinator_write.go:377` | packages/session/session-persistence/src/coordinator.ts | 1326-1338 | 1407-1419 | `flush` | Go 声明名 |  | - |
-| `session/persistence/coordinator_write.go:420` | packages/session/session-persistence/src/coordinator.ts | 1355-1361 | 1435-1442 | `appendLiveBatch` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:78` | packages/session/session-persistence/src/preparations.ts | 14-22 | 14-23 | `preparationEntry` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/persistence/preparations.go:147` | packages/session/session-persistence/src/preparations.ts | 42-44 | 44-51 | `has` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:157` | packages/session/session-persistence/src/preparations.ts | 53-65 | 53-72 | `inspect` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/persistence/preparations.go:187` | packages/session/session-persistence/src/preparations.ts | 75-123 | 119-175 | `reserve` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:267` | packages/session/session-persistence/src/preparations.ts | 130-139 | 177-191 | `reservationFor` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:292` | packages/session/session-persistence/src/preparations.ts | 145-151 | 193-203 | `attach` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:306` | packages/session/session-persistence/src/preparations.ts | 157-161 | 205-213 | `discard` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:323` | packages/session/session-persistence/src/preparations.ts | 168-182 | 215-234 | `release` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:346` | packages/session/session-persistence/src/preparations.ts | 188-191 | 236-243 | `invalidate` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:371` | packages/session/session-persistence/src/preparations.ts | 199-205 | 245-257 | `discardReady` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:392` | packages/session/session-persistence/src/preparations.ts | 211-216 | 259-268 | `assertWritable` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:412` | packages/session/session-persistence/src/preparations.ts | 223-228 | 270-280 | `takeReady` | Go 声明名 |  | - |
-| `session/persistence/preparations.go:428` | packages/session/session-persistence/src/preparations.ts | 230-264 | 282-317 | `entryFor` | Go 声明名 |  | - |
+| `session/persistence/coordinator_write.go:115` | packages/session/session-persistence/src/coordinator.ts | 1237-1294 | 1305-1375 | `onCreated` | Go 声明名 |  | - |
+| `session/persistence/coordinator_write.go:241` | packages/session/session-persistence/src/coordinator.ts | 1302-1324 | 1377-1405 | `adoptLivePrefix` | Go 声明名 |  | - |
+| `session/persistence/coordinator_write.go:309` | packages/session/session-persistence/src/coordinator.ts | 1215-1222 | 1291-1303 | `seedMatchesPersisted` | Go 声明名 |  | - |
+| `session/persistence/coordinator_write.go:344` | packages/session/session-persistence/src/coordinator.ts | 1140-1151 | 1220-1232 | `retire` | Go 声明名 |  | - |
+| `session/persistence/coordinator_write.go:378` | packages/session/session-persistence/src/coordinator.ts | 1154-1161 | 1234-1242 | `retireCore` | Go 声明名 |  | - |
+| `session/persistence/coordinator_write.go:414` | packages/session/session-persistence/src/coordinator.ts | 1326-1338 | 1407-1419 | `flush` | Go 声明名 |  | - |
+| `session/persistence/coordinator_write.go:457` | packages/session/session-persistence/src/coordinator.ts | 1355-1361 | 1435-1442 | `appendLiveBatch` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:84` | packages/session/session-persistence/src/preparations.ts | 14-22 | 14-23 | `preparationEntry` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/persistence/preparations.go:153` | packages/session/session-persistence/src/preparations.ts | 42-44 | 44-51 | `has` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:163` | packages/session/session-persistence/src/preparations.ts | 53-65 | 53-72 | `inspect` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/persistence/preparations.go:193` | packages/session/session-persistence/src/preparations.ts | 75-123 | 119-175 | `reserve` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:273` | packages/session/session-persistence/src/preparations.ts | 130-139 | 177-191 | `reservationFor` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:298` | packages/session/session-persistence/src/preparations.ts | 145-151 | 193-203 | `attach` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:312` | packages/session/session-persistence/src/preparations.ts | 157-161 | 205-213 | `discard` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:329` | packages/session/session-persistence/src/preparations.ts | 168-182 | 215-234 | `release` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:352` | packages/session/session-persistence/src/preparations.ts | 188-191 | 236-243 | `invalidate` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:377` | packages/session/session-persistence/src/preparations.ts | 199-205 | 245-257 | `discardReady` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:398` | packages/session/session-persistence/src/preparations.ts | 211-216 | 259-268 | `assertWritable` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:418` | packages/session/session-persistence/src/preparations.ts | 223-228 | 270-280 | `takeReady` | Go 声明名 |  | - |
+| `session/persistence/preparations.go:434` | packages/session/session-persistence/src/preparations.ts | 230-264 | 282-317 | `entryFor` | Go 声明名 |  | - |
 | `session/persistence/stored.go:145` | packages/session/session-persistence/src/coordinator.ts | 264-272 | 268-275 | `SeedCoversPrefix` | Go 声明名・放宽大小写 |  | - |
-| `session/persistence/writebehind.go:45` | packages/session/session-persistence/src/write-behind.ts | 18-24 | 18-159 | `SessionWriteBehind` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/persistence/writebehind.go:183` | packages/session/session-persistence/src/write-behind.ts | 113-133 | 117-136 | `drainBarrier` | Go 声明名 |  | - |
-| `session/persistence/writebehind.go:284` | packages/session/session-persistence/src/write-behind.ts | 108-111 | 108-115 | `continueAutomatic` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/persistence/writebehind.go:299` | packages/session/session-persistence/src/write-behind.ts | 135-155 | 138-158 | `startWrite` | Go 声明名 |  | - |
+| `session/persistence/writebehind.go:47` | packages/session/session-persistence/src/write-behind.ts | 18-24 | 18-159 | `SessionWriteBehind` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/persistence/writebehind.go:245` | packages/session/session-persistence/src/write-behind.ts | 113-133 | 117-136 | `drainBarrier` | Go 声明名 |  | - |
+| `session/persistence/writebehind.go:346` | packages/session/session-persistence/src/write-behind.ts | 108-111 | 108-115 | `continueAutomatic` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/persistence/writebehind.go:361` | packages/session/session-persistence/src/write-behind.ts | 135-155 | 138-158 | `startWrite` | Go 声明名 |  | - |
 | `session/projection/checkpoint.go:62` | packages/session/session-projection/src/index.ts | 342-368 | 397-423 | `RestoreFloor` | Go 声明名・放宽大小写 |  | - |
-| `session/projection/checkpoint.go:95` | packages/session/session-projection/src/index.ts | 370-396 | 425-457 | `ViewCheckpoint` | Go 声明名・放宽大小写 |  | - |
-| `session/projection/checkpoint.go:129` | packages/session/session-projection/src/index.ts | 398-454 | 459-523 | `Restore` | Go 声明名・放宽大小写 |  | - |
+| `session/projection/checkpoint.go:102` | packages/session/session-projection/src/index.ts | 370-396 | 425-457 | `ViewCheckpoint` | Go 声明名・放宽大小写 |  | - |
+| `session/projection/checkpoint.go:136` | packages/session/session-projection/src/index.ts | 398-454 | 459-523 | `Restore` | Go 声明名・放宽大小写 |  | - |
 | `session/projection/definition.go:37` | packages/session/session-projection/src/index.ts | 34-82 | 34-86 | `ProjectionDefinition` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/projection/definition.go:99` | packages/session/session-projection/src/index.ts | 128-136 | 132-140 | `erasedDefinition` | Go 声明名・放宽大小写 |  | - |
 | `session/projection/definition.go:139` | packages/session/session-projection/src/index.ts | 138-143 | 142-149 | `unitCell` | Go 声明名・放宽大小写 |  | - |
@@ -777,10 +785,10 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `session/projectioncache/cache.go:112` | packages/session/session-projection-cache/src/index.ts | 71-287 | 68-311 | `SessionProjectionCache` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/projectioncache/cache.go:189` | packages/session/session-projection-cache/src/index.ts | 107-130 | 115-142 | `CachedSnapshot` | Go 声明名・放宽大小写 |  | - |
 | `session/projectioncache/cache.go:222` | packages/session/session-projection-cache/src/index.ts | 154-196 | 195-215 | `ColdSnapshot` | Go 声明名・放宽大小写 |  | - |
-| `session/projectioncache/cache.go:294` | packages/session/session-projection-cache/src/index.ts | 132-152 | 172-193 | `Write` | Go 声明名・放宽大小写 |  | - |
-| `session/projectioncache/cache.go:436` | packages/session/session-projection-cache/src/index.ts | 253-262 | 286-295 | `markClean` | Go 声明名 |  | - |
-| `session/projectioncache/cache.go:456` | packages/session/session-projection-cache/src/index.ts | 101-105 | 97-113 | `recordFor` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/projectioncache/cache.go:470` | packages/session/session-projection-cache/src/index.ts | 264-271 | 297-304 | `put` | Go 声明名 |  | - |
+| `session/projectioncache/cache.go:301` | packages/session/session-projection-cache/src/index.ts | 132-152 | 172-193 | `Write` | Go 声明名・放宽大小写 |  | - |
+| `session/projectioncache/cache.go:443` | packages/session/session-projection-cache/src/index.ts | 253-262 | 286-295 | `markClean` | Go 声明名 |  | - |
+| `session/projectioncache/cache.go:463` | packages/session/session-projection-cache/src/index.ts | 101-105 | 97-113 | `recordFor` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/projectioncache/cache.go:477` | packages/session/session-projection-cache/src/index.ts | 264-271 | 297-304 | `put` | Go 声明名 |  | - |
 | `session/projectioncache/record.go:56` | packages/session/session-projection-cache/src/index.ts | 289-292 | 313-316 | `IdentityOf` | Go 声明名・放宽大小写 |  | - |
 | `session/projectioncache/record.go:102` | packages/session/session-projection-cache/src/spec.ts | 66-70 | 62-74 | `projectionCacheDomainSpec` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/repair.go:45` | packages/core/session/src/repair.ts | 27-133 | 19-134 | `interruptedTurnClosers` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
@@ -830,12 +838,12 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `session/surface.go:70` | packages/core/session/src/surface.ts | 83-114 | 70-114 | `deriveEventMessage` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/surface.go:141` | packages/core/session/src/surface.ts | 185-208 | 184-208 | `SurfaceOpOf` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/surface.go:171` | packages/core/session/src/surface.ts | 211-243 | 210-243 | `assertProvenance` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/surface.go:231` | packages/core/session/src/surface.ts | 246-266 | 245-266 | `replacementRange` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/surface.go:252` | packages/core/session/src/surface.ts | 287-318 | 286-318 | `assertToolResultRewrite` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/surface.go:341` | packages/core/session/src/surface.ts | 321-347 | 320-347 | `planSurfaceEvent` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/surface.go:396` | packages/core/session/src/surface.ts | 362-379 | 361-379 | `applySurfacePlan` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/surface.go:422` | packages/core/session/src/surface.ts | 387-395 | 381-395 | `foldSurface` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `session/surface.go:466` | packages/core/session/src/surface.ts | 421-429 | 417-429 | `ValidateNext` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/surface.go:232` | packages/core/session/src/surface.ts | 246-266 | 245-266 | `replacementRange` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/surface.go:274` | packages/core/session/src/surface.ts | 287-318 | 286-318 | `assertToolResultRewrite` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/surface.go:368` | packages/core/session/src/surface.ts | 321-347 | 320-347 | `planSurfaceEvent` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/surface.go:429` | packages/core/session/src/surface.ts | 362-379 | 361-379 | `applySurfacePlan` | Go 声明名 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/surface.go:455` | packages/core/session/src/surface.ts | 387-395 | 381-395 | `foldSurface` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `session/surface.go:504` | packages/core/session/src/surface.ts | 421-429 | 417-429 | `ValidateNext` | Go 声明名・放宽大小写 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/telemetry/coordinator.go:77` | packages/session/session-telemetry/src/coordinator.ts | 60-259 | 45-268 | `SessionTelemetryCoordinator` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `session/telemetry/coordinator.go:142` | packages/session/session-telemetry/src/coordinator.ts | 150-154 | 151-170 | `Adopt` | Go 声明名・放宽大小写 |  | - |
 | `session/telemetry/coordinator.go:168` | packages/session/session-telemetry/src/coordinator.ts | 122-134 | 128-149 | `CaptureSession` | Go 声明名・放宽大小写 |  | - |
@@ -863,8 +871,8 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `sessionquery/engine.go:183` | packages/session-query/session-query/src/index.ts | 257-270 | 278-291 | `ReadSurface` | Go 声明名・放宽大小写 |  | - |
 | `sessionquery/engine.go:203` | packages/session-query/session-query/src/index.ts | 272-283 | 293-304 | `traceSession` | 裁决表 |  | - |
 | `sessionquery/engine.go:217` | packages/session-query/session-query/src/index.ts | 285-299 | 306-320 | `traceEvent` | 裁决表 |  | - |
-| `sessionquery/engine.go:269` | packages/session-query/session-query/src/index.ts | 107-116 | 128-137 | `SearchSessions` | Go 声明名・放宽大小写 |  | - |
-| `sessionquery/engine.go:279` | packages/session-query/session-query/src/index.ts | 118-127 | 139-148 | `SearchEvents` | Go 声明名・放宽大小写 |  | - |
+| `sessionquery/engine.go:274` | packages/session-query/session-query/src/index.ts | 107-116 | 128-137 | `SearchSessions` | Go 声明名・放宽大小写 |  | - |
+| `sessionquery/engine.go:284` | packages/session-query/session-query/src/index.ts | 118-127 | 139-148 | `SearchEvents` | Go 声明名・放宽大小写 |  | - |
 | `sessionquery/extraction.go:16` | packages/session-query/session-query/src/extraction.ts | 13-40 | 7-44 | `extractSessionEventText` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `sessionquery/extraction.go:73` | packages/session-query/session-query/src/extraction.ts | 42-58 | 46-62 | `turnEndText` | Go 声明名 |  | - |
 | `sessionquery/extraction.go:101` | packages/session-query/session-query/src/extraction.ts | 62-64 | 66-68 | `contentText` | Go 声明名 |  | - |
@@ -928,8 +936,8 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `sessionquery/titles.go:68` | packages/session-query/session-query/src/index.ts | 180-193 | 201-214 | `ReadTitleSnapshot` | Go 声明名・放宽大小写 |  | - |
 | `sessionquery/titles.go:87` | packages/session-query/session-query/src/index.ts | 167-178 | 188-199 | `ReadTitle` | Go 声明名・放宽大小写 |  | - |
 | `sessionquery/tracing.go:16` | packages/session-query/session-query/src/tracing.ts | 11-16 | 14-19 | `eventLogAnalysis` | Go 声明名・放宽大小写 |  | - |
-| `sessionquery/tracing.go:107` | packages/session-query/session-query/src/tracing.ts | 113-172 | 107-173 | `traceSession` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `sessionquery/tracing.go:197` | packages/session-query/session-query/src/tracing.ts | 216-241 | 220-244 | `buildDescendants` | Go 声明名 |  | - |
+| `sessionquery/tracing.go:109` | packages/session-query/session-query/src/tracing.ts | 113-172 | 107-173 | `traceSession` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
+| `sessionquery/tracing.go:199` | packages/session-query/session-query/src/tracing.ts | 216-241 | 220-244 | `buildDescendants` | Go 声明名 |  | - |
 | `settings/invariant.go:16` | packages/settings/settings/src/invariant.ts | 10 | 12-13 | `name` | 裁决表 |  | - |
 | `settings/json.go:17` | packages/settings/settings/src/index.ts | 241-288 | 231-278 | `cloneJSONShaped` | Go 声明名・放宽大小写 |  | - |
 | `settings/json.go:65` | packages/settings/settings/src/index.ts | 290-305 | 280-295 | `mergeLayers` | Go 声明名 |  | - |
@@ -1005,7 +1013,6 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `storage/backend.go:111` | packages/storage/storage/src/backend.ts | 45-55 | 45-64 | `KvUnitDescriptor` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `storage/domain/facility.go:50` | packages/storage/storage-domain/src/invariant.ts | 8 | 18-19 | `name` | 裁决表 |  | - |
 | `storage/domain/spec.go:179` | packages/storage/storage-domain/src/spec.ts | 34-44 | 34-52 | `DomainSpec` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
-| `storage/postgres/backend.go:46` | packages/storage/storage-sqlite/src/index.ts | 50-55 | 159 | `Backend` | Go 声明名・放宽大小写 |  | - |
 | `storage/registry.go:24` | packages/storage/storage/src/registry.ts | 9-14 | 9-62 | `BackendRegistry` | 裁决表+路径一致 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
 | `subagent/controltool/control.go:24` | packages/subagent/tool-subagent-control/src/invariant.ts | 10 | 12-13 | `name` | 裁决表 |  | - |
 | `subagent/controltool/control.go:132` | packages/subagent/tool-subagent-control/src/index.ts | 25 | 22-121 | `apply` | 裁决表 |  | 引的范围落在算出的范围之内，多半引的是该符号内部的一小段 |
@@ -1201,47 +1208,61 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 
 锚点在注释引的那个文件里没有，但在裁决表记的那个文件里唯一命中——上游搬了文件。这一档 `-fix` 会把路径和行号一起改；「上游文件」那一列写的是**改成**哪个。
 
-共 3 条。
-
-| Go 位置 | 上游文件 | 引的范围 | 算出的范围 | 锚点符号 | 锚点来路 | 可改 | 备注 |
-|---|---|---:|---:|---|---|:-:|---|
-| `core/tools/pipeline.go:208` | packages/interaction/user-approval/src/types.ts | 1706-1727 | 28-32 | `ApprovalOutcome` | 裁决表 | ✓ | 锚点在裁决表记的 packages/interaction/user-approval/src/types.ts 里找着了，上游搬了文件 |
-| `core/tools/pipeline.go:224` | packages/interaction/user-approval/src/index.ts | 1700-1706 | 114-139 | `ApprovalRequest` | 裁决表 | ✓ | 锚点在裁决表记的 packages/interaction/user-approval/src/index.ts 里找着了，上游搬了文件 |
-| `plan/planmode/projection.go:45` | packages/plan/plan-mode/src/types.ts | 146-152 | 26-36 | `PlanUnitState` | 裁决表 | ✓ | 锚点在裁决表记的 packages/plan/plan-mode/src/types.ts 里找着了，上游搬了文件 |
+没有发现。
 
 ## NOT_FOUND（逐条）
 
 锚点符号在引的那个上游文件里找不到。锚点来路是「Go 声明名」的那些**不说明任何问题**——Go 侧的构造器、哨兵错误、测试函数名上游本来就没有对应物。
 
-共 1765 条。
+共 1783 条。
 
 | Go 位置 | 上游文件 | 引的范围 | 算出的范围 | 锚点符号 | 锚点来路 | 可改 | 备注 |
 |---|---|---:|---:|---|---|:-:|---|
-| `acp/acp/bridge.go:59` | packages/acp/acp/src/index.ts | 93-113 | — | `inflightPrompt` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:113` | packages/acp/acp/src/index.ts | 86-114 | — | `sessionRecord` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:217` | packages/acp/acp/src/index.ts | 222 | — | `subscribe` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:267` | packages/acp/acp/src/index.ts | 132-135 | — | `ownedRecordLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:299` | packages/acp/acp/src/index.ts | 222-252 | — | `toolCallUpdate` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
-| `acp/acp/bridge.go:354` | packages/acp/acp/src/index.ts | 227-244 | — | `scheduleDeliveryLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:379` | packages/acp/acp/src/index.ts | 230-244 | — | `deliver` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:415` | packages/acp/acp/src/index.ts | 254-258 | — | `onInboxClaimed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:433` | packages/acp/acp/src/index.ts | 260-266 | — | `onAgentError` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:459` | packages/acp/acp/src/index.ts | 271-285 | — | `answerApproval` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:509` | packages/acp/acp/src/index.ts | 169-216 | — | `settleAfterQuiescenceLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:522` | packages/acp/acp/src/index.ts | 175-215 | — | `settle` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:576` | packages/acp/acp/src/index.ts | 201-207 | — | `promptStopReason` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:593` | packages/acp/acp/src/index.ts | 210-214 | — | `clearAndFinish` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:690` | packages/acp/acp/src/index.ts | 514-524 | — | `validateSessionParams` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:762` | packages/acp/acp/src/index.ts | 366-401 | — | `admit` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:810` | packages/acp/acp/src/index.ts | 369 | — | `isLive` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:818` | packages/acp/acp/src/index.ts | 409-417 | — | `mapAdmissionError` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/bridge.go:915` | packages/acp/acp/src/index.ts | 453-508 | — | `performQuiesce` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/config.go:54` | packages/acp/acp/src/index.ts | 150 | — | `JsonRpcTransportPeer` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
-| `acp/acp/config.go:69` | packages/acp/acp/src/index.ts | 52-58 | — | `ContinuableDrain` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `acp/acp/config.go:82` | packages/acp/acp/src/index.ts | 271 | — | `ApprovalRegistrar` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:60` | packages/acp/acp/src/index.ts | 93-113 | — | `inflightPrompt` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:114` | packages/acp/acp/src/index.ts | 86-114 | — | `sessionRecord` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:243` | packages/acp/acp/src/index.ts | 222 | — | `subscribe` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:299` | packages/acp/acp/src/index.ts | 132-135 | — | `ownedRecordLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:409` | packages/acp/acp/src/session.ts | 232-266 | — | `scheduleLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:435` | packages/acp/acp/src/session.ts | 236-243 | — | `deliver` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:492` | packages/acp/acp/src/session.ts | 271-283 | — | `pushConfigOptions` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:515` | packages/acp/acp/src/index.ts | 233 | — | `turnOwner` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:565` | packages/acp/acp/src/index.ts | 260-266 | — | `onAgentError` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:591` | packages/acp/acp/src/index.ts | 271-285 | — | `answerApproval` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:641` | packages/acp/acp/src/index.ts | 169-216 | — | `settleAfterQuiescenceLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:654` | packages/acp/acp/src/index.ts | 175-215 | — | `settle` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:708` | packages/acp/acp/src/index.ts | 201-207 | — | `promptStopReason` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:725` | packages/acp/acp/src/index.ts | 210-214 | — | `clearAndFinish` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:850` | packages/acp/acp/src/session.ts | 118-121 | — | `newModelControl` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:860` | packages/acp/acp/src/session.ts | 122-127 | — | `sessionSetup` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:884` | packages/acp/acp/src/index.ts | 216-220 | — | `mapActivationError` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:895` | packages/acp/acp/src/index.ts | 206-214 | — | `adopt` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:941` | packages/acp/acp/src/index.ts | 238-241 | — | `abandon` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:1040` | packages/acp/acp/src/index.ts | 366-401 | — | `admit` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:1096` | packages/acp/acp/src/index.ts | 369 | — | `isLive` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:1104` | packages/acp/acp/src/index.ts | 409-417 | — | `mapAdmissionError` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:1208` | packages/acp/acp/src/index.ts | 341-349 | — | `beginActivation` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:1231` | packages/acp/acp/src/index.ts | 351-366 | — | `resumableHeader` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:1259` | packages/acp/acp/src/session.ts | 166-175 | — | `adoptLoggedSelection` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/bridge.go:1559` | packages/acp/acp/src/index.ts | 453-508 | — | `performQuiesce` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/config.go:26` | packages/acp/acp/src/index.ts | 58 | — | `DefaultSessionListPageSize` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/config.go:60` | packages/acp/acp/src/index.ts | 150 | — | `JsonRpcTransportPeer` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
+| `acp/acp/config.go:75` | packages/acp/acp/src/index.ts | 52-58 | — | `ContinuableDrain` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/config.go:88` | packages/acp/acp/src/index.ts | 271 | — | `ApprovalRegistrar` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/config.go:104` | packages/acp/acp/src/index.ts | 100 | — | `sessionPersistence` | 注释锚点 |  | 锚点符号在该上游文件里找不到 |
 | `acp/acp/content.go:26` | packages/acp/acp/src/content.ts | 11-16 | — | `imageMediaTypes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `acp/acp/content.go:79` | packages/acp/acp/src/content.ts | 67 | — | `ModelResolver` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `acp/acp/content.go:133` | packages/acp/acp/src/content.ts | 64-66 | — | `routeOf` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/mcp.go:26` | packages/acp/acp/src/mcp.ts | 10 | — | `validServerName` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/mcp.go:52` | packages/acp/acp/src/mcp.ts | 32 | — | `MCPHost` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/mcp.go:194` | packages/acp/acp/src/mcp.ts | 76-108 | — | `headersToMap` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/modelcontrol.go:34` | packages/acp/acp/src/model-control.ts | 10-11 | — | `providerDefaultReasoningValue` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/modelcontrol.go:42` | packages/acp/acp/src/model-control.ts | 41 | — | `LlmRuntime` | 注释锚点 |  | 锚点符号在该上游文件里找不到 |
+| `acp/acp/modelcontrol.go:143` | packages/acp/acp/src/model-control.ts | 40-52 | — | `NewModelControl` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/modelcontrol.go:341` | packages/acp/acp/src/model-control.ts | 143-221 | — | `buildState` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/sessionlist.go:22` | packages/acp/acp/src/index.ts | 316 | — | `sessionListEntry` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/sessionlist.go:39` | packages/acp/acp/src/index.ts | 476 | — | `cursorChars` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/sessionlist.go:114` | packages/acp/acp/src/index.ts | 320 | — | `sortSessionList` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `acp/acp/updates.go:22` | packages/acp/acp/src/updates.ts | 95 | — | `TokenMeasurer` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `attachment/attachment.go:109` | packages/attachment/attachment/src/index.ts | 110-129 | — | `RequestImageProjector` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `attachment/attachment_test.go:25` | packages/attachment/attachment/tests/index.spec.ts | 16-23 | — | `testLimits` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `attachment/attachment_test.go:116` | packages/attachment/attachment/tests/index.spec.ts | 55-72 | — | `projectingStore` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -1331,13 +1352,13 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `context/instructions/compose.go:131` | packages/context/agent-instructions/src/state.ts | 136-156 | — | `visibleChanges` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `context/instructions/compose.go:432` | packages/context/agent-instructions/src/index.ts | 322-348 | — | `onPreStep` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `context/instructions/config.go:16` | packages/context/agent-instructions/src/config.ts | 14 | — | `DefaultMaxSourceBytes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/config.go:34` | packages/context/agent-instructions/src/config.ts | 15 | — | `reservedPathSegments` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/config.go:127` | packages/context/agent-instructions/src/config.ts | 119-123 | — | `resolveCandidates` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/files.go:56` | packages/context/agent-instructions/src/files.ts | 36-40 | — | `discoveredFile` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/files.go:77` | packages/context/agent-instructions/src/files.ts | 73-77 | — | `ProbeKind` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/files.go:103` | packages/context/agent-instructions/src/files.ts | 79-88 | — | `statProbe` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/files.go:126` | packages/context/agent-instructions/src/files.ts | 222 | — | `resolvePath` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/files.go:585` | packages/context/agent-instructions/src/files.ts | 468-470 | — | `scopeDirectoryPath` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/config.go:45` | packages/context/agent-instructions/src/config.ts | 15 | — | `reservedPathSegments` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/config.go:152` | packages/context/agent-instructions/src/config.ts | 119-123 | — | `resolveCandidates` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/files.go:58` | packages/context/agent-instructions/src/files.ts | 36-40 | — | `discoveredFile` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/files.go:79` | packages/context/agent-instructions/src/files.ts | 73-77 | — | `ProbeKind` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/files.go:105` | packages/context/agent-instructions/src/files.ts | 79-88 | — | `statProbe` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/files.go:128` | packages/context/agent-instructions/src/files.ts | 222 | — | `resolvePath` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/files.go:633` | packages/context/agent-instructions/src/files.ts | 468-470 | — | `scopeDirectoryPath` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `context/instructions/install.go:26` | packages/context/agent-instructions/src/index.ts | 322 | — | `Agents` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `context/instructions/install.go:53` | packages/context/agent-instructions/src/index.ts | 350 | — | `tools` | 注释锚点 |  | 锚点符号在该上游文件里找不到 |
 | `context/instructions/install.go:61` | packages/context/agent-instructions/src/index.ts | 80 | — | `Deps` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -1360,9 +1381,9 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `context/instructions/state.go:150` | packages/context/agent-instructions/src/state.ts | 81-86 | — | `ContextMessage` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `context/instructions/state.go:200` | packages/context/agent-instructions/src/state.ts | 129-134 | — | `sameChange` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `context/instructions/state.go:344` | packages/context/agent-instructions/src/state.ts | 246-259 | — | `ReconcileRequest` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/state.go:453` | packages/context/agent-instructions/src/state.ts | 269-299 | — | `collectScopes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/state.go:522` | packages/context/agent-instructions/src/state.ts | 324-330 | — | `groupScopesByDirectory` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `context/instructions/state.go:588` | packages/context/agent-instructions/src/state.ts | 331-422 | — | `reconcileDirectory` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/state.go:454` | packages/context/agent-instructions/src/state.ts | 269-299 | — | `collectScopes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/state.go:523` | packages/context/agent-instructions/src/state.ts | 324-330 | — | `groupScopesByDirectory` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `context/instructions/state.go:591` | packages/context/agent-instructions/src/state.ts | 331-422 | — | `reconcileDirectory` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `context/sessionref/install.go:20` | packages/context/session-reference/src/index.ts | 106 | — | `on` | 注释锚点 |  | 锚点符号在该上游文件里找不到 |
 | `context/sessionref/install.go:32` | packages/context/session-reference/src/index.ts | 85-114 | — | `Deps` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `context/sessionref/install.go:90` | packages/context/session-reference/src/index.ts | 106-113 | — | `onPreStep` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -1472,8 +1493,8 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/agentloop/agent.go:1113` | packages/core/agent-loop/src/agent.ts | 355-369 | — | `appendInterrupted` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/agent.go:1142` | packages/core/agent-loop/src/agent.ts | 392-399 | — | `assembledMessage` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/agent.go:1175` | packages/core/agent-loop/src/agent.ts | 416 | — | `acceptToolContext` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/agent.go:1308` | packages/core/agent-loop/src/agent.ts | 483-489 | — | `foldRequestHeader` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/agent.go:1342` | packages/core/agent-loop/src/agent.ts | 491-502 | — | `foldRequestContext` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/agent.go:1317` | packages/core/agent-loop/src/agent.ts | 483-489 | — | `foldRequestHeader` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/agent.go:1351` | packages/core/agent-loop/src/agent.ts | 491-502 | — | `foldRequestContext` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/agent_test.go:438` | packages/core/agent-loop/src/agent.ts | 92 | — | `TestLastTurnOfReadsTheLatestTurnStart` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/agent_test.go:506` | packages/core/agent-loop/src/agent.ts | 99-101 | — | `TestStatusOfProjectsTheRunningPhaseOnly` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/agent_test.go:603` | packages/core/agent-loop/src/agent.ts | 54-61 | — | `TestRequestProposalStripsAdapterSuppliedDefaults` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -1522,62 +1543,64 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/agentloop/invariant_test.go:575` | packages/core/agent-loop/src/invariant.ts | 51 | — | `TestSameToolsComparesSchemaBytes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/loop.go:120` | packages/core/agent-loop/src/index.ts | 260-271 | — | `ConfiguredAgent` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/loop.go:171` | packages/core/agent-loop/src/index.ts | 28 | — | `SessionPersistence` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:252` | packages/core/agent-loop/src/index.ts | 170-179 | — | `ConfigStartFailedObserver` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:298` | packages/core/agent-loop/src/index.ts | 82 | — | `errLoopNotActive` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:446` | packages/core/agent-loop/src/index.ts | 94-97 | — | `abortCause` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:613` | packages/core/agent-loop/src/index.ts | 377-379 | — | `agentVariable` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:660` | packages/core/agent-loop/src/index.ts | 160-179 | — | `OnConfigStartFailed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:672` | packages/core/agent-loop/src/index.ts | 381 | — | `startConfiguredAgents` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:685` | packages/core/agent-loop/src/index.ts | 384-397 | — | `startFreshConfigured` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:710` | packages/core/agent-loop/src/index.ts | 398-410 | — | `startResumingConfigured` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop.go:761` | packages/core/agent-loop/src/index.ts | 396-403 | — | `notifyStartFailed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:218` | packages/core/agent-loop/src/index.ts | 213-215 | — | `TestApplyLauncherIdentitiesLeavesConfiguredIdentitiesAloneWhenNobodyIsNamed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:232` | packages/core/agent-loop/src/index.ts | 216-232 | — | `TestApplyLauncherIdentitiesSwapsBothIdentityKeysTogether` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:280` | packages/core/agent-loop/src/index.ts | 132-139 | — | `TestResolveMaxParallelToolCallsTreatsZeroAsUnset` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:304` | packages/core/agent-loop/src/index.ts | 141-147 | — | `TestAssertAgentOptionsRejectsANegativeOutputCap` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:325` | packages/core/agent-loop/src/index.ts | 277-283 | — | `TestValidateConfiguredAgentsRejectsTwoIdentitiesOnOneEntry` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:343` | packages/core/agent-loop/src/index.ts | 284-291 | — | `TestValidateConfiguredAgentsRejectsADuplicateExactIdentity` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:394` | packages/core/agent-loop/src/index.ts | 94-97 | — | `TestAbortCauseStaysQuietOnALiveContext` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:406` | packages/core/agent-loop/src/index.ts | 95-96 | — | `TestAbortCauseNamesTheAgentWhenTheReasonIsPlain` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:427` | packages/core/agent-loop/src/index.ts | 95 | — | `TestAbortCausePassesARicherReasonThroughUntouched` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:444` | packages/core/agent-loop/src/index.ts | 99-118 | — | `TestRaceAbortHandsBackTheWorkThatWon` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:464` | packages/core/agent-loop/src/index.ts | 100-102 | — | `TestRaceAbortRefusesBeforeStartingWorkOnADeadContext` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:528` | packages/core/agent-loop/src/index.ts | 113 | — | `TestRaceAbortDoesNotReleaseAResultThatFailed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:562` | packages/core/agent-loop/src/index.ts | 55-57 | — | `TestFactoryOwnershipStopsAcceptingOnceDisposed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:584` | packages/core/agent-loop/src/index.ts | 85-88 | — | `TestFactoryOwnershipTearsDownEveryLiveAgentEvenWhenOneFails` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:623` | packages/core/agent-loop/src/index.ts | 59-63 | — | `TestFactoryOwnershipForgetsAnAgentThatAlreadyToreItselfDown` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:651` | packages/core/agent-loop/src/index.ts | 65-70 | — | `TestFactoryOwnershipWaitsForStartupWorkBeforeItFinishes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:678` | packages/core/agent-loop/src/index.ts | 77-79 | — | `TestWaitWhileActiveStopsWaitingWhenTeardownBegins` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:777` | packages/core/agent-loop/src/index.ts | 213-233 | — | `TestNewLetsTheLauncherIdentityBeatTheConfiguredOne` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:800` | packages/core/agent-loop/src/index.ts | 336 | — | `TestNewInstallsItselfAsTheRegistryFactory` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:863` | packages/core/agent-loop/src/index.ts | 377-379 | — | `TestTheAgentVariablesReadFromTheAgentOnThatScope` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:906` | packages/core/agent-loop/src/index.ts | 377-379 | — | `TestTheAgentVariablesAreAbsentOffAnyAgent` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:939` | packages/core/agent-loop/src/index.ts | 330-334 | — | `TestMaxParallelToolCallsLocksToTheStaticCapWithoutSettings` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:958` | packages/core/agent-loop/src/index.ts | 330-334 | — | `TestMaxParallelToolCallsReadsThroughSettingsEveryTime` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:983` | packages/core/agent-loop/src/index.ts | 340-347 | — | `TestSettingsRejectABadParallelCapBeforeItIsCommitted` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1006` | packages/core/agent-loop/src/index.ts | 580-587 | — | `TestCreatePublishesIntoBothRegistries` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1031` | packages/core/agent-loop/src/index.ts | 454-455 | — | `TestCreateRefusesAnUnrepresentableOutputCap` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1049` | packages/core/agent-loop/src/index.ts | 606-620 | — | `TestCreateAgentRunsSetupAndItsCommitBeforePublishing` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1093` | packages/core/agent-loop/src/index.ts | 611-615 | — | `TestCreateAgentRollsBackWhenSetupFails` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1130` | packages/core/agent-loop/src/index.ts | 590-591 | — | `TestCreateAgentNeedsAnOwner` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1147` | packages/core/agent-loop/src/index.ts | 496-540 | — | `TestDisposingAHandleClearsBothRegistriesAndTheScope` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1187` | packages/core/agent-loop/src/index.ts | 456-458 | — | `TestCreateRefusesOnceTheFactoryIsGone` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1247` | packages/core/agent-loop/src/index.ts | 625-630 | — | `TestResumeWithoutPersistenceSaysSo` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1267` | packages/core/agent-loop/src/index.ts | 637-710 | — | `TestResumeRebuildsTheAgentOnThePersistedSession` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1306` | packages/core/agent-loop/src/index.ts | 686-689 | — | `TestResumeHandsBackTheLoadFailure` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1322` | packages/core/agent-loop/src/index.ts | 657-672 | — | `TestResumeStopsWaitingWhenTheCallerGivesUp` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1363` | packages/core/agent-loop/src/index.ts | 385-388 | — | `TestAConfiguredAgentWithoutAnIdentityGetsAMintedOne` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1391` | packages/core/agent-loop/src/index.ts | 390-393 | — | `TestAMintedIdentityNeverTouchesPersistence` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1417` | packages/core/agent-loop/src/index.ts | 406-419 | — | `TestAConfiguredIdentityIsRestoredWhenItAlreadyLanded` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1445` | packages/core/agent-loop/src/index.ts | 420-427 | — | `TestAConfiguredIdentityIsCreatedTheFirstTimeItIsUsed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1466` | packages/core/agent-loop/src/index.ts | 420-424 | — | `TestABrokenArchiveIsNotMistakenForAMissingOne` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1494` | packages/core/agent-loop/src/index.ts | 398-404 | — | `TestAResumingEntryWithoutPersistenceIsReportedNotHung` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1542` | packages/core/agent-loop/src/index.ts | 405-410 | — | `TestAConfiguredResumingEntryRebuildsOnTheArchivedSession` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1567` | packages/core/agent-loop/src/index.ts | 405-410 | — | `TestAConfiguredResumeThatFailsIsReported` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1625` | packages/core/agent-loop/src/index.ts | 430-451 | — | `TestARestoringConfiguredIdentityWaitsForTheDrainingOccupant` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1672` | packages/core/agent-loop/src/index.ts | 430-433 | — | `TestAFreeConfiguredIdentityIsNotWaitedOn` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1699` | packages/core/agent-loop/src/index.ts | 396-403 | — | `TestAPanickingObserverDoesNotStopTheRest` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/agentloop/loop_test.go:1733` | packages/core/agent-loop/src/index.ts | 384-386 | — | `TestNoStartupFailureIsReportedOnceTheFactoryIsDisposing` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:254` | packages/core/agent-loop/src/index.ts | 170-179 | — | `ConfigStartFailedObserver` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:300` | packages/core/agent-loop/src/index.ts | 82 | — | `errLoopNotActive` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:448` | packages/core/agent-loop/src/index.ts | 94-97 | — | `abortCause` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:615` | packages/core/agent-loop/src/index.ts | 377-379 | — | `agentVariable` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:662` | packages/core/agent-loop/src/index.ts | 160-179 | — | `OnConfigStartFailed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:674` | packages/core/agent-loop/src/index.ts | 381 | — | `startConfiguredAgents` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:687` | packages/core/agent-loop/src/index.ts | 384-397 | — | `startFreshConfigured` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:712` | packages/core/agent-loop/src/index.ts | 398-410 | — | `startResumingConfigured` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop.go:763` | packages/core/agent-loop/src/index.ts | 396-403 | — | `notifyStartFailed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:246` | packages/core/agent-loop/src/index.ts | 213-215 | — | `TestApplyLauncherIdentitiesLeavesConfiguredIdentitiesAloneWhenNobodyIsNamed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:260` | packages/core/agent-loop/src/index.ts | 216-232 | — | `TestApplyLauncherIdentitiesSwapsBothIdentityKeysTogether` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:308` | packages/core/agent-loop/src/index.ts | 132-139 | — | `TestResolveMaxParallelToolCallsTreatsZeroAsUnset` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:332` | packages/core/agent-loop/src/index.ts | 141-147 | — | `TestAssertAgentOptionsRejectsANegativeOutputCap` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:353` | packages/core/agent-loop/src/index.ts | 277-283 | — | `TestValidateConfiguredAgentsRejectsTwoIdentitiesOnOneEntry` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:371` | packages/core/agent-loop/src/index.ts | 284-291 | — | `TestValidateConfiguredAgentsRejectsADuplicateExactIdentity` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:422` | packages/core/agent-loop/src/index.ts | 94-97 | — | `TestAbortCauseStaysQuietOnALiveContext` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:434` | packages/core/agent-loop/src/index.ts | 95-96 | — | `TestAbortCauseNamesTheAgentWhenTheReasonIsPlain` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:455` | packages/core/agent-loop/src/index.ts | 95 | — | `TestAbortCausePassesARicherReasonThroughUntouched` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:472` | packages/core/agent-loop/src/index.ts | 99-118 | — | `TestRaceAbortHandsBackTheWorkThatWon` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:492` | packages/core/agent-loop/src/index.ts | 100-102 | — | `TestRaceAbortRefusesBeforeStartingWorkOnADeadContext` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:556` | packages/core/agent-loop/src/index.ts | 113 | — | `TestRaceAbortDoesNotReleaseAResultThatFailed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:590` | packages/core/agent-loop/src/index.ts | 55-57 | — | `TestFactoryOwnershipStopsAcceptingOnceDisposed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:612` | packages/core/agent-loop/src/index.ts | 85-88 | — | `TestFactoryOwnershipTearsDownEveryLiveAgentEvenWhenOneFails` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:651` | packages/core/agent-loop/src/index.ts | 59-63 | — | `TestFactoryOwnershipForgetsAnAgentThatAlreadyToreItselfDown` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:679` | packages/core/agent-loop/src/index.ts | 65-70 | — | `TestFactoryOwnershipWaitsForStartupWorkBeforeItFinishes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:706` | packages/core/agent-loop/src/index.ts | 77-79 | — | `TestWaitWhileActiveStopsWaitingWhenTeardownBegins` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:805` | packages/core/agent-loop/src/index.ts | 213-233 | — | `TestNewLetsTheLauncherIdentityBeatTheConfiguredOne` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:828` | packages/core/agent-loop/src/index.ts | 336 | — | `TestNewInstallsItselfAsTheRegistryFactory` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:891` | packages/core/agent-loop/src/index.ts | 377-379 | — | `TestTheAgentVariablesReadFromTheAgentOnThatScope` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:934` | packages/core/agent-loop/src/index.ts | 377-379 | — | `TestTheAgentVariablesAreAbsentOffAnyAgent` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:967` | packages/core/agent-loop/src/index.ts | 330-334 | — | `TestMaxParallelToolCallsLocksToTheStaticCapWithoutSettings` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:986` | packages/core/agent-loop/src/index.ts | 330-334 | — | `TestMaxParallelToolCallsReadsThroughSettingsEveryTime` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1011` | packages/core/agent-loop/src/index.ts | 340-347 | — | `TestSettingsRejectABadParallelCapBeforeItIsCommitted` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1034` | packages/core/agent-loop/src/index.ts | 580-587 | — | `TestCreatePublishesIntoBothRegistries` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1059` | packages/core/agent-loop/src/index.ts | 454-455 | — | `TestCreateRefusesAnUnrepresentableOutputCap` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1077` | packages/core/agent-loop/src/index.ts | 606-620 | — | `TestCreateAgentRunsSetupAndItsCommitBeforePublishing` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1121` | packages/core/agent-loop/src/index.ts | 611-615 | — | `TestCreateAgentRollsBackWhenSetupFails` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1158` | packages/core/agent-loop/src/index.ts | 590-591 | — | `TestCreateAgentNeedsAnOwner` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1175` | packages/core/agent-loop/src/index.ts | 496-540 | — | `TestDisposingAHandleClearsBothRegistriesAndTheScope` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1215` | packages/core/agent-loop/src/index.ts | 456-458 | — | `TestCreateRefusesOnceTheFactoryIsGone` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1275` | packages/core/agent-loop/src/index.ts | 625-630 | — | `TestResumeWithoutPersistenceSaysSo` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1295` | packages/core/agent-loop/src/index.ts | 637-710 | — | `TestResumeRebuildsTheAgentOnThePersistedSession` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1328` | packages/core/agent-loop/src/index.ts | 697-708 | — | `TestResumeReleasesThePreparationWhenSetupFails` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1356` | packages/core/agent-loop/src/index.ts | 747-753 | — | `TestResumeReleasesAPreparationThatArrivesAfterTheCallerGaveUp` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1410` | packages/core/agent-loop/src/index.ts | 686-689 | — | `TestResumeHandsBackTheLoadFailure` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1426` | packages/core/agent-loop/src/index.ts | 657-672 | — | `TestResumeStopsWaitingWhenTheCallerGivesUp` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1467` | packages/core/agent-loop/src/index.ts | 385-388 | — | `TestAConfiguredAgentWithoutAnIdentityGetsAMintedOne` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1495` | packages/core/agent-loop/src/index.ts | 390-393 | — | `TestAMintedIdentityNeverTouchesPersistence` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1521` | packages/core/agent-loop/src/index.ts | 406-419 | — | `TestAConfiguredIdentityIsRestoredWhenItAlreadyLanded` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1549` | packages/core/agent-loop/src/index.ts | 420-427 | — | `TestAConfiguredIdentityIsCreatedTheFirstTimeItIsUsed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1570` | packages/core/agent-loop/src/index.ts | 420-424 | — | `TestABrokenArchiveIsNotMistakenForAMissingOne` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1598` | packages/core/agent-loop/src/index.ts | 398-404 | — | `TestAResumingEntryWithoutPersistenceIsReportedNotHung` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1646` | packages/core/agent-loop/src/index.ts | 405-410 | — | `TestAConfiguredResumingEntryRebuildsOnTheArchivedSession` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1671` | packages/core/agent-loop/src/index.ts | 405-410 | — | `TestAConfiguredResumeThatFailsIsReported` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1729` | packages/core/agent-loop/src/index.ts | 430-451 | — | `TestARestoringConfiguredIdentityWaitsForTheDrainingOccupant` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1776` | packages/core/agent-loop/src/index.ts | 430-433 | — | `TestAFreeConfiguredIdentityIsNotWaitedOn` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1803` | packages/core/agent-loop/src/index.ts | 396-403 | — | `TestAPanickingObserverDoesNotStopTheRest` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/agentloop/loop_test.go:1837` | packages/core/agent-loop/src/index.ts | 384-386 | — | `TestNoStartupFailureIsReportedOnceTheFactoryIsDisposing` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/runtimecontext.go:21` | packages/core/agent-loop/src/runtime-context.ts | 12 | — | `RuntimeContextSource` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/runtimecontext.go:31` | packages/core/agent-loop/src/runtime-context.ts | 13 | — | `runtimeContextCleared` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/agentloop/runtimecontext.go:83` | packages/core/agent-loop/src/runtime-context.ts | 31-58 | — | `NewRuntimeContextProjection` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -1630,25 +1653,25 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/scope/scope.go:468` | packages/core/scope/tests/store.spec.ts | 195 | — | `Effects` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/fork.go:96` | packages/core/session/src/index.ts | 1146-1155 | — | `ForkByID` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/fork.go:115` | packages/core/session/src/index.ts | 1090-1108 | — | `forkFrom` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/fork.go:148` | packages/core/session/src/index.ts | 1110-1144 | — | `forkSeed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/fork.go:205` | packages/core/session/src/index.ts | 1132-1140 | — | `rejectOpenTurn` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/fork.go:151` | packages/core/session/src/index.ts | 1110-1144 | — | `forkSeed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/fork.go:223` | packages/core/session/src/index.ts | 1132-1140 | — | `rejectOpenTurn` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/preparation.go:42` | packages/core/session/src/preparation.ts | 36-38 | — | `NewPreparation` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/session.go:131` | packages/core/session/src/index.ts | 493-544 | — | `newSession` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/session.go:296` | packages/core/session/src/index.ts | 427-430 | — | `SurfaceReplaceGeneration` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/session.go:360` | packages/core/session/src/index.ts | 625-647 | — | `commit` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/session.go:406` | packages/core/session/src/index.ts | 650-656 | — | `finishPublishing` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/session.go:428` | packages/core/session/src/index.ts | 915-925 | — | `attach` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/session.go:151` | packages/core/session/src/index.ts | 493-544 | — | `newSession` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/session.go:334` | packages/core/session/src/index.ts | 427-430 | — | `SurfaceReplaceGeneration` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/session.go:398` | packages/core/session/src/index.ts | 625-647 | — | `commit` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/session.go:444` | packages/core/session/src/index.ts | 650-656 | — | `finishPublishing` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/session.go:466` | packages/core/session/src/index.ts | 915-925 | — | `attach` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/store.go:61` | packages/core/session/src/index.ts | 37-93 | — | `storeLayer` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/store.go:158` | packages/core/session/src/index.ts | 795-806 | — | `NewStore` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/store.go:193` | packages/core/session/src/index.ts | 44-53 | — | `OnCreated` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/store.go:213` | packages/core/session/src/index.ts | 54-63 | — | `OnDisposed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/store.go:229` | packages/core/session/src/index.ts | 64-77 | — | `OnEvent` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/store.go:245` | packages/core/session/src/index.ts | 78-91 | — | `OnFlush` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/store.go:401` | packages/core/session/src/index.ts | 869-871 | — | `PrepareRestored` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/store.go:415` | packages/core/session/src/index.ts | 848-858 | — | `mintID` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/store.go:517` | packages/core/session/src/index.ts | 949-958 | — | `detachEnteredLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/store.go:603` | packages/core/session/src/index.ts | 650-656 | — | `afterPublish` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/session/store.go:796` | packages/core/session/src/index.ts | 1035-1043 | — | `callFlushObserver` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/store.go:416` | packages/core/session/src/index.ts | 869-871 | — | `PrepareRestored` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/store.go:430` | packages/core/session/src/index.ts | 848-858 | — | `mintID` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/store.go:532` | packages/core/session/src/index.ts | 949-958 | — | `detachEnteredLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/store.go:618` | packages/core/session/src/index.ts | 650-656 | — | `afterPublish` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/session/store.go:811` | packages/core/session/src/index.ts | 1035-1043 | — | `callFlushObserver` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/validate.go:53` | packages/core/session/src/index.ts | 215-217 | — | `legacyHeaderDelta` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/validate.go:62` | packages/core/session/src/index.ts | 367-371 | — | `legacyFallbackReason` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/session/validate.go:147` | packages/core/session/src/index.ts | 212-250 | — | `validateSeedEvent` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -1679,7 +1702,7 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/systemprompt/registry.go:517` | packages/core/system-prompt/src/index.ts | 524-532 | — | `assembleContexts` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/systemprompt/registry.go:547` | packages/core/system-prompt/src/index.ts | 536 | — | `assembleRulesFor` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/systemprompt/registry.go:563` | packages/core/system-prompt/src/index.ts | 535-538 | — | `runAssembleRules` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/definition.go:179` | packages/core/tools/src/index.ts | 1866-1868 | — | `newExecutionToken` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/definition.go:216` | packages/core/tools/src/index.ts | 1866-1868 | — | `newExecutionToken` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/tools/jsonschema.go:38` | packages/core/tools/src/json-schema.ts | 87 | — | `schemaTypes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/tools/jsonschema.go:43` | packages/core/tools/src/json-schema.ts | 315-316 | — | `scalarTypes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/tools/jsonschema.go:217` | packages/core/tools/src/json-schema.ts | 257-273 | — | `ParseSchema` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -1699,19 +1722,19 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `core/tools/pipeline.go:196` | packages/core/tools/src/index.ts | 197 | — | `ObserveResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/tools/pipeline.go:249` | packages/core/tools/src/index.ts | 424-441 | — | `StageKind` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/tools/pipeline.go:485` | packages/core/tools/src/index.ts | 1546-1554 | — | `invokeBody` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/pipeline.go:766` | packages/core/tools/src/index.ts | 1846-1863 | — | `materialize` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/pipeline.go:826` | packages/core/tools/src/index.ts | 1477 | — | `collectRules` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/pipeline.go:845` | packages/core/tools/src/index.ts | 1869-1877 | — | `failureResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/pipeline.go:862` | packages/core/tools/src/index.ts | 1489-1497 | — | `denialResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/pipeline.go:875` | packages/core/tools/src/index.ts | 1746-1754 | — | `blockedResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/pipeline.go:916` | packages/core/tools/src/index.ts | 1919-1931 | — | `abortedResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/pipeline.go:923` | packages/core/tools/src/index.ts | 1923-1935 | — | `abortedBeforeDispatchResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/pipeline.go:931` | packages/core/agent-loop/src/tool-calls.ts | 249-259 | — | `AbortedBeforeDispatchResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/pipeline.go:775` | packages/core/tools/src/index.ts | 1846-1863 | — | `materialize` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/pipeline.go:835` | packages/core/tools/src/index.ts | 1477 | — | `collectRules` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/pipeline.go:854` | packages/core/tools/src/index.ts | 1869-1877 | — | `failureResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/pipeline.go:871` | packages/core/tools/src/index.ts | 1489-1497 | — | `denialResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/pipeline.go:884` | packages/core/tools/src/index.ts | 1746-1754 | — | `blockedResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/pipeline.go:925` | packages/core/tools/src/index.ts | 1919-1931 | — | `abortedResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/pipeline.go:932` | packages/core/tools/src/index.ts | 1923-1935 | — | `abortedBeforeDispatchResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/pipeline.go:940` | packages/core/agent-loop/src/tool-calls.ts | 249-259 | — | `AbortedBeforeDispatchResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/tools/runtime.go:63` | packages/core/tools/src/index.ts | 684-687 | — | `compiledRestriction` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `core/tools/runtime.go:114` | packages/core/tools/src/index.ts | 726-730 | — | `newToolLayer` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/runtime.go:211` | packages/core/tools/src/index.ts | 825-836 | — | `NewRuntime` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/runtime.go:259` | packages/core/tools/src/index.ts | 1025-1050 | — | `validateDefinition` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `core/tools/runtime.go:381` | packages/core/tools/src/index.ts | 1148-1195 | — | `viewOf` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/runtime.go:232` | packages/core/tools/src/index.ts | 825-836 | — | `NewRuntime` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/runtime.go:289` | packages/core/tools/src/index.ts | 1025-1050 | — | `validateDefinition` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `core/tools/runtime.go:411` | packages/core/tools/src/index.ts | 1148-1195 | — | `viewOf` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `credentials/credentials.go:71` | packages/credentials/credentials/src/index.ts | 16 | — | `refPattern` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `credentials/credentials.go:76` | packages/credentials/credentials/src/index.ts | 18-19 | — | `keySegmentPattern` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `credentials/credentials.go:88` | packages/credentials/credentials/src/index.ts | 28 | — | `ErrInvalidRef` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2028,8 +2051,8 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `jobs/localjobs/registry.go:604` | packages/jobs/jobs-local/src/index.ts | 388-392 | — | `changedFor` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `jobs/localjobs/registry.go:622` | packages/jobs/jobs-local/src/index.ts | 345-360 | — | `reachLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `jobs/localjobs/registry.go:646` | packages/jobs/jobs-local/src/index.ts | 363-377 | — | `snapshotOf` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `jobs/localjobs/registry.go:811` | packages/jobs/jobs-local/src/index.ts | 481-500 | — | `Dispose` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `jobs/localjobs/registry.go:923` | packages/jobs/jobs-local/src/index.ts | 470 | — | `awaitAll` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `jobs/localjobs/registry.go:812` | packages/jobs/jobs-local/src/index.ts | 481-500 | — | `Dispose` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `jobs/localjobs/registry.go:924` | packages/jobs/jobs-local/src/index.ts | 470 | — | `awaitAll` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `llm/adapter.go:46` | packages/llm/llm/src/index.ts | 192-199 | — | `ProviderDescriber` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `llm/adapter.go:56` | packages/llm/llm/src/index.ts | 201-208 | — | `RetryPolicyOwner` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `llm/adapter.go:66` | packages/llm/llm/src/index.ts | 210-219 | — | `ModelLister` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2369,15 +2392,16 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `schedule/schedule/types.go:406` | packages/schedule/schedule/src/types.ts | 208 | — | `CodeScheduleNotFound` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sdk/sdkprotocol/transport.go:49` | packages/sdk/protocol/src/transport.ts | 99-110 | — | `Handlers` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sdk/sdkprotocol/transport.go:71` | packages/sdk/protocol/src/transport.ts | 59 | — | `ErrMethodNotFound` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkprotocol/transport.go:91` | packages/sdk/protocol/src/transport.ts | 70-82 | — | `NewLineTransport` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkprotocol/transport.go:134` | packages/sdk/protocol/src/transport.ts | 226-238 | — | `dispatcher` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkprotocol/transport.go:195` | packages/sdk/protocol/src/transport.ts | 180-189 | — | `lineStream` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkprotocol/types.go:15` | packages/sdk/server/src/server.ts | 124 | — | `ServerName` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkprotocol/types.go:124` | packages/sdk/protocol/src/types.ts | 63 | — | `AgentStatus` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkserver/config.go:32` | packages/sdk/server/src/server.ts | 124 | — | `ServerVersion` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkserver/config.go:38` | packages/sdk/server/src/server.ts | 237-239 | — | `ProviderLister` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkserver/config.go:52` | packages/sdk/server/src/server.ts | 120-123 | — | `MountAdapter` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkserver/config.go:129` | packages/sdk/server/src/server.ts | 65-69 | — | `Config` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
+| `sdk/sdkprotocol/transport.go:127` | packages/sdk/protocol/src/transport.ts | 70-82 | — | `NewLineTransport` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkprotocol/transport.go:193` | packages/sdk/protocol/src/transport.ts | 226-238 | — | `dispatcher` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkprotocol/transport.go:280` | packages/sdk/protocol/src/transport.ts | 180-189 | — | `lineStream` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkprotocol/types.go:19` | packages/sdk/server/src/server.ts | 124 | — | `ServerName` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkprotocol/types.go:145` | packages/sdk/protocol/src/types.ts | 40 | — | `PromptContent` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkprotocol/types.go:257` | packages/sdk/protocol/src/types.ts | 63 | — | `AgentStatus` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkserver/config.go:33` | packages/sdk/server/src/server.ts | 124 | — | `ServerVersion` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkserver/config.go:39` | packages/sdk/server/src/server.ts | 294-296 | — | `listProviders` | 注释锚点 |  | 锚点符号在该上游文件里找不到 |
+| `sdk/sdkserver/config.go:57` | packages/sdk/server/src/server.ts | 120-123 | — | `MountAdapter` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkserver/config.go:140` | packages/sdk/server/src/server.ts | 65-69 | — | `Config` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
 | `sdk/sdkserver/notify.go:22` | packages/sdk/server/src/server.ts | 70-103 | — | `subscribe` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sdk/sdkserver/notify.go:74` | packages/sdk/server/src/server.ts | 71-74 | — | `toolCallUpdate` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
 | `sdk/sdkserver/notify.go:87` | packages/sdk/server/src/server.ts | 75-77 | — | `onAgentStatus` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2385,8 +2409,9 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `sdk/sdkserver/notify.go:112` | packages/sdk/server/src/server.ts | 78-86 | — | `onSessionCreated` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sdk/sdkserver/notify.go:130` | packages/sdk/server/src/server.ts | 87-103 | — | `onSubagentEnd` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sdk/sdkserver/notify.go:156` | packages/sdk/server/src/server.ts | 43-46 | — | `runStatus` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sdk/sdkserver/server.go:81` | packages/sdk/server/src/server.ts | 70-103 | — | `SessionReferenceResolver` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
-| `sdk/sdkserver/server.go:353` | packages/sdk/server/src/index.ts | 76-89 | — | `Handlers` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkserver/server.go:98` | packages/sdk/server/src/server.ts | 70-103 | — | `SessionReferenceResolver` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
+| `sdk/sdkserver/server.go:254` | packages/sdk/server/src/server.ts | 150-153 | — | `ensureAdapterFor` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sdk/sdkserver/server.go:550` | packages/sdk/server/src/index.ts | 76-89 | — | `Handlers` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/checkpointpolicy/policy.go:92` | packages/session/session-checkpoint-policy/src/index.ts | 64-68 | — | `streamRule` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/checkpointpolicy/policy.go:118` | packages/session/session-checkpoint-policy/src/index.ts | 70-75 | — | `dispatchRule` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/checkpointpolicy/policy.go:148` | packages/session/session-checkpoint-policy/src/index.ts | 77-82 | — | `preStepRule` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2402,50 +2427,50 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `session/invariant.go:43` | packages/core/session/src/invariant.ts | 198-205 | — | `NewTrace` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/invariant.go:114` | packages/core/session/src/invariant.ts | 55-166 | — | `defineDomain` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
 | `session/invariant.go:280` | packages/core/session/src/invariant.ts | 138 | — | `isSyntheticNotStarted` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/backend.go:98` | packages/session/session-persistence/src/coordinator.ts | 146-172 | — | `SeekableBackend` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/backend.go:121` | packages/session/session-persistence/src/coordinator.ts | 200-206 | — | `LocatingBackend` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/backend.go:135` | packages/session/session-persistence/src/coordinator.ts | 208-213 | — | `ClosableBackend` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator.go:52` | packages/session/session-persistence/src/coordinator.ts | 600-604 | — | `sessions` | 注释锚点 |  | 锚点符号在该上游文件里找不到 |
-| `session/persistence/coordinator.go:83` | packages/session/session-persistence/src/coordinator.ts | 589-604 | — | `CoordinatorDeps` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator.go:120` | packages/session/session-persistence/src/coordinator.ts | 237-241 | — | `liveState` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator.go:214` | packages/session/session-persistence/src/coordinator.ts | 589-620 | — | `NewCoordinator` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator.go:276` | packages/session/session-persistence/src/coordinator.ts | 1086-1137 | — | `SessionReferenceResolver` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
-| `session/persistence/coordinator.go:338` | packages/session/session-persistence/src/coordinator.ts | 1091-1112 | — | `drain` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator.go:389` | packages/session/session-persistence/src/coordinator.ts | 1115-1117 | — | `onSessionCreated` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator.go:401` | packages/session/session-persistence/src/coordinator.ts | 1119-1121 | — | `toolCallUpdate` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
-| `session/persistence/coordinator.go:408` | packages/session/session-persistence/src/coordinator.ts | 1123-1125 | — | `onSessionFlush` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator.go:415` | packages/session/session-persistence/src/coordinator.ts | 1127-1129 | — | `onSessionDisposed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/backend.go:110` | packages/session/session-persistence/src/coordinator.ts | 146-172 | — | `SeekableBackend` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/backend.go:137` | packages/session/session-persistence/src/coordinator.ts | 200-206 | — | `LocatingBackend` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/backend.go:151` | packages/session/session-persistence/src/coordinator.ts | 208-213 | — | `ClosableBackend` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator.go:62` | packages/session/session-persistence/src/coordinator.ts | 600-604 | — | `sessions` | 注释锚点 |  | 锚点符号在该上游文件里找不到 |
+| `session/persistence/coordinator.go:93` | packages/session/session-persistence/src/coordinator.ts | 589-604 | — | `CoordinatorDeps` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator.go:145` | packages/session/session-persistence/src/coordinator.ts | 237-241 | — | `liveState` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator.go:247` | packages/session/session-persistence/src/coordinator.ts | 589-620 | — | `NewCoordinator` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator.go:321` | packages/session/session-persistence/src/coordinator.ts | 1086-1137 | — | `SessionReferenceResolver` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
+| `session/persistence/coordinator.go:383` | packages/session/session-persistence/src/coordinator.ts | 1091-1112 | — | `drain` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator.go:451` | packages/session/session-persistence/src/coordinator.ts | 1115-1117 | — | `onSessionCreated` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator.go:463` | packages/session/session-persistence/src/coordinator.ts | 1119-1121 | — | `toolCallUpdate` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
+| `session/persistence/coordinator.go:470` | packages/session/session-persistence/src/coordinator.ts | 1123-1125 | — | `onSessionFlush` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator.go:477` | packages/session/session-persistence/src/coordinator.ts | 1127-1129 | — | `onSessionDisposed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/persistence/coordinator_chain.go:19` | packages/session/session-persistence/src/coordinator.ts | 1010-1033 | — | `acquire` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator_chain.go:355` | packages/session/session-persistence/src/coordinator.ts | 900-930 | — | `wrapCorruption` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator_prepare.go:131` | packages/session/session-persistence/src/coordinator.ts | 791-818 | — | `inspectOnce` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator_prepare.go:184` | packages/session/session-persistence/src/coordinator.ts | 728 | — | `preparationLoaderFor` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator_prepare.go:207` | packages/session/session-persistence/src/coordinator.ts | 729 | — | `committerFor` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator_prepare.go:250` | packages/session/session-persistence/src/coordinator.ts | 895-923 | — | `buildPreparedSource` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator_write.go:159` | packages/session/session-persistence/src/coordinator.ts | 1239-1270 | — | `reconcileTracked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/coordinator_write.go:396` | packages/session/session-persistence/src/coordinator.ts | 1341-1352 | — | `newWriteBehind` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator_chain.go:409` | packages/session/session-persistence/src/coordinator.ts | 900-930 | — | `wrapCorruption` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator_prepare.go:150` | packages/session/session-persistence/src/coordinator.ts | 791-818 | — | `inspectOnce` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator_prepare.go:203` | packages/session/session-persistence/src/coordinator.ts | 728 | — | `preparationLoaderFor` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator_prepare.go:226` | packages/session/session-persistence/src/coordinator.ts | 729 | — | `committerFor` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator_prepare.go:269` | packages/session/session-persistence/src/coordinator.ts | 895-923 | — | `buildPreparedSource` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator_write.go:164` | packages/session/session-persistence/src/coordinator.ts | 1239-1270 | — | `reconcileTracked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/coordinator_write.go:433` | packages/session/session-persistence/src/coordinator.ts | 1341-1352 | — | `newWriteBehind` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/persistence/error.go:113` | packages/session/session-persistence/src/coordinator.ts | 1067-1074 | — | `WithLocation` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/persistence/preparations.go:22` | packages/session/session-persistence/src/coordinator.ts | 562-586 | — | `preparedSource` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/preparations.go:45` | packages/session/session-persistence/src/preparations.ts | 78 | — | `commitResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/preparations.go:357` | packages/session/session-persistence/src/preparations.ts | 199 | — | `discardOutcome` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/preparations.go:473` | packages/session/session-persistence/src/preparations.ts | 266-274 | — | `makeReadyLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/preparations.go:485` | packages/session/session-persistence/src/preparations.ts | 276-283 | — | `removeLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/preparations.go:497` | packages/session/session-persistence/src/preparations.ts | 285-298 | — | `touchLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/preparations.go:51` | packages/session/session-persistence/src/preparations.ts | 78 | — | `commitResult` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/preparations.go:363` | packages/session/session-persistence/src/preparations.ts | 199 | — | `discardOutcome` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/preparations.go:479` | packages/session/session-persistence/src/preparations.ts | 266-274 | — | `makeReadyLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/preparations.go:491` | packages/session/session-persistence/src/preparations.ts | 276-283 | — | `removeLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/preparations.go:503` | packages/session/session-persistence/src/preparations.ts | 285-298 | — | `touchLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/persistence/stored.go:20` | packages/session/session-persistence/src/coordinator.ts | 1078-1082 | — | `CheckStoredIdentity` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/persistence/stored.go:36` | packages/session/session-persistence/src/coordinator.ts | 1044-1049 | — | `CheckStoredVersion` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/persistence/stored.go:53` | packages/session/session-persistence/src/coordinator.ts | 1051-1065 | — | `CheckStoredVocabulary` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/persistence/stored.go:81` | packages/session/session-persistence/src/coordinator.ts | 884-889 | — | `CheckStored` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/persistence/stored.go:122` | packages/session/session-persistence/src/coordinator.ts | 900-902 | — | `BalanceStored` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/writebehind.go:105` | packages/session/session-persistence/src/write-behind.ts | 33-38 | — | `HasWork` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/writebehind.go:220` | packages/session/session-persistence/src/write-behind.ts | 80-83 | — | `armTimerLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/persistence/writebehind.go:234` | packages/session/session-persistence/src/write-behind.ts | 85-90 | — | `cancelTimerLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/writebehind.go:118` | packages/session/session-persistence/src/write-behind.ts | 33-38 | — | `HasWork` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/writebehind.go:282` | packages/session/session-persistence/src/write-behind.ts | 80-83 | — | `armTimerLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/persistence/writebehind.go:296` | packages/session/session-persistence/src/write-behind.ts | 85-90 | — | `cancelTimerLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/projection/registry.go:286` | packages/session/session-projection/src/index.ts | 463-471 | — | `cellForLocked` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/projectioncache/cache.go:322` | packages/session/session-projection-cache/src/index.ts | 200-219 | — | `Observe` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/projectioncache/cache.go:363` | packages/session/session-projection-cache/src/index.ts | 225-229 | — | `Detach` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/projectioncache/cache.go:385` | packages/session/session-projection-cache/src/index.ts | 231-237 | — | `Close` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/projectioncache/cache.go:407` | packages/session/session-projection-cache/src/index.ts | 216-218 | — | `onInterval` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/projectioncache/cache.go:424` | packages/session/session-projection-cache/src/index.ts | 240-251 | — | `writeSoft` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/projectioncache/cache.go:477` | packages/session/session-projection-cache/src/index.ts | 273-280 | — | `putSoft` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `session/projectioncache/cache.go:490` | packages/session/session-projection-cache/src/index.ts | 176 | — | `lastSeq` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/projectioncache/cache.go:329` | packages/session/session-projection-cache/src/index.ts | 200-219 | — | `Observe` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/projectioncache/cache.go:370` | packages/session/session-projection-cache/src/index.ts | 225-229 | — | `Detach` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/projectioncache/cache.go:392` | packages/session/session-projection-cache/src/index.ts | 231-237 | — | `Close` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/projectioncache/cache.go:414` | packages/session/session-projection-cache/src/index.ts | 216-218 | — | `onInterval` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/projectioncache/cache.go:431` | packages/session/session-projection-cache/src/index.ts | 240-251 | — | `writeSoft` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/projectioncache/cache.go:484` | packages/session/session-projection-cache/src/index.ts | 273-280 | — | `putSoft` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `session/projectioncache/cache.go:497` | packages/session/session-projection-cache/src/index.ts | 176 | — | `lastSeq` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/projectioncache/record.go:19` | packages/session/session-projection-cache/src/spec.ts | 67 | — | `DomainName` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/projectioncache/record.go:24` | packages/session/session-projection-cache/src/spec.ts | 68 | — | `DomainVersion` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `session/projectioncache/record.go:32` | packages/session/session-projection-cache/src/spec.ts | 69 | — | `TableName` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2508,7 +2533,7 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `sessionquery/corpus.go:482` | packages/session-query/session-query/src/corpus.ts | 299-301 | — | `compareRecords` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sessionquery/engine.go:25` | packages/session-query/session-query/src/index.ts | 81-127 | — | `Searcher` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sessionquery/engine.go:78` | packages/session-query/session-query/src/index.ts | 87-105 | — | `Config` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
-| `sessionquery/engine.go:289` | packages/session-query/session-query/src/index.ts | 347-356 | — | `checkWindow` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sessionquery/engine.go:294` | packages/session-query/session-query/src/index.ts | 347-356 | — | `checkWindow` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sessionquery/filters.go:302` | packages/session-query/session-query/src/filters.ts | 209-225 | — | `assertAllowed` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sessionquery/querytool/access.go:190` | packages/session-query/tool-session-query/src/workspace-access.ts | 148 | — | `untitledText` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sessionquery/querytool/boundary.go:18` | packages/session-query/tool-session-query/src/service-boundary.ts | 14-17 | — | `safeFailure` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2537,9 +2562,9 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `sessionquery/querytool/tools.go:120` | packages/session-query/tool-session-query/src/input.ts | 54 | — | `availabilityNames` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sessionquery/querytool/tools.go:131` | packages/session-query/tool-session-query/src/input.ts | 64 | — | `surfaceNames` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `sessionquery/querytool/tools.go:255` | packages/session-query/tool-session-query/src/index.ts | 66-122 | — | `definitions` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sessionquery/tracing.go:148` | packages/session-query/session-query/src/tracing.ts | 128-146 | — | `traceAncestors` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sessionquery/tracing.go:171` | packages/session-query/session-query/src/tracing.ts | 148-156 | — | `groupChildren` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `sessionquery/tracing.go:277` | packages/session-query/session-query/src/tracing.ts | 66-72 | — | `eventAtSeq` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sessionquery/tracing.go:150` | packages/session-query/session-query/src/tracing.ts | 128-146 | — | `traceAncestors` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sessionquery/tracing.go:173` | packages/session-query/session-query/src/tracing.ts | 148-156 | — | `groupChildren` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `sessionquery/tracing.go:279` | packages/session-query/session-query/src/tracing.ts | 66-72 | — | `eventAtSeq` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/invariant_test.go:150` | packages/settings/settings/tests/invariant.spec.ts | 18-27 | — | `TestInvariantCatchesACommitAfterTheServiceIsGone` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/json.go:104` | packages/settings/settings/src/index.ts | 200-202 | — | `PathOpKind` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/json_test.go:16` | packages/settings/settings/tests/settings.spec.ts | 518-528 | — | `TestCloneJSONShapedDetachesAndNormalizes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2549,7 +2574,7 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `settings/json_test.go:202` | packages/settings/settings/tests/settings.spec.ts | 845-900 | — | `TestApplyPathOpEditsOnePlace` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/json_test.go:278` | packages/settings/settings/tests/settings.spec.ts | 894-900 | — | `TestApplyPathOpRefusesANonObjectAtTheSectionRoot` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/memory_backend_test.go:25` | packages/settings/settings/tests/memory.ts | 11-31 | — | `memoryBackend` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `settings/memory_backend_test.go:44` | packages/settings/settings/tests/memory.ts | 15 | — | `persistedCall` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `settings/memory_backend_test.go:51` | packages/settings/settings/tests/memory.ts | 15 | — | `persistedCall` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/provider.go:21` | packages/settings/settings/src/index.ts | 388-423 | — | `PersistenceBackend` | 裁决表 |  | 锚点符号在该上游文件里找不到 |
 | `settings/provider.go:170` | packages/settings/settings/src/types.ts | 20-35 | — | `UpdatedListener` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/provider.go:181` | packages/settings/settings/src/types.ts | 37-48 | — | `DocumentListener` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2585,11 +2610,11 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `settings/provider_test.go:803` | packages/settings/settings/tests/settings.spec.ts | 937-966 | — | `TestExpectedRevisionRefusesAStaleWrite` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/provider_test.go:843` | packages/settings/settings/tests/settings.spec.ts | 333-343 | — | `TestConcurrentUpdatesSerializeSoNeitherPatchIsLost` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/provider_test.go:881` | packages/settings/settings/tests/settings.spec.ts | 856-866 | — | `TestMutateReadsTheSectionAtTheFrontOfTheQueue` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `settings/provider_test.go:917` | packages/settings/settings/tests/settings.spec.ts | 676-685 | — | `TestWatchStopsAfterItsDisposerRuns` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `settings/provider_test.go:961` | packages/settings/settings/tests/settings.spec.ts | 344-355 | — | `TestAThrowingObserverIsContainedAndEveryOtherOneStillRuns` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `settings/provider_test.go:1009` | packages/settings/settings/tests/settings.spec.ts | 323-332 | — | `TestAnInvariantCodedFailurePropagatesAfterEveryObserverRan` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `settings/provider_test.go:1051` | packages/settings/settings/tests/settings.spec.ts | 443-460 | — | `TestCloseDrainsInFlightWritesAndRejectsLaterOnes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `settings/provider_test.go:1089` | packages/settings/settings/tests/settings.spec.ts | 404-442 | — | `TestAWriteQueuedBehindAnUnregistrationIsRejected` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `settings/provider_test.go:927` | packages/settings/settings/tests/settings.spec.ts | 676-685 | — | `TestWatchStopsAfterItsDisposerRuns` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `settings/provider_test.go:971` | packages/settings/settings/tests/settings.spec.ts | 344-355 | — | `TestAThrowingObserverIsContainedAndEveryOtherOneStillRuns` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `settings/provider_test.go:1019` | packages/settings/settings/tests/settings.spec.ts | 323-332 | — | `TestAnInvariantCodedFailurePropagatesAfterEveryObserverRan` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `settings/provider_test.go:1061` | packages/settings/settings/tests/settings.spec.ts | 443-460 | — | `TestCloseDrainsInFlightWritesAndRejectsLaterOnes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `settings/provider_test.go:1106` | packages/settings/settings/tests/settings.spec.ts | 404-442 | — | `TestAWriteQueuedBehindAnUnregistrationIsRejected` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/redact.go:87` | packages/settings/settings/src/redact.ts | 50-92 | — | `walkRedaction` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/redact.go:143` | packages/settings/settings/src/redact.ts | 57-72 | — | `walkStruct` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `settings/redact_test.go:27` | packages/settings/settings/tests/redact.spec.ts | 9-18 | — | `redactAdapter` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2726,12 +2751,6 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `storage/domain/spec_test.go:144` | packages/storage/storage-domain/src/spec.ts | 100-112 | — | `TestDescriptorProjectsTheSpecOntoTheBackend` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `storage/domain/spec_test.go:179` | packages/storage/storage-domain/src/spec.ts | 58-65 | — | `TestEncodingRefusesAValueOfTheWrongType` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `storage/domain/spec_test.go:225` | packages/storage/storage-domain/src/spec.ts | 91-96 | — | `TestAGlobalInitialThatCannotBeMarshalledIsRefused` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `storage/postgres/backend.go:66` | packages/storage/storage-sqlite/src/index.ts | 64-73 | — | `Open` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `storage/postgres/backend.go:129` | packages/storage/storage-sqlite/src/index.ts | 75-123 | — | `Open` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `storage/postgres/backend.go:188` | packages/storage/storage-sqlite/src/index.ts | 98-123 | — | `materialize` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `storage/postgres/schema.go:19` | packages/storage/storage-sqlite/src/schema.ts | 14-20 | — | `SchemaVersion` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `storage/postgres/schema.go:74` | packages/storage/storage-sqlite/src/schema.ts | 52-108 | — | `ensureLayout` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `storage/postgres/unit.go:21` | packages/storage/storage-sqlite/src/unit.ts | 27-42 | — | `kvUnit` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `storage/registry.go:71` | packages/storage/storage/src/registry.ts | 31-36 | — | `unregister` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `storage/storage.go:85` | packages/storage/storage/src/index.ts | 69-74 | — | `unmount` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `storage/storage_test.go:55` | packages/storage/storage/tests/registry.spec.ts | 9-18 | — | `TestRegistryRegistersResolvesAndDisposes` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2834,8 +2853,8 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 | `subagent/subagent/listchildren.go:68` | packages/subagent/subagent/src/list-children.ts | 80-83 | — | `DiagnosticUnsupported` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `subagent/subagent/listchildren.go:77` | packages/subagent/subagent/src/list-children.ts | 44-92 | — | `SubagentListEntry` | 裁决表+路径一致 |  | 锚点符号在该上游文件里找不到 |
 | `subagent/subagent/listchildren.go:173` | packages/subagent/subagent/src/list-children.ts | 246 | — | `coldRead` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `subagent/subagent/listchildren.go:501` | packages/subagent/subagent/src/list-children.ts | 284-286 | — | `servedIdentity` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
-| `subagent/subagent/listchildren.go:556` | packages/subagent/subagent/src/list-children.ts | 398-403 | — | `listingCancelled` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `subagent/subagent/listchildren.go:502` | packages/subagent/subagent/src/list-children.ts | 284-286 | — | `servedIdentity` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
+| `subagent/subagent/listchildren.go:557` | packages/subagent/subagent/src/list-children.ts | 398-403 | — | `listingCancelled` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `subagent/subagent/messagesource.go:25` | packages/subagent/subagent/src/continuation.ts | 59 | — | `CoordinatorPlugin` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `subagent/subagent/messagesource.go:29` | packages/subagent/subagent/src/continuation.ts | 67 | — | `ReportPlugin` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
 | `subagent/subagent/messagesource.go:33` | packages/subagent/subagent/src/continuation.ts | 83 | — | `SettledPlugin` | Go 声明名 |  | 锚点是拿 Go 声明名硬凑的，找不到多半只说明这个名字上游没有对应物 |
@@ -2988,7 +3007,7 @@ DRIFT 里有 **413** 条的备注是「引的范围落在算出的范围之内�
 按要求只给数量，不逐条列。
 
 - `AMBIGUOUS`：151 条——同名声明在该文件里出现多次，定不了
-- `NO_ANCHOR`：577 条——判不出锚点（多为整段溯源、结构体字段上的注释）
-- `CONTAINS`：82 条——引的范围完全包含算出来的（文件头部那种整体溯源，不算错）
-- `OK`：919 条——引的范围和算出来的一致
+- `NO_ANCHOR`：589 条——判不出锚点（多为整段溯源、结构体字段上的注释）
+- `CONTAINS`：83 条——引的范围完全包含算出来的（文件头部那种整体溯源，不算错）
+- `OK`：953 条——引的范围和算出来的一致
 

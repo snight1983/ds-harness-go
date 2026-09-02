@@ -160,7 +160,7 @@ func TestRegisterProjectionPlugsIntoTheRegistry(t *testing.T) {
 				`"maxGoalRounds":3},"roundsStarted":0,"createdAt":10,"updatedAt":10,"extra":1}`,
 		),
 	}}
-	if _, err := registry.Restore(broken, view.Events(), 0); err == nil {
+	if _, err := registry.Restore(broken, view.Events(), 0, 0); err == nil {
 		t.Fatal("一行多带了字段的检查点本该把这次冷读整个拒掉")
 	}
 

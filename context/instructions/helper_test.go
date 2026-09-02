@@ -269,10 +269,6 @@ func chunksOf(content string, size int) iter.Seq[string] {
 	}
 }
 
-func (f *fakeFS) ProcessPath(fs.Target) string {
-	panic("instructions 的用例不该用到 ProcessPath")
-}
-func (f *fakeFS) FileURL(fs.Target) string { panic("instructions 的用例不该用到 FileURL") }
 func (f *fakeFS) Contains(fs.Target, fs.Target) bool {
 	panic("instructions 的用例不该用到 Contains")
 }

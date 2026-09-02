@@ -8,13 +8,13 @@
 flowchart TB
     Session["活会话事件"] --> Coordinator["session/persistence Coordinator"]
     Coordinator --> Persistence["session/persistence Backend"]
-    Persistence --> SessionBackend["persistence.Store / Backend\n由宿主实现"]
+    Persistence --> SessionBackend["datastore/sessionstore\n或宿主实现"]
 
     State["设置等运行时领域数据"] --> Hub["storage.Storage"]
     Hub --> Domain["storage/domain"]
     Domain --> Backend["storage KV Backend"]
     Backend --> Contract["storagetest 测试实现"]
-    Backend --> Postgres["storage/postgres"]
+    Backend --> KVStore["datastore/kvstore"]
 
     Runtime["上下文、工具、协议"] --> FS["fs.FileSystem"]
     FS --> Object["fs/objectstore"]
@@ -36,7 +36,9 @@ flowchart TB
 - 严格按“介质提交、更新内存、发布事件”的顺序完成一次变更。
 - 统一处理不存在、类型错误、格式版本不匹配和损坏介质等稳定错误。
 
-`storage/postgres` 是生产后端之一，负责 schema、事务和 revision 比较。接口不要求宿主使用 PostgreSQL；其他实现应通过 `storage/storagetest` 的契约测试。
+`datastore/kvstore` 是生产后端之一。接口不要求宿主使用关系数据库；其他实现应通过 `storage/storagetest` 的契约测试。
+
+本模块**不知道**下面是什么介质，也不该知道：schema、事务、连接池这些词一个都不出现在 `storage` 这棵树里，全在 [持久化抽象层](datastore.md) 底下，界线由 `tools/dbcheck` 把着。
 
 ## 会话持久化
 
@@ -64,7 +66,7 @@ sequenceDiagram
 - 存档 revision 用于判断同一份物理日志在两次观察之间是否变化。
 - 写入失败必须返回协调方，不能只记录日志后假装提交成功。
 
-`session/persistence.Backend` 与 `storage.Backend` 是两条不同接口。当前 `storage/postgres` 实现的是通用 KV Backend，不会自动成为会话持久化后端；宿主需要提供 `session/persistence.Backend` 或直接实现完整 `Store`。使用 Backend 时可以复用内置 Coordinator，但具体介质和顶层接线仍由宿主负责。
+`session/persistence.Backend` 与 `storage.Backend` 是两条不同接口，各有各的适配层：`datastore/kvstore` 填通用 KV 那条，`datastore/sessionstore` 填会话这条。填了一条不等于另一条也有了，宿主也可以自己实现 `session/persistence.Backend` 或完整 `Store`。使用 Backend 时可以复用内置 Coordinator，但具体介质和顶层接线仍由宿主负责。
 
 ## 文件系统
 
@@ -117,8 +119,9 @@ sequenceDiagram
 |---|---|
 | `storage/backend.go`、`storage/storage.go` | 通用 Backend 契约与错误语义 |
 | `storage/domain/` | 领域 Facility、串行提交和领域事件 |
-| `storage/postgres/` | PostgreSQL 实现与 schema |
 | `storage/storagetest/` | Backend 一致性测试套件 |
+| `datastore/kvstore/` | 把 KV Backend 接到持久化抽象层 |
+| `datastore/sessionstore/` | 把会话 Backend 接到持久化抽象层 |
 | `session/persistence/` | 会话 Backend/Store、Coordinator、准备池、修复和写入协调 |
 | `fs/` | 执行世界文件接口、路径与策略 |
 | `fs/objectstore/` | 对象存储文件实现 |
@@ -127,4 +130,4 @@ sequenceDiagram
 
 ## 深入阅读
 
-[文件系统](filesystem.md) · [附件与图片](attachment.md) · [凭据](credentials.md) · [大结果外置](spill.md)
+[持久化抽象层](datastore.md) · [文件系统](filesystem.md) · [附件与图片](attachment.md) · [凭据](credentials.md) · [大结果外置](spill.md)

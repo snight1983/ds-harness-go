@@ -257,7 +257,7 @@ Go 仓库明确不执行任意代码、不提供沙箱或本机子进程，因�
 | 顶层裁决代替方法验收 | 旧表没有成员行 | 完整性门禁不足 |
 | 模块各自实现但不接线 | Agent Loop 与 Coordinator 接口冲突 | 实质阻断 |
 | 把生产介质留给宿主 | 无会话 Backend | 合理边界，但产品闭环未完成 |
-| 用 panic 表达可选能力缺失 | `fs/objectstore.ProcessPath`、`FileURL` 必定 panic | 接口能力表达不安全 |
+| ~~用 panic 表达可选能力缺失~~（已裁决） | 原 `fs/objectstore.ProcessPath`、`FileURL` 必定 panic | 已改：两个方法移进可选接缝 `fs.OSPathFileSystem`，objectstore 不实现它，调用方类型断言拿 error 而不是崩溃 |
 | 只提供内存态示例 | minimalhost 不含恢复和协议 | 示例有价值，但不足以证明生产嵌入 |
 | 不做性能验证 | 0 个 benchmark | 无法声明性能成熟 |
 

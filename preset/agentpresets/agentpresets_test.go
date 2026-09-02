@@ -26,7 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -34,31 +34,66 @@ import (
 
 	"github.com/snight1983/ds-harness-go/core/scope"
 	"github.com/snight1983/ds-harness-go/preset/agentpresets"
+	"github.com/snight1983/ds-harness-go/preset/presetstore/localdir"
 	"github.com/snight1983/ds-harness-go/session"
 )
+
+// store 是这些用例走的那份预设存储：一棵真的本地目录树。
+//
+// 不摆一份内存假货，是因为这些用例守的正好是「一份预设是它那个目录」这件事——
+// 子目录跟不跟过去、断链跳不跳、一次失败的复制留不留东西——而一份照着我对这道缝
+// 的理解写出来的假货，只会守住那份理解本身。
+var store = localdir.New()
+
+// presetRoot 造一个空的预设根，交出这道缝上那种**斜杠分隔**的路径。
+//
+// [testing.T.TempDir] 在 Windows 上给的是反斜杠，而 [agentpresets.Store] 那条约定
+// 是斜杠（见 store.go），所以进包之前先翻一次。
+func presetRoot(t *testing.T) string {
+	t.Helper()
+	return filepath.ToSlash(t.TempDir())
+}
 
 // writePreset 在 root 底下摆出一份预设目录，composition 是它那份组合文件的内容。
 //
 // metadata 为空串时不写 preset.yml——一份靠复制别人建出来的预设正是这样。
 func writePreset(t *testing.T, root, id, composition, metadata string) string {
 	t.Helper()
-	dir := filepath.Join(root, id)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	ctx := context.Background()
+	dir := path.Join(root, id)
+	if err := store.MakeDir(ctx, dir); err != nil {
 		t.Fatalf("建不出预设目录：%v", err)
 	}
 	if composition != "" {
-		path := filepath.Join(dir, agentpresets.CompositionFile)
-		if err := os.WriteFile(path, []byte(composition), 0o600); err != nil {
+		if err := store.WriteFile(ctx, path.Join(dir, agentpresets.CompositionFile), []byte(composition), false); err != nil {
 			t.Fatalf("写不了组合文件：%v", err)
 		}
 	}
 	if metadata != "" {
-		path := filepath.Join(dir, agentpresets.MetadataFile)
-		if err := os.WriteFile(path, []byte(metadata), 0o600); err != nil {
+		if err := store.WriteFile(ctx, path.Join(dir, agentpresets.MetadataFile), []byte(metadata), false); err != nil {
 			t.Fatalf("写不了元数据：%v", err)
 		}
 	}
 	return dir
+}
+
+// rewriteComposition 改掉一份已经摆好的预设那份组合文件的内容。
+func rewriteComposition(t *testing.T, dir, composition string) {
+	t.Helper()
+	file := path.Join(dir, agentpresets.CompositionFile)
+	if err := store.WriteFile(context.Background(), file, []byte(composition), false); err != nil {
+		t.Fatalf("改不了组合文件：%v", err)
+	}
+}
+
+// present 判存储上那条路径此刻有没有东西。
+func present(t *testing.T, at string) bool {
+	t.Helper()
+	_, found, err := store.Stat(context.Background(), at)
+	if err != nil {
+		t.Fatalf("看不了 %s：%v", at, err)
+	}
+	return found
 }
 
 // countingComposer 造一个记下自己被装了几次、被摘了几次的组装器。
@@ -90,14 +125,14 @@ func findPreset(t *testing.T, presets []agentpresets.Preset, id string) agentpre
 }
 
 func TestABrokenPresetStaysOnTheRosterCarryingItsReason(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "good", "- name: demo\n", "")
 	// 目录在、组合文件不在：这个目录仍旧占着 id。
 	writePreset(t, root, "ghost", "", "")
 	writePreset(t, root, "torn", "name: demo\n", "")
 	writePreset(t, root, "garbled", "- name: demo\n  config: [\n", "")
 
-	presets, err := agentpresets.DiscoverPresets([]agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}})
+	presets, err := agentpresets.DiscoverPresets(context.Background(), store, []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}})
 	if err != nil {
 		t.Fatalf("发现失败：%v", err)
 	}
@@ -119,14 +154,14 @@ func TestABrokenPresetStaysOnTheRosterCarryingItsReason(t *testing.T) {
 }
 
 func TestADirectoryWhoseNameNoCopyCouldClaimIsNotAPresetSlot(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "kept", "- name: demo\n", "")
 	// 大写、下划线、点开头：没有任何副本能取到这些名字，所以它们什么都不挡。
 	writePreset(t, root, ".DS_Store_dir", "", "")
 	writePreset(t, root, "Upper", "", "")
 	writePreset(t, root, "under_score", "", "")
 
-	presets, err := agentpresets.DiscoverPresets([]agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}})
+	presets, err := agentpresets.DiscoverPresets(context.Background(), store, []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}})
 	if err != nil {
 		t.Fatalf("发现失败：%v", err)
 	}
@@ -136,8 +171,8 @@ func TestADirectoryWhoseNameNoCopyCouldClaimIsNotAPresetSlot(t *testing.T) {
 }
 
 func TestAMissingRootSuppliesNoPresetsRatherThanFailing(t *testing.T) {
-	presets, err := agentpresets.DiscoverPresets([]agentpresets.Root{
-		{Path: filepath.Join(t.TempDir(), "never-written"), Trust: agentpresets.TrustUser},
+	presets, err := agentpresets.DiscoverPresets(context.Background(), store, []agentpresets.Root{
+		{Path: path.Join(presetRoot(t), "never-written"), Trust: agentpresets.TrustUser},
 	})
 	if err != nil {
 		t.Fatalf("一个不存在的根不该报错：%v", err)
@@ -148,13 +183,13 @@ func TestAMissingRootSuppliesNoPresetsRatherThanFailing(t *testing.T) {
 }
 
 func TestDeclaredOrderSortsAheadAndTheRestFallBackToId(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "zulu", "- name: demo\n", "order: 1\n")
 	writePreset(t, root, "alpha", "- name: demo\n", "")
 	writePreset(t, root, "bravo", "- name: demo\n", "")
 	writePreset(t, root, "mike", "- name: demo\n", "order: 0\n")
 
-	presets, err := agentpresets.DiscoverPresets([]agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}})
+	presets, err := agentpresets.DiscoverPresets(context.Background(), store, []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}})
 	if err != nil {
 		t.Fatalf("发现失败：%v", err)
 	}
@@ -169,11 +204,11 @@ func TestDeclaredOrderSortsAheadAndTheRestFallBackToId(t *testing.T) {
 }
 
 func TestAnEarlierRootWinsADuplicateId(t *testing.T) {
-	shipped, authored := t.TempDir(), t.TempDir()
+	shipped, authored := presetRoot(t), presetRoot(t)
 	writePreset(t, shipped, "shared", "- name: demo\n", "name: Shipped\n")
 	writePreset(t, authored, "shared", "- name: demo\n", "name: Authored\n")
 
-	presets, err := agentpresets.DiscoverPresets([]agentpresets.Root{
+	presets, err := agentpresets.DiscoverPresets(context.Background(), store, []agentpresets.Root{
 		{Path: shipped, Trust: agentpresets.TrustSystem},
 		{Path: authored, Trust: agentpresets.TrustUser},
 	})
@@ -189,12 +224,12 @@ func TestAnEarlierRootWinsADuplicateId(t *testing.T) {
 }
 
 func TestUnreadableDisplayTextIsNeverFatal(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	// 解不动的元数据、以及一份不是映射的元数据：两种都回落到显示 id。
 	writePreset(t, root, "broken-meta", "- name: demo\n", "name: [\n")
 	writePreset(t, root, "list-meta", "- name: demo\n", "- not-a-map\n")
 
-	presets, err := agentpresets.DiscoverPresets([]agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}})
+	presets, err := agentpresets.DiscoverPresets(context.Background(), store, []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}})
 	if err != nil {
 		t.Fatalf("发现失败：%v", err)
 	}
@@ -228,6 +263,7 @@ func newRoster(t *testing.T, root string, composers agentpresets.ComposerSet, de
 		Default:   defaultID,
 		Roots:     []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
 		Composers: composers,
+		Store:     store,
 	}, nil)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
@@ -237,7 +273,7 @@ func newRoster(t *testing.T, root string, composers agentpresets.ComposerSet, de
 }
 
 func TestOnePresetMountsOnceAndEveryAgentNamingItJoinsThatOne(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "demo", "- name: alpha\n- name: beta\n", "")
 	var mounted, disposed int
 	composer := countingComposer(&mounted, &disposed)
@@ -266,7 +302,7 @@ func TestOnePresetMountsOnceAndEveryAgentNamingItJoinsThatOne(t *testing.T) {
 }
 
 func TestARowThatCannotActivateRollsTheWholeMountBack(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "demo", "- name: alpha\n- name: nobody\n", "")
 	var mounted, disposed int
 	roster := newRoster(t, root, agentpresets.ComposerSet{
@@ -292,7 +328,7 @@ func TestARowThatCannotActivateRollsTheWholeMountBack(t *testing.T) {
 }
 
 func TestAFailedMountIsRetriedOnceTheFileIsFixed(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	dir := writePreset(t, root, "demo", "- name: nobody\n", "")
 	var mounted, disposed int
 	roster := newRoster(t, root, agentpresets.ComposerSet{
@@ -303,10 +339,7 @@ func TestAFailedMountIsRetriedOnceTheFileIsFixed(t *testing.T) {
 	if _, err := roster.Mount(ctx, scope.NewKey("first"), "demo"); err == nil {
 		t.Fatal("第一次该失败")
 	}
-	path := filepath.Join(dir, agentpresets.CompositionFile)
-	if err := os.WriteFile(path, []byte("- name: alpha\n"), 0o600); err != nil {
-		t.Fatalf("改不了组合文件：%v", err)
-	}
+	rewriteComposition(t, dir, "- name: alpha\n")
 	if _, err := roster.Mount(ctx, scope.NewKey("second"), "demo"); err != nil {
 		t.Fatalf("文件修好之后该装得上：%v", err)
 	}
@@ -316,7 +349,7 @@ func TestAFailedMountIsRetriedOnceTheFileIsFixed(t *testing.T) {
 }
 
 func TestDisabledRowsAreSkippedAndGroupsFlatten(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "demo", strings.Join([]string{
 		"- name: alpha",
 		"- name: alpha",
@@ -343,7 +376,7 @@ func TestDisabledRowsAreSkippedAndGroupsFlatten(t *testing.T) {
 }
 
 func TestARowsConfigReachesItsComposerAsJSON(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "demo", "- name: alpha\n  config:\n    depth: 3\n    label: hi\n", "")
 	var seen json.RawMessage
 	roster := newRoster(t, root, agentpresets.ComposerSet{
@@ -369,7 +402,7 @@ func TestARowsConfigReachesItsComposerAsJSON(t *testing.T) {
 }
 
 func TestEditingTheCompositionStartsANewGenerationForLaterSessions(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	dir := writePreset(t, root, "demo", "- name: alpha\n", "")
 	var mounted, disposed int
 	roster := newRoster(t, root, agentpresets.ComposerSet{
@@ -383,10 +416,7 @@ func TestEditingTheCompositionStartsANewGenerationForLaterSessions(t *testing.T)
 	}
 	earlyStanding := scope.ParentOf(early)
 
-	path := filepath.Join(dir, agentpresets.CompositionFile)
-	if err := os.WriteFile(path, []byte("- name: alpha\n- name: alpha\n"), 0o600); err != nil {
-		t.Fatalf("改不了组合文件：%v", err)
-	}
+	rewriteComposition(t, dir, "- name: alpha\n- name: alpha\n")
 
 	late := scope.NewKey("late")
 	if _, err := roster.Mount(ctx, late, "demo"); err != nil {
@@ -407,11 +437,11 @@ func TestEditingTheCompositionStartsANewGenerationForLaterSessions(t *testing.T)
 }
 
 func TestABrokenPresetIsRefusedBeforeAnyMountIsAttempted(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "ghost", "", "")
 	roster := newRoster(t, root, agentpresets.ComposerSet{}, "ghost")
 
-	if _, err := roster.Resolve("ghost"); err != nil {
+	if _, err := roster.Resolve(context.Background(), "ghost"); err != nil {
 		t.Fatalf("坏掉的预设照样该解算得出来（删它、读它都要这一行）：%v", err)
 	}
 	_, err := roster.Mount(context.Background(), scope.NewKey("agent"), "ghost")
@@ -424,11 +454,11 @@ func TestABrokenPresetIsRefusedBeforeAnyMountIsAttempted(t *testing.T) {
 }
 
 func TestAnUnknownIdIsADifferentErrorFromAnUnusableComposition(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "demo", "- name: alpha\n", "")
 	roster := newRoster(t, root, agentpresets.ComposerSet{}, "demo")
 
-	_, err := roster.Resolve("nowhere")
+	_, err := roster.Resolve(context.Background(), "nowhere")
 	if !errors.Is(err, agentpresets.ErrUnknownPreset) {
 		t.Fatalf("该是「名册里没这份」，得到 %v", err)
 	}
@@ -442,7 +472,7 @@ func TestAnUnknownIdIsADifferentErrorFromAnUnusableComposition(t *testing.T) {
 }
 
 func TestComposeFromJoinsTheParentsExactGeneration(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	dir := writePreset(t, root, "demo", "- name: alpha\n", "")
 	var mounted, disposed int
 	roster := newRoster(t, root, agentpresets.ComposerSet{
@@ -455,10 +485,7 @@ func TestComposeFromJoinsTheParentsExactGeneration(t *testing.T) {
 		t.Fatalf("父装不上：%v", err)
 	}
 	// 父启动之后组合文件被编辑过：孩子仍然要拿到父那一代，不是新的那一代。
-	path := filepath.Join(dir, agentpresets.CompositionFile)
-	if err := os.WriteFile(path, []byte("- name: alpha\n- name: alpha\n"), 0o600); err != nil {
-		t.Fatalf("改不了组合文件：%v", err)
-	}
+	rewriteComposition(t, dir, "- name: alpha\n- name: alpha\n")
 
 	child := scope.NewKey("child")
 	joined, err := roster.ComposeFrom(child, parent)
@@ -477,7 +504,7 @@ func TestComposeFromJoinsTheParentsExactGeneration(t *testing.T) {
 }
 
 func TestAParentThatJoinedNoPresetYieldsNoJoinAndNoError(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "demo", "- name: alpha\n", "")
 	roster := newRoster(t, root, agentpresets.ComposerSet{}, "demo")
 
@@ -495,7 +522,7 @@ func TestAParentThatJoinedNoPresetYieldsNoJoinAndNoError(t *testing.T) {
 }
 
 func TestRecomposeMovesTheLinkAndLeavesTheOldCompositionForItsOtherAgents(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "one", "- name: alpha\n", "")
 	writePreset(t, root, "two", "- name: alpha\n", "")
 	var mounted, disposed int
@@ -531,7 +558,7 @@ func TestRecomposeMovesTheLinkAndLeavesTheOldCompositionForItsOtherAgents(t *tes
 }
 
 func TestRecomposeToAnUnusablePresetLeavesTheAgentExactlyAsItWas(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "one", "- name: alpha\n", "")
 	writePreset(t, root, "ghost", "", "")
 	var mounted, disposed int
@@ -555,7 +582,7 @@ func TestRecomposeToAnUnusablePresetLeavesTheAgentExactlyAsItWas(t *testing.T) {
 }
 
 func TestRecomposingABareAgentIsItsFirstBind(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "one", "- name: alpha\n", "")
 	var mounted, disposed int
 	roster := newRoster(t, root, agentpresets.ComposerSet{
@@ -572,7 +599,7 @@ func TestRecomposingABareAgentIsItsFirstBind(t *testing.T) {
 }
 
 func TestAColdReaderResolvesTheSameStandingRegistrationsWithNoAgent(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "demo", "- name: alpha\n", "")
 	var mounted, disposed int
 	roster := newRoster(t, root, agentpresets.ComposerSet{
@@ -610,7 +637,7 @@ func (d *fixedDefault) ClearDefault(context.Context) error {
 }
 
 func TestTheUserDefaultLayersOverTheDeploymentDefault(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	writePreset(t, root, "shipped", "- name: alpha\n", "")
 	writePreset(t, root, "chosen", "- name: alpha\n", "")
 	layer := &fixedDefault{value: "chosen"}
@@ -618,6 +645,7 @@ func TestTheUserDefaultLayersOverTheDeploymentDefault(t *testing.T) {
 		Default:   "shipped",
 		Roots:     []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
 		Composers: agentpresets.ComposerSet{},
+		Store:     store,
 	}, layer)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
@@ -634,13 +662,14 @@ func TestTheUserDefaultLayersOverTheDeploymentDefault(t *testing.T) {
 }
 
 func TestCopyingCarriesTheWholeDirectoryAndRewritesTheDisplayText(t *testing.T) {
-	shipped, authored := t.TempDir(), t.TempDir()
+	shipped, authored := presetRoot(t), presetRoot(t)
 	dir := writePreset(t, shipped, "source", "- name: alpha\n", "name: Source\ndescription: why\norder: 2\n")
 	// 一份预设是它那个目录，不是那一个文件：子目录和素材也要跟过去。
-	if err := os.MkdirAll(filepath.Join(dir, "skills", "nested"), 0o700); err != nil {
+	ctx := context.Background()
+	if err := store.MakeDir(ctx, path.Join(dir, "skills", "nested")); err != nil {
 		t.Fatalf("建不出子目录：%v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "skills", "nested", "asset.txt"), []byte("payload"), 0o600); err != nil {
+	if err := store.WriteFile(ctx, path.Join(dir, "skills", "nested", "asset.txt"), []byte("payload"), false); err != nil {
 		t.Fatalf("写不了素材：%v", err)
 	}
 
@@ -651,21 +680,22 @@ func TestCopyingCarriesTheWholeDirectoryAndRewritesTheDisplayText(t *testing.T) 
 			{Path: authored, Trust: agentpresets.TrustUser},
 		},
 		Composers: agentpresets.ComposerSet{},
+		Store:     store,
 	}, nil)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
 	}
 	t.Cleanup(func() { _ = roster.Close(context.Background()) })
 
-	if err := roster.Copy("source", "mine", ""); err != nil {
+	if err := roster.Copy(context.Background(), "source", "mine", ""); err != nil {
 		t.Fatalf("复制失败：%v", err)
 	}
-	copied := filepath.Join(authored, "mine")
-	asset, err := os.ReadFile(filepath.Join(copied, "skills", "nested", "asset.txt"))
+	copied := path.Join(authored, "mine")
+	asset, err := store.ReadFile(ctx, path.Join(copied, "skills", "nested", "asset.txt"))
 	if err != nil || string(asset) != "payload" {
 		t.Fatalf("素材该跟过去：%v / %q", err, asset)
 	}
-	metadata := agentpresets.ReadMetadata(copied)
+	metadata := agentpresets.ReadMetadata(ctx, store, copied)
 	if metadata.Description != "why" {
 		t.Fatalf("说明该留着，得到 %q", metadata.Description)
 	}
@@ -675,7 +705,7 @@ func TestCopyingCarriesTheWholeDirectoryAndRewritesTheDisplayText(t *testing.T) 
 }
 
 func TestACopyWithNothingToPublishWritesNoMetadataFileAtAll(t *testing.T) {
-	shipped, authored := t.TempDir(), t.TempDir()
+	shipped, authored := presetRoot(t), presetRoot(t)
 	writePreset(t, shipped, "source", "- name: alpha\n", "order: 1\n")
 	roster, err := agentpresets.New(agentpresets.Config{
 		Default: "source",
@@ -684,23 +714,23 @@ func TestACopyWithNothingToPublishWritesNoMetadataFileAtAll(t *testing.T) {
 			{Path: authored, Trust: agentpresets.TrustUser},
 		},
 		Composers: agentpresets.ComposerSet{},
+		Store:     store,
 	}, nil)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
 	}
 	t.Cleanup(func() { _ = roster.Close(context.Background()) })
 
-	if err := roster.Copy("source", "mine", ""); err != nil {
+	if err := roster.Copy(context.Background(), "source", "mine", ""); err != nil {
 		t.Fatalf("复制失败：%v", err)
 	}
-	path := filepath.Join(authored, "mine", agentpresets.MetadataFile)
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("什么都没得发布时那个文件该不在，得到 %v", err)
+	if present(t, path.Join(authored, "mine", agentpresets.MetadataFile)) {
+		t.Fatal("什么都没得发布时那个文件该不在")
 	}
 }
 
 func TestACopyNeverOverwritesAndTheIdIsAFence(t *testing.T) {
-	shipped, authored := t.TempDir(), t.TempDir()
+	shipped, authored := presetRoot(t), presetRoot(t)
 	writePreset(t, shipped, "source", "- name: alpha\n", "")
 	writePreset(t, authored, "taken", "- name: alpha\n", "")
 	roster, err := agentpresets.New(agentpresets.Config{
@@ -710,47 +740,48 @@ func TestACopyNeverOverwritesAndTheIdIsAFence(t *testing.T) {
 			{Path: authored, Trust: agentpresets.TrustUser},
 		},
 		Composers: agentpresets.ComposerSet{},
+		Store:     store,
 	}, nil)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
 	}
 	t.Cleanup(func() { _ = roster.Close(context.Background()) })
 
-	if err := roster.Copy("source", "taken", ""); !errors.Is(err, agentpresets.ErrPresetExists) {
+	if err := roster.Copy(context.Background(), "source", "taken", ""); !errors.Is(err, agentpresets.ErrPresetExists) {
 		t.Fatalf("占了的 id 该被拒，得到 %v", err)
 	}
 	// 发出去的那一套也算占着——一个和它同名的用户目录会被它遮蔽。
-	if err := roster.Copy("source", "source", ""); !errors.Is(err, agentpresets.ErrPresetExists) {
+	if err := roster.Copy(context.Background(), "source", "source", ""); !errors.Is(err, agentpresets.ErrPresetExists) {
 		t.Fatalf("发出去的 id 也该算占着，得到 %v", err)
 	}
 	for _, bad := range []string{"../escape", "Upper", "under_score", "", "-lead"} {
-		if err := roster.Copy("source", bad, ""); !errors.Is(err, agentpresets.ErrInvalidPresetID) {
+		if err := roster.Copy(context.Background(), "source", bad, ""); !errors.Is(err, agentpresets.ErrInvalidPresetID) {
 			t.Fatalf("id %q 该被围栏拦下，得到 %v", bad, err)
 		}
 	}
 }
 
 func TestAuthoringOnlyWritesTheUserRoot(t *testing.T) {
-	shipped := t.TempDir()
+	shipped := presetRoot(t)
 	writePreset(t, shipped, "source", "- name: alpha\n", "")
 	roster := newRoster(t, shipped, agentpresets.ComposerSet{}, "source")
 
 	if roster.Authorable() {
 		t.Fatal("没有 user 根时不该说自己能创作")
 	}
-	if err := roster.Copy("source", "mine", ""); !errors.Is(err, agentpresets.ErrPresetNotWritable) {
+	if err := roster.Copy(context.Background(), "source", "mine", ""); !errors.Is(err, agentpresets.ErrPresetNotWritable) {
 		t.Fatalf("没有可写根时复制该被拒，得到 %v", err)
 	}
 	if err := roster.Remove(context.Background(), "source"); !errors.Is(err, agentpresets.ErrPresetNotWritable) {
 		t.Fatalf("发出去的预设不许删，得到 %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(shipped, "source", agentpresets.CompositionFile)); err != nil {
-		t.Fatalf("它该原封不动：%v", err)
+	if !present(t, path.Join(shipped, "source", agentpresets.CompositionFile)) {
+		t.Fatal("它该原封不动")
 	}
 }
 
 func TestRemovingTheUserDefaultClearsItSoTheDeploymentDefaultShowsThrough(t *testing.T) {
-	shipped, authored := t.TempDir(), t.TempDir()
+	shipped, authored := presetRoot(t), presetRoot(t)
 	writePreset(t, shipped, "shipped", "- name: alpha\n", "")
 	writePreset(t, authored, "mine", "- name: alpha\n", "")
 	layer := &fixedDefault{value: "mine"}
@@ -761,6 +792,7 @@ func TestRemovingTheUserDefaultClearsItSoTheDeploymentDefaultShowsThrough(t *tes
 			{Path: authored, Trust: agentpresets.TrustUser},
 		},
 		Composers: agentpresets.ComposerSet{},
+		Store:     store,
 	}, layer)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
@@ -776,18 +808,18 @@ func TestRemovingTheUserDefaultClearsItSoTheDeploymentDefaultShowsThrough(t *tes
 	if got := roster.DefaultID(); got != "shipped" {
 		t.Fatalf("该露出部署自己的默认，得到 %q", got)
 	}
-	if _, err := os.Stat(filepath.Join(authored, "mine")); !os.IsNotExist(err) {
-		t.Fatalf("那个目录该没了，得到 %v", err)
+	if present(t, path.Join(authored, "mine")) {
+		t.Fatal("那个目录该没了")
 	}
 }
 
 func TestReadHandsBackTheCompositionExactlyAsStored(t *testing.T) {
-	root := t.TempDir()
+	root := presetRoot(t)
 	const composition = "- name: alpha\n  config:\n    depth: 3\n"
 	writePreset(t, root, "demo", composition, "")
 	roster := newRoster(t, root, agentpresets.ComposerSet{}, "demo")
 
-	got, err := roster.Read("demo")
+	got, err := roster.Read(context.Background(), "demo")
 	if err != nil {
 		t.Fatalf("读不出来：%v", err)
 	}

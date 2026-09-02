@@ -45,6 +45,16 @@ type CoordinatorOptions struct {
 	// 数量级笔误，而 Go 这边是 [time.Duration]，单位由类型带着，那种笔误
 	// 在类型上就不成立。
 	WriteBatchMaxDelay time.Duration
+
+	// MaxStoredEvents 是一份存档最多留几条事件；零表示用
+	// [DefaultMaxStoredEvents]，负数报错。
+	//
+	// 新增: 上游没有这一条，理由见 [DefaultMaxStoredEvents]。**没有关掉它的
+	// 取值**：「日志的头部会被删」是权威前提（docs/session-log-limit.md 的决定
+	// 第 13 条），留一个关掉的口子就等于留一条谁都可以退回旧前提的路。
+	// 后端实现不了 [TrimmingBackend] 时这个数不起作用，那是介质的能力问题，
+	// 不是一个开关。
+	MaxStoredEvents int
 }
 
 // Sessions 是本层要的那一小片会话存储。
@@ -107,8 +117,23 @@ type CoordinatorDeps struct {
 type sessionState struct {
 	// meta 是这份存档的头。
 	meta session.SessionHeader
-	// cursor 是已经落盘的事件数，也就是下一条要写的 seq。
-	cursor int
+
+	// baseSeq 是这份存档现存最早一条事件的 seq，nextSeq 是下一条要写的 seq。
+	//
+	// 新增: 上游只有一个 `cursor`，注释写的是「已经落盘的事件数，**也就是**下一条
+	// 要写的 seq」——两者相等的前提是日志从 0 起、一条不删。本仓库的日志会从最老的
+	// 一头弹出事件（见 docs/session-log-limit.md），条数和 seq 就此分家：拿条数当 seq
+	// 会把已经落盘的那一段再写一遍，拿 seq 当下标会切错位置，两样都不报错。
+	baseSeq int
+	nextSeq int
+
+	// started 表示上面那两个数已经定下来了。
+	//
+	// 新增: 上游拿 `cursor === 0` 当「还什么都没落盘」。新前提下 0 既可能是一个
+	// 真起点、也可能根本不是起点，「还没定」得单独说，见 docs/session-log-limit.md
+	// 的原则第 3 条。
+	started bool
+
 	// materialized 表示这个身份在后端那边已经真的存在了（不只是一份内存里的意图）。
 	materialized bool
 	// owner 非 nil 表示这个身份此刻归那个活会话所有；nil 表示没有活会话认领它。
@@ -188,11 +213,16 @@ type retirement struct {
 // 纪律是**绝不拿着 mutex 去调 serialize、后端方法、或者 preparations 上的任何
 // 方法**——那三样都会阻塞，攥着这把锁跑会把整个编排器锁死。
 type Coordinator struct {
-	backend            Backend
+	backend Backend
+
+	// trimmer 是同一个后端的更宽视角，弹不动的后端上它是 nil。
+	trimmer TrimmingBackend
+
 	sessions           Sessions
 	vocabulary         session.Vocabulary
 	logger             *slog.Logger
 	writeBatchMaxDelay time.Duration
+	maxStoredEvents    int
 	preparations       *preparations
 
 	// background 是那些**不该被某一次调用取消**的活儿用的 ctx：攒批的写、
@@ -229,6 +259,10 @@ func NewCoordinator(deps CoordinatorDeps, options CoordinatorOptions) (*Coordina
 		return nil, fmt.Errorf(
 			"session/persistence: 攒批时长不能是负数（给的是 %s）",
 			options.WriteBatchMaxDelay)
+	case options.MaxStoredEvents < 0:
+		return nil, fmt.Errorf(
+			"session/persistence: 存档条数上限不能是负数（给的是 %d）",
+			options.MaxStoredEvents)
 	}
 
 	capacity := options.PreparedSessionCacheSize
@@ -239,6 +273,12 @@ func NewCoordinator(deps CoordinatorDeps, options CoordinatorOptions) (*Coordina
 	if delay == 0 {
 		delay = DefaultWriteBatchMaxDelay
 	}
+	maxStoredEvents := options.MaxStoredEvents
+	if maxStoredEvents == 0 {
+		maxStoredEvents = DefaultMaxStoredEvents
+	}
+	// 后端弹不弹得动是它自己的形状，问一次记下来，不用每批写都断言一遍。
+	trimmer, _ := Trimming(deps.Backend)
 	vocabulary := deps.Vocabulary
 	if len(vocabulary.Types()) == 0 {
 		vocabulary = session.CoreVocabulary()
@@ -250,10 +290,12 @@ func NewCoordinator(deps CoordinatorDeps, options CoordinatorOptions) (*Coordina
 
 	coordinator := &Coordinator{
 		backend:            deps.Backend,
+		trimmer:            trimmer,
 		sessions:           deps.Sessions,
 		vocabulary:         vocabulary,
 		logger:             logger,
 		writeBatchMaxDelay: delay,
+		maxStoredEvents:    maxStoredEvents,
 		preparations:       newPreparations(capacity),
 		background:         context.Background(),
 		states:             map[session.SessionID]*sessionState{},

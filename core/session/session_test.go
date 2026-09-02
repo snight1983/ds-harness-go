@@ -88,7 +88,7 @@ func TestASeedAlreadyEndingWithTheMarkerIsNotMarkedAgain(t *testing.T) {
 func TestRestoreTakesOwnershipAndNeedsAStoredHeader(t *testing.T) {
 	header := sessionlog.SessionHeader{Version: sessionlog.FormatVersion, ID: "s", CreatedAt: 7}
 	seed := seedOf(userEvent(t, "你好"))
-	session, err := RestoreSession("s", seed, header, nil)
+	session, err := RestoreSession("s", seed, 0, header, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestRestoreTakesOwnershipAndNeedsAStoredHeader(t *testing.T) {
 		t.Fatalf("恢复没给头该报 ErrInvalidHeader：%v", err)
 	}
 	bad := sessionlog.SessionHeader{Version: sessionlog.FormatVersion, ID: "other"}
-	if _, err := RestoreSession("s", nil, bad, nil); !errors.Is(err, ErrInvalidHeader) {
+	if _, err := RestoreSession("s", nil, 0, bad, nil); !errors.Is(err, ErrInvalidHeader) {
 		t.Fatalf("头里的标识对不上该报错：%v", err)
 	}
 }
@@ -304,11 +304,49 @@ func TestMessageEventShapeValidation(t *testing.T) {
 	}
 }
 
-func TestASeedMustBeContiguousFromZero(t *testing.T) {
-	seed := []sessionlog.Event{{Type: sessionlog.EventTurnStart, Seq: 3, Data: json.RawMessage(`{"turn":1}`)}}
+func TestASeedMustBeContiguousFromTheDeclaredStart(t *testing.T) {
+	// 起点不必是 0——存储会从最老的一头弹掉事件——但从起点起必须一条不缺。
+	seed := seedFrom(3, userEvent(t, "你好"), assistantEvent(t, 1, 1, "在"))
+	seed[1].Seq = 7
+	_, err := NewSession("s", Options{Seed: seed, BaseSeq: 3})
+	if !errors.Is(err, ErrInvalidSeed) || !strings.Contains(err.Error(), "contiguous from 3") {
+		t.Fatalf("诊断是 %v", err)
+	}
+}
+
+func TestASeedIsCheckedAgainstTheDeclaredStartNotItsOwnFirstEvent(t *testing.T) {
+	// 起点是存储那一侧的事实，不从 seed 自己推：推的话第一条就没人验了，
+	// 一份 seq 写错了的 seed 会被读成「起点在那儿」而不是被拒。
+	seed := seedFrom(7, userEvent(t, "你好"))
 	_, err := NewSession("s", Options{Seed: seed})
 	if !errors.Is(err, ErrInvalidSeed) || !strings.Contains(err.Error(), "contiguous from 0") {
 		t.Fatalf("诊断是 %v", err)
+	}
+	if _, err := NewSession("s", Options{BaseSeq: -1}); !errors.Is(err, ErrInvalidSeed) {
+		t.Fatalf("起点为负该报 ErrInvalidSeed：%v", err)
+	}
+}
+
+func TestASeedMayStartAboveZero(t *testing.T) {
+	// 一份被弹掉过头部的日志续跑起来就是这样：起点 500，下一条接着往上长，
+	// 而不是从 len(log) 重新数——那会撞掉已经存下来的 500..501。
+	seed := seedFrom(500, userEvent(t, "你好"), assistantEvent(t, 1, 1, "在"))
+	session, err := NewSession("s", Options{Seed: seed, BaseSeq: 500})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.BaseSeq() != 500 {
+		t.Fatalf("起点是 %d", session.BaseSeq())
+	}
+	if session.FirstLiveSeq() != 502 {
+		t.Fatalf("firstLiveSeq 是 %d", session.FirstLiveSeq())
+	}
+	events := session.Events()
+	if len(events) != 3 || events[2].Type != sessionlog.EventSessionEndSeed || events[2].Seq != 502 {
+		t.Fatalf("日志是 %#v", events)
+	}
+	if got := session.Seq(); got != 503 {
+		t.Fatalf("下一条的 seq 是 %d", got)
 	}
 }
 
@@ -587,6 +625,88 @@ func TestDeriveMessagesReportsAnUnprojectableSurfaceNode(t *testing.T) {
 	}
 	if _, err := session.DeriveMessages(); err == nil {
 		t.Fatal("投影不出来该报错")
+	}
+}
+
+func TestDeriveMessagesWorksOnALogWhoseHeadWasEvicted(t *testing.T) {
+	// 这是那个 bug 的形状：表面节点存的是事件 seq，而 s.log 是从 0 数起的切片。
+	// 修之前这里直接 `s.log[seq]`，一份起点 500、只剩两条的日志会去取 log[500]，
+	// 当场越界 panic——而调用它的是 core/agentloop 每个回合都走的那条路，
+	// 于是「恢复一份被弹过头部的存档、说一句话」等于把整个进程带走。
+	header := sessionlog.SessionHeader{Version: sessionlog.FormatVersion, ID: "s", CreatedAt: 7}
+	seed := seedFrom(500, userEvent(t, "你好"), assistantEvent(t, 1, 1, "在"))
+	session, err := RestoreSession("s", seed, 500, header, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	messages, err := session.DeriveMessages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 2 || messages[0].Role != llm.RoleUser || messages[1].Role != llm.RoleAssistant {
+		t.Fatalf("派生历史是 %#v", messages)
+	}
+
+	// 增量那条路也走一遍：缓存记的是「折到第几个节点」，节点换算成下标同样要减起点。
+	if _, err := session.Append(userEvent(t, "还在么")); err != nil {
+		t.Fatal(err)
+	}
+	messages, err = session.DeriveMessages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) != 3 || messages[2].Role != llm.RoleUser {
+		t.Fatalf("增量之后的派生历史是 %#v", messages)
+	}
+}
+
+func TestDeriveMessagesReportsASurfaceNodeThatTheLogCannotAnswer(t *testing.T) {
+	// 表面和日志本该是同一份东西折出来的两面。硬把起点挪开一位造出分岔，
+	// 验它报错而不是越界——一个在服务端长期跑着的组件不该因为一份坏存档
+	// 把整个进程带走。
+	header := sessionlog.SessionHeader{Version: sessionlog.FormatVersion, ID: "s", CreatedAt: 7}
+	seed := seedFrom(500, userEvent(t, "你好"))
+	session, err := RestoreSession("s", seed, 500, header, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session.baseSeq++
+
+	_, err = session.DeriveMessages()
+	if !errors.Is(err, ErrCorruptLog) {
+		t.Fatalf("表面指着一条日志答不上来的 seq，该报 ErrCorruptLog：%v", err)
+	}
+}
+
+func TestAFailedDeriveDoesNotLeaveHalfACacheBehind(t *testing.T) {
+	// 派生缓存是「折到第几个节点」加上折出来的那串消息，两者必须同进同退。
+	// 半路失败时只把错误抛出去，已经追加进去的那几条会留在缓存里而计数没跟着走，
+	// 下一次调用从同一个节点重折，把它们**再追加一次**。
+	session, err := NewSession("s", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Append(userEvent(t, "你好")); err != nil {
+		t.Fatal(err)
+	}
+	// 第二条在表面上但负载坏掉，投影到它才失败——第一条那时已经进了缓存。
+	if _, err := session.Append(sessionlog.Event{
+		Type:      sessionlog.EventAssistantMessage,
+		Data:      json.RawMessage(`{"turn":1,"step":1,"message":7}`),
+		SurfaceOp: sessionlog.AppendOp{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := session.DeriveMessages(); err == nil {
+		t.Fatal("投影不出来该报错")
+	}
+	if _, err := session.DeriveMessages(); err == nil {
+		t.Fatal("再来一次还是该报同一件事")
+	}
+	if len(session.derived) != 0 || session.derivedNodes != 0 {
+		t.Fatalf("失败之后不该留下半份缓存：derived=%d nodes=%d", len(session.derived), session.derivedNodes)
 	}
 }
 

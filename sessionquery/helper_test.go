@@ -215,6 +215,18 @@ func replacementLog(t *testing.T) []session.Event {
 	}
 }
 
+// evictedHeadLog 是 [replacementLog] 那份日志整体挪到 baseSeq 起的样子：
+// 一份被弹掉过头部的存档，第一条的 seq 不是 0（见 docs/session-log-limit.md 原则第 1 条）。
+func evictedHeadLog(t *testing.T, baseSeq int) []session.Event {
+	t.Helper()
+
+	return []session.Event{
+		userEvent(t, baseSeq, "第一条"),
+		userEvent(t, baseSeq+1, "第二条"),
+		replacingUserEvent(t, baseSeq+2, "盖住前两条", baseSeq, baseSeq+1, baseSeq, baseSeq+1),
+	}
+}
+
 // requireCode 断言一条错误带着预期的分类码。
 func requireCode(t *testing.T, err error, want Code) {
 	t.Helper()

@@ -4,7 +4,7 @@
 
 这五份都不是判决，是**工作队列**：每一条要么改代码、要么在裁决表的 `note` 列写明为什么它是对的。
 
-裁决表 11194 行，其中 PORTED 且填了 `go_ref` 的 1500 条。
+裁决表 11194 行，其中 PORTED 且填了 `go_ref` 的 1482 条。
 
 ## 一、kind 对不上（最强信号）
 
@@ -104,21 +104,6 @@
 | session/session-persistence | `SessionPreparationReservation` | `persistence.preparationReservation` | 非导出的一段：preparationReservation（裁决表已有理由：一份被独占持有的准备成果。不导出：它只在本包内部的写路径和准备路径之间传，对外露出去的是 persistence.Preparation。） |
 | session/session-persistence | `SessionPreparations` | `persistence.preparations` | 非导出的一段：preparations（裁决表已有理由：准备池：冷读共享、独占预留、就绪条目按最近使用淘汰。不导出——它是编排器的内脏。DSH 靠 JS Map 的插入顺序当 LRU 队列，Go 的 map 没有顺序，所以另立一条 order 切片：那个顺序是语义，淘汰谁全看它。另外每一次状态转移都要拿锁，因为 Go 这边池子会被好几条 goroutine 同时碰。） |
 | session/session-persistence | `observeQueuedAbort` | `persistence.awaitShared` | 非导出的一段：awaitShared（裁决表已有理由：等一件共享的活儿干完，中途允许这一个等待方自己走掉而不连累其余人。DSH 是给 AbortSignal 挂监听再拆掉；Go 里就是 select 两个通道，另加一句「两边都就绪时不看运气」——一件已经干完的活儿就是干完了。） |
-| session/session-persistence-jsonl | `HeaderLine` | `jsonl.headerLine` | 非导出的一段：headerLine（裁决表已有理由：头那一行的线上形状。Go 里可选字段一律用指针加 omitempty：「没给」和「给了零值」在这道缝上不是同一件事。） |
-| session/session-persistence-jsonl | `SessionLogScanner` | `jsonl.logScanner` | 非导出的一段：logScanner（裁决表已有理由：一份日志的流式扫描器：逐行解、记住已提交到哪个字节、把一次解析故障推迟到后面真的出现一个 turn/end 时才发作。） |
-| session/session-persistence-jsonl | `encodeSegment` | `jsonl.encodeSegment` | 非导出的一段：encodeSegment（裁决表已有理由：把一段任意文本编成一个单射的、文件系统安全的路径分量，逃逸走 UTF-16 码元的 ~XXXX。会话目录那一层靠它可逆。） |
-| session/session-persistence-jsonl | `ensureDurableDirectoryWin32` | `jsonl.createLeafDirectory` | 非导出的一段：createLeafDirectory（裁决表已有理由：耐久地建出一级目录。POSIX 那条是 mkdir 加父目录 fsync（durable_unix.go），Windows 那条是暂存目录加写穿改名（durable_windows.go）；递归那一层两边共用 jsonl.ensureDurableDirectory。） |
-| session/session-persistence-jsonl | `eventLines` | `jsonl.eventLines` | 非导出的一段：eventLines（裁决表已有理由：把一批事件编成若干行存储记录，packChunks 打开时把连着的增量分块压成一行。读那一侧和这个开关无关。） |
-| session/session-persistence-jsonl | `fromHeaderLine` | `jsonl.fromHeaderLine` | 非导出的一段：fromHeaderLine（裁决表已有理由：把头那一行解回一份会话头。） |
-| session/session-persistence-jsonl | `logPath` | `jsonl.logPath` | 非导出的一段：logPath（裁决表已有理由：一个会话那份存档的完整路径。） |
-| session/session-persistence-jsonl | `logSuffix` | `jsonl.logSuffix` | 非导出的一段：logSuffix（裁决表已有理由：把一档物理编码折成存档的文件名后缀。） |
-| session/session-persistence-jsonl | `parseHeaderMeta` | `jsonl.parseHeaderMeta` | 非导出的一段：parseHeaderMeta（裁决表已有理由：只解头那一行。Go 里「这一行不是一份头」由 jsonl.errHeaderMalformed 这个哨兵表示，于是列举那条路能跳过它、装载那条路能把它翻成一句损坏。） |
-| session/session-persistence-jsonl | `projectDir` | `jsonl.projectDir` | 非导出的一段：projectDir（裁决表已有理由：一个工作目录对应的工程目录在哪。） |
-| session/session-persistence-jsonl | `projectKey` | `jsonl.projectKey` | 非导出的一段：projectKey（裁决表已有理由：把一个工作目录折成一段给人看的工程目录名。它**不是**单射的，只求可读——身份由里面那一层保证。） |
-| session/session-persistence-jsonl | `publishNewFileWin32` | `jsonl.publishNewFile` | 非导出的一段：publishNewFile（裁决表已有理由：把一个已经 fsync 过的暂存对象发布到最终名字上。上游用 koffi 把 kernel32 的 MoveFileExW 引进来；Go 这边走 golang.org/x/sys/windows.MoveFileEx，同一个调用。不带 MOVEFILE_REPLACE_EXISTING：目标已存在意味着盘上撞了号，那必须喊出来。） |
-| session/session-persistence-jsonl | `scanLog` | `jsonl.scanLog` | 非导出的一段：scanLog（裁决表已有理由：一次把整份日志的字节扫成「头 + 已提交事件 + 已提交字节数」。） |
-| session/session-persistence-jsonl | `sessionDir` | `jsonl.sessionDir` | 非导出的一段：sessionDir（裁决表已有理由：一个会话自己的目录在哪。） |
-| session/session-persistence-jsonl | `toHeaderLine` | `jsonl.encodeHeaderLine` | 非导出的一段：encodeHeaderLine（裁决表已有理由：把一份会话头排成头那一行的字节。） |
 | session/session-title | `titleProjectionDefinition` | `sessiontitle.projectionDefinition` | 非导出的一段：projectionDefinition（**裁决表没写理由**） |
 | subagent/subagent | `ActivationObserver` | `subagent.activationObserver` | 非导出的一段：activationObserver（裁决表已有理由：只在包内用，所以不导出。） |
 | subagent/subagent | `ActivationTerminal` | `subagent.activationTerminal` | 非导出的一段：activationTerminal（裁决表已有理由：只在包内用，所以不导出。） |
@@ -221,7 +206,7 @@
 
 ## 四、溯源密度偏低的包
 
-全仓 4336 条 `// 源:` / 119856 行非测试代码 = **36.2 条/千行**。低于 25 条/千行的列在下面。
+全仓 4244 条 `// 源:` / 119331 行非测试代码 = **35.6 条/千行**。低于 25 条/千行的列在下面。
 
 密度低不等于写错了，它只说明这段代码多半是照着记忆写的而不是照着源码写的——**这一份指的是该去哪儿细读，不是哪一行有 bug**。两类包已排除：本仓自造的 `tools/`，以及包文档里写了 `新增:` 且全包零条 `源:` 的包——后者已经在最显眼的地方交代过自己整份是新写的。
 
@@ -229,7 +214,7 @@
 |---|---:|---:|---:|---:|
 | storage/storagetest | 724 | 10 | 1 | 13.8 |
 | llm/llmretry | 1393 | 20 | 24 | 14.4 |
-| session | 3187 | 72 | 37 | 22.6 |
+| session | 3242 | 72 | 40 | 22.2 |
 | llm/replay | 1627 | 38 | 15 | 23.4 |
 | session/stats | 419 | 10 | 5 | 23.9 |
 

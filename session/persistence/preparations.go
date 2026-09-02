@@ -32,6 +32,12 @@ type preparedSource struct {
 	live *coresession.Session
 	// revision 是读到这份前缀时观察到的变更令牌，用来核对它有没有过期。
 	revision Revision
+	// baseSeq 是这份存档现存最早一条事件的 seq，nextSeq 是它之后下一条要写的 seq。
+	//
+	// 新增: 上游这两个数都从 `inspection.events.length` 现算，靠的是「日志从 0 起、
+	// 一条不删」。见 [sessionState.baseSeq]。
+	baseSeq int
+	nextSeq int
 	// sessionLength 是刚恢复出来时那个会话的日志长度，用来判断它有没有被写过。
 	sessionLength int
 	// tornMarker 非 nil 表示存档尾巴上还挂着一截要截掉的坏字节。

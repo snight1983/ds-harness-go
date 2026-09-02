@@ -745,7 +745,7 @@ func TestCoordinator这个身份已经绑在另一个活会话上(t *testing.T) 
 		t.Fatalf("恢复不出占位的会话：%v", err)
 	}
 	h.mutex.Lock()
-	h.states[id] = &sessionState{meta: testHeader(t, id), cursor: 1, materialized: true, owner: other}
+	h.states[id] = &sessionState{meta: testHeader(t, id), nextSeq: 1, started: true, materialized: true, owner: other}
 	h.mutex.Unlock()
 
 	live := h.createLive(t, id, coresession.CreateOptions{})

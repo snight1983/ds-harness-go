@@ -1001,114 +1001,29 @@ prepared.agent.Scope())`），而那一刻会话还没公布、从存储里也�
 
 ---
 
-## session/session-persistence-jsonl —— 物理编码 zstd 这一版不搬（不是整包）
+## session/session-persistence-jsonl —— 整包不落地
 
-和上一节一样，这个包是**移过来的**：`session/persistence/jsonl` 十一个文件，
-明文那一档从建库、追加、崩溃恢复到发布全都在，四个真的动盘上字节的恢复用例
-（`recovery_test.go`）跑着。裁掉的是**一个物理编码档位**，不是这个包。
+这个包曾经是**移过来的**：`session/persistence/jsonl` 十一个文件，明文那一档
+从建库、追加、崩溃恢复到发布全都在，四个真的动盘上字节的恢复用例跑着。
+后来整包删掉了，因此上游这个包的每一条符号在裁决表里都是 `SKIP`。
 
-### 裁掉的是哪些文件
+### 为什么删
 
-| 上游文件 | 行数 | 裁决 |
-|---|---|---|
-| `src/zstd.ts` | 156 | SKIP |
-| `src/zstd-private-decoder.ts` | 178 | SKIP |
-| `src/zstd-public-decoder.ts` | 40 | SKIP |
+两条，都写在 `docs/session-log-limit.md` 里：
 
-合计 374 行，十个符号：`ZstdFrameRange`、`ZstdFrameScan`、`scanZstdFrames`、
-`compressZstdFrame`、`decompressZstdFrame`、`ZstdFrameDecoder`、
-`createZstdFrameDecoder`、`decompressZstdPrefix`、`NodePrivateZstdFrameDecoder`、
-`PublicZstdFrameDecoder`。那张裁决表里这十一行（含 `invariant.ts:28`）指的就是这里。
+1. **服务端不把 event 存在本机目录。** 一会话一份文件要求所有读写者看得见
+   同一块盘，而本仓库的落点是一个多进程的服务端。
+2. **日志要从最老的一头弹出 event（决定第 1、13 条）。** 顺序追加的文件上
+   做不动这件事：弹掉头那一段就得重写整份存档，而那正好是这个后端它自己的崩溃
+   安全性所依赖的那一条「已提交的那一段一个字节都不重写」。
 
-### 它在干什么
+现在本仓库自带的会话介质只有 `datastore/sessionstore` 一个：所有会话装在同一份介质里，
+一个会话就是一条流，弹出是一句走主键的删除，一次写就是一个事务、因此压根不存在断尾。
 
-上游那份日志在 zstd 档下**不是**一段连续压缩流，而是一串各自独立的帧：头一帧，
-之后每一次耐久追加各一帧（`index.ts:634-651` 的 `encodeMaterialization` /
-`encodeEventBatch`）。这个排布是为了「只追加、绝不重写」——一帧写完就再不碰。
-代价是读那一侧要三样明文档根本不需要的东西：
+### 那一档 zstd 物理编码一并没了
 
-1. **帧边界扫描**：`scanZstdFrames` 靠 `ZSTD_MAGIC`（`0xFD2FB528`）逐帧量出
-   `ZstdFrameRange`，因为「第几个字节是一条记录的边界」这个问题在压缩之后
-   不能再靠找 `\n` 回答。
-2. **断帧前缀解码**：一次崩溃可能停在某一帧的中间。`decompressZstdPrefix` 配上
-   `INCOMPLETE_FRAME_OPTIONS` 把那半帧里**已经能解出来的**明文尽量解出来，
-   `index.ts:358` 的 `readZstdPrefix` 再拿它去接明文档那条 `scanLog` 的活。
-   这一条正是本包最要紧的那条不变量（「一次崩溃不许吃掉一整个回合」）在
-   zstd 档下的实现，它换了一套完全不同的算法。
-3. **头帧单独读**：`List` 要便宜——只读头、不解整份日志。明文档下这是
-   `readFirstLine`；zstd 档下要 `readFirstZstdLine`（`index.ts:756`），先量出
-   第一帧的边界、只解那一帧。
-
-再加上两个解码器实现（Node 私有 API 一个、公开 API 一个）之间的择一，
-`NodePrivateZstdFrameDecoder` 存在的唯一理由是复用一块解码缓冲以免每帧一次分配。
-
-### 这一版为什么不做
-
-这三件事没有一件能靠「换一个 Go 压缩库」解决。Go 侧有
-`github.com/klauspost/compress/zstd`，但它给的是「解一个完整帧」和「解一条流」；
-上面那三条要的是**在字节层面替存储格式做决定**：哪儿是帧边界、一个断掉的帧
-该按什么口径部分解、以及怎么在不读整份文件的前提下只解第一帧。那是本包之外的
-一整块新代码，配套的测试也得是新的一套（明文档那四个恢复用例一个都复用不上——
-它们靠的就是「往文件尾巴上直接贴半行文本」这种可读的手法）。
-
-把它塞进这一次移植里，结果是**两个档位同时半成品**：明文那一档已经跑通并且有
-真实崩溃恢复测试，zstd 那一档只会有一个没被断帧场景验过的实现。审查记录里
-第 6 条要的是「提供**至少一个**生产会话 Backend，跑真实崩溃恢复测试」，
-一个验过的档位比两个没验过的档位更贴那句话。
-
-### `jsonl.Compression` 这个类型为什么留着
-
-留着的**不是**一个半成品，是一道拒绝。
-
-`Compression`、`CompressionZstd`、`logSuffix` 这几样在 Go 侧都在
-（`session/persistence/jsonl/path.go`），但 `CompressionZstd` 不能被配上去——
-`NewBackend`（`backend.go:145`）当场回一句「物理编码 %q 本包还没有搬过来」。
-它们真正的用处是让一个**已经装着 `.jsonl.zstd` 的根**被大声拒掉：
-
-- `Backend.oppositeCompression`（`backend.go:805`）在明文档下指向 zstd；
-- `Backend.ensureRootEncoding`（`backend.go:703`）第一次碰这个根时走一遍所有
-  会话目录，看见任何一份 `session.jsonl.zstd` 就 `encodingMismatch`；
-- `Backend.rejectOppositeArtifact`（`backend.go:787`）在落地一份新存档之前
-  再查同一个会话在另一种编码下是否已经存在；
-- `Backend.rejectLegacyFlatArtifact`（`backend.go:770`）连早先那种平铺排布下的
-  `.zstd` 也一并认出来。
-
-去掉这个类型，上面四条判据全都没得写，后果不是「读不了」而是**「读成了一个会话
-都没有」**——一个装着真实历史的 DSH 根会被当成空根，然后一条新会话建在它旁边。
-那是这条裁剪唯一真正危险的失败模式，所以这个类型必须留。
-
-### 因此的可观察差异
-
-两条，都是有意的：
-
-1. **一个 DSH 写出来的 zstd 根，这一版读不了**。它会在第一次 `Load` / `List` /
-   `ReadRaw` 上拿到 `encodingMismatch` 那句拒绝，里面写着「换一个根，或者把编码
-   配成对得上的那一种」——后半句今天还兑现不了，但前半句是真的可操作。
-2. **默认档位和上游相反**。上游 `DEFAULT_COMPRESSION = 'zstd'`（`index.ts:40`），
-   本包 `DefaultCompression = CompressionNone`。也就是说两边**都用默认配置**的时候，
-   写出来的根天生不互认。这一条比第 1 条更容易咬到人，所以
-   `jsonl/doc.go` 的「物理编码」一节和 `DefaultCompression` 的 `新增:` 块里
-   都写着。
-
-盘上占用会变大——同一份日志明文比 zstd 大几倍。这一版不当它是阻断：一份会话日志
-的量级由回合数决定，不由压缩比决定，而真要省盘的部署可以把根放在一个带透明压缩的
-文件系统上。
-
-### 想推翻这条的话
-
-不需要动 `Backend` 的接口，也不需要动 `Coordinator`——这是这条裁剪和上一节
-`ensureMaterialized` 那条的关键区别。要加的东西全在本包里，而且边界很清楚：
-
-1. 一个帧边界扫描器（对 `scanZstdFrames`），单测拿手写的帧头喂它；
-2. 一个断帧前缀解码器（对 `decompressZstdPrefix`），单测要能造出「一帧只写了
-   前 N 个字节」这种输入；
-3. `readPrefix`（`backend.go:381`）里按 `b.compression` 分出 zstd 那一支，
-   接到上面两样上，`tornMarker.truncateTo` 改成量到**上一个完整帧的尾巴**；
-4. `readArtifactHeader`（`backend.go:558`）里只解第一帧；
-5. `encodeMaterialization`（`backend.go:467`）和 `appendLines`（`backend.go:491`）
-   各自改成一帧一次，**注意头和第一批不能合进同一帧**——上游那个方法名下面那句
-   注释说的就是这件事；
-6. 把 `NewBackend` 里那句拒绝删掉。
-
-`recovery_test.go` 那四个用例要按档位跑两遍，其中断尾那两个在 zstd 档下要换一套
-造脏字节的手法（贴半个帧，而不是贴半行文本）。
+上一版这里记的是「裁掉的是一个物理编码档位，不是这个包」，并且为了把一个
+已经装着 `.jsonl.zstd` 的根大声拒掉，特意留着 `Compression` 这个类型。
+整包删掉之后这道拒绝也不存在了，但它防的那个失败模式也跟着没了：
+本仓库再也不会去打开一个 DSH 写出来的本地根，所以也不会把它读成「一个会话都没有」。
+**从 DSH 的本地根迁移历史这件事，本仓库不提供工具。**

@@ -124,30 +124,30 @@ func sortSessionList(entries []sessionListEntry) {
 	})
 }
 
-// sameDirectory 按物理身份比两个存在的目录，读不动的路径按字面比。
+// sameDirectory 判两个工作目录算不算同一个，只看这两个字符串。
 //
 // 源: packages/acp/acp/src/index.ts:526-535
 //
-// 一个已经落档的会话，它的工作目录可能早就不在了。那时退回字面比较——两条都规范化
-// 之后逐字相同就算同一个。
+// 新增: **不碰文件系统。** DSH 那边先走 `node:fs` 的 realpath，解得开就按物理身份比，
+// 解不开才退回字面比较；这条移植最初照抄成了 [path/filepath.EvalSymlinks]。那是一台
+// 机器上跑一个 CLI 才成立的写法：进程就在那台机器上，那个目录就在眼前。
 //
-// 新增: DSH 用 node:fs 的 realpath，Go 这边是 [path/filepath.EvalSymlinks]。两者在
-// 「路径不存在就失败」这一点上一致，所以那条退路的触发条件也一致。字面那一支 DSH 用
-// path.resolve，这里用 [path/filepath.Abs] 加 [path/filepath.Clean]——Abs 自己就带 Clean，
-// 而 resolve 同时做的正是这两件事。
+// 会话存档搬进数据库之后它不成立了。这个字段是**会话头里的一个标签**，判它和另一个
+// 标签相不相等，不该去问跑着这个进程的机器上有没有这么个目录、软链接解不解得开——
+// 同一份存档换台机器读会给出不同的答案，一个已经落档半年、目录早删了的会话续不续
+// 得上要看运维有没有把那个目录留着。服务化之后这两件事都是错的。
+//
+// 于是只剩字面这一支，也就是 DSH 那条退路：两边都 [path/filepath.Clean] 之后逐字比。
+// Clean 是纯字符串函数，不做任何 I/O。相对路径不必在这里操心——ACP 那一侧进得来的
+// cwd 都验过是绝对路径（见 [Bridge.newSession] 和 [Bridge.loadSession] 里的
+// [path/filepath.IsAbs]），存档头那一份由 core/session 的头校验把着。
+//
+// 代价是两条指向同一处的不同路径（软链接、`/tmp` 与 `/private/tmp`）不再算同一个，
+// 客户端得报出当初开会话时那一份。这是有意的：一个能被宿主机文件系统改写答案的判据，
+// 换来的确定性比它挡掉的那点不便值钱。
 func sameDirectory(left, right string) bool {
 	if left == "" {
 		return false
 	}
-	realLeft, leftErr := filepath.EvalSymlinks(left)
-	realRight, rightErr := filepath.EvalSymlinks(right)
-	if leftErr == nil && rightErr == nil {
-		return realLeft == realRight
-	}
-	absLeft, leftErr := filepath.Abs(left)
-	absRight, rightErr := filepath.Abs(right)
-	if leftErr != nil || rightErr != nil {
-		return false
-	}
-	return absLeft == absRight
+	return filepath.Clean(left) == filepath.Clean(right)
 }

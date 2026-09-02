@@ -314,6 +314,56 @@ func TestReadEventCutsABoundedWindowAroundTheTarget(t *testing.T) {
 	}
 }
 
+// TestReadEventCutsTheWindowBySeqOnALogWhoseHeadWasEvicted 把同一套夹取放到一份
+// 起始 seq 不是 0 的日志上。
+//
+// 窗口的两端是 seq，不是下标。按下标夹取的话，贴前边那一档会夹到 0（远在这份
+// 存档的起点之前），切出来的区间起点大于终点，当场 panic。
+func TestReadEventCutsTheWindowBySeqOnALogWhoseHeadWasEvicted(t *testing.T) {
+	t.Parallel()
+
+	const baseSeq = 500
+	events := []session.Event{
+		userEvent(t, baseSeq, "零"),
+		userEvent(t, baseSeq+1, "一"),
+		userEvent(t, baseSeq+2, "二"),
+	}
+	engine := newEngine(t, events)
+
+	cases := map[string]struct {
+		request  EventReadRequest
+		wantFrom int
+		wantTo   int
+	}{
+		"两边都取得到":  {request: EventReadRequest{SessionID: "s1", Seq: baseSeq + 1, Before: 1, After: 1}, wantFrom: baseSeq, wantTo: baseSeq + 2},
+		"前面贴的是起点": {request: EventReadRequest{SessionID: "s1", Seq: baseSeq + 2, Before: 9, After: 0}, wantFrom: baseSeq, wantTo: baseSeq + 2},
+		"后面贴的是末尾": {request: EventReadRequest{SessionID: "s1", Seq: baseSeq, Before: 0, After: 9}, wantFrom: baseSeq, wantTo: baseSeq + 2},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			window, err := engine.ReadEvent(context.Background(), testCase.request)
+			if err != nil {
+				t.Fatalf("读不了：%v", err)
+			}
+			if window.StartSeq != testCase.wantFrom || window.EndSeq != testCase.wantTo {
+				t.Fatalf("窗口边界不对：想要 %d 到 %d，实际 %d 到 %d",
+					testCase.wantFrom, testCase.wantTo, window.StartSeq, window.EndSeq)
+			}
+			if len(window.Events) != testCase.wantTo-testCase.wantFrom+1 ||
+				window.Events[0].Seq != testCase.wantFrom {
+				t.Fatalf("窗口里的事件对不上边界：%+v", window.Events)
+			}
+		})
+	}
+
+	// 被弹掉的那一段：点名一条已经不在的事件，答的是「找不到」（原则第 4 条）。
+	_, err := engine.ReadEvent(context.Background(), EventReadRequest{SessionID: "s1", Seq: baseSeq - 1})
+	requireCode(t, err, CodeEventNotFound)
+}
+
 func TestReadEventRefusesAWindowOutsideTheConfiguredBound(t *testing.T) {
 	t.Parallel()
 

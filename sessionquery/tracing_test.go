@@ -170,6 +170,59 @@ func TestTraceEventRefusesASeqThatIsNotThere(t *testing.T) {
 	}
 }
 
+// TestTracingAddressesBySeqOnALogWhoseHeadWasEvicted 把三个追溯函数放到一份
+// 起始 seq 不是 0 的日志上跑一遍。
+//
+// 起始 seq 是个变量之后，「seq 就是下标」这条不再成立：分类表按下标取会取错人，
+// 表面节点按下标找会找不到（整份日志因此打不开），追溯目标按下标取会越界。
+func TestTracingAddressesBySeqOnALogWhoseHeadWasEvicted(t *testing.T) {
+	t.Parallel()
+
+	const baseSeq = 500
+	events := evictedHeadLog(t, baseSeq)
+
+	records, err := EventRecords("s1", events)
+	if err != nil {
+		t.Fatalf("分类不出来：%v", err)
+	}
+	want := []EventSurface{SurfaceShadowed, SurfaceShadowed, SurfaceCurrent}
+	for index, record := range records {
+		if record.Seq != baseSeq+index || record.Surface != want[index] {
+			t.Fatalf("第 %d 条记录不对：%+v", index, record)
+		}
+	}
+
+	surface, err := CurrentSurfaceEvents("s1", events)
+	if err != nil {
+		t.Fatalf("取不出表面：%v", err)
+	}
+	if len(surface) != 1 || surface[0].Seq != baseSeq+2 {
+		t.Fatalf("当前表面不对：%+v", surface)
+	}
+
+	trace, err := TraceEvent("s1", events, baseSeq)
+	if err != nil {
+		t.Fatalf("追溯不了：%v", err)
+	}
+	if trace.Target.Seq != baseSeq || trace.Target.Surface != SurfaceShadowed {
+		t.Fatalf("目标记录不对：%+v", trace.Target)
+	}
+	if !trace.Shadowed || trace.ReplacedBy != baseSeq+2 {
+		t.Fatalf("直接替换者不对：%+v", trace)
+	}
+	if len(trace.DerivedEventSeqs) != 1 || trace.DerivedEventSeqs[0] != baseSeq+2 {
+		t.Fatalf("派生事件不对：%v", trace.DerivedEventSeqs)
+	}
+
+	// 落在起点之前的那些 seq 是**被弹掉的**那一段：调用方点名一条已经不在的事件，
+	// 答的是「找不到」，不是「日志坏了」（原则第 4 条）。
+	if _, err := TraceEvent("s1", events, baseSeq-1); err == nil {
+		t.Fatal("被弹掉的那一段本该答找不到")
+	} else {
+		requireCode(t, err, CodeEventNotFound)
+	}
+}
+
 func TestTraceEventRefusesALogWhoseSurfaceCannotFold(t *testing.T) {
 	t.Parallel()
 

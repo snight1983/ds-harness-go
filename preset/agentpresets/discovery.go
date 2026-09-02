@@ -7,10 +7,10 @@ package agentpresets
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
@@ -102,10 +102,10 @@ func entryListProblem(node *yaml.Node, at string) string {
 // compositionProblem 说清 path 上那份组合为什么装不了，能装就给空串。
 //
 // 源: packages/preset/agent-presets/src/discovery.ts:86-106
-func compositionProblem(path string) string {
-	content, err := os.ReadFile(path)
+func compositionProblem(ctx context.Context, store Store, file string) string {
+	content, err := store.ReadFile(ctx, file)
 	if err != nil {
-		// 调用方刚刚才 stat 过这个文件；此刻任何读失败——中间被删了、权限——
+		// 调用方刚刚才看过这个文件；此刻任何读失败——中间被删了、权限——
 		// 和解不动是同一个答案。
 		return "the composition file " + CompositionFile + " cannot be read"
 	}
@@ -125,11 +125,11 @@ func compositionProblem(path string) string {
 // isFile 判一条路径上是不是一个存在的常规文件。
 //
 // 源: packages/preset/agent-presets/src/discovery.ts:113-122
-func isFile(path string) bool {
-	info, err := os.Stat(path)
-	// 任何 stat 失败——不在、读不了、断链——都表示这个目录没有摆出一份组合，
+func isFile(ctx context.Context, store Store, file string) bool {
+	entry, found, err := store.Stat(ctx, file)
+	// 任何看不成——不在、读不了、断链——都表示这个目录没有摆出一份组合，
 	// 而那不是错误：这个目录只是不是一份预设。
-	return err == nil && info.Mode().IsRegular()
+	return err == nil && found && entry.Regular
 }
 
 // ScanRoot 扫一个根，找出它下面的预设目录。
@@ -142,34 +142,34 @@ func isFile(path string) bool {
 // 每一个名字能当预设 id 用的目录都是一行名册项——组合缺了或者装不动时带上 Broken。
 // 一个名字在 [IsPresetID] 之外的目录则**跳过**：没有任何副本能取到那个名字，所以它
 // 什么都不挡；而把 `.DS_Store` 那个量级的残渣报成坏掉的预设，只会教会用户无视这个标记。
-func ScanRoot(root Root) ([]Preset, error) {
-	dir := filepath.Clean(root.Path)
-	children, err := os.ReadDir(dir)
+func ScanRoot(ctx context.Context, store Store, root Root) ([]Preset, error) {
+	dir := path.Clean(root.Path)
+	children, found, err := store.List(ctx, dir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, fmt.Errorf("agent-presets: 读不了预设根 %s：%w", dir, err)
 	}
-	found := make([]Preset, 0, len(children))
+	if !found {
+		return nil, nil
+	}
+	presets := make([]Preset, 0, len(children))
 	for _, child := range children {
-		if !child.IsDir() || !IsPresetID(child.Name()) {
+		if !child.Dir || !IsPresetID(child.Name) {
 			continue
 		}
-		directory := filepath.Join(dir, child.Name())
-		path := filepath.Join(directory, CompositionFile)
+		directory := path.Join(dir, child.Name)
+		file := path.Join(directory, CompositionFile)
 		broken := "the composition file " + CompositionFile +
 			" is missing — the directory still occupies the id; delete it or restore the file"
-		if isFile(path) {
-			broken = compositionProblem(path)
+		if isFile(ctx, store, file) {
+			broken = compositionProblem(ctx, store, file)
 		}
 		// 只有展示文字，而且永不致命：一份元数据读不出来的预设照样装得起来，
 		// 它只是显示自己的 id。
-		metadata := ReadMetadata(directory)
-		found = append(found, Preset{
-			ID:          child.Name(),
+		metadata := ReadMetadata(ctx, store, directory)
+		presets = append(presets, Preset{
+			ID:          child.Name,
 			Trust:       root.Trust,
-			Path:        path,
+			Path:        file,
 			Name:        metadata.Name,
 			Description: metadata.Description,
 			Order:       metadata.Order,
@@ -178,13 +178,13 @@ func ScanRoot(root Root) ([]Preset, error) {
 	}
 	// 声明了位次的在前，于是发出去的那一套按能力顺序读；其余回落到 id，
 	// 让创作出来的那些保持稳定。
-	slices.SortFunc(found, func(left, right Preset) int {
+	slices.SortFunc(presets, func(left, right Preset) int {
 		if byOrder := cmp.Compare(orderOf(left), orderOf(right)); byOrder != 0 {
 			return byOrder
 		}
 		return strings.Compare(left.ID, right.ID)
 	})
-	return found, nil
+	return presets, nil
 }
 
 // orderOf 把一个没声明位次的预设折成正无穷，好和声明了的一起比。
@@ -200,11 +200,11 @@ func orderOf(preset Preset) float64 {
 // 源: packages/preset/agent-presets/src/discovery.ts:325-343（discoverPresets）
 //
 // 靠前的根赢下重名的 id。
-func DiscoverPresets(roots []Root) ([]Preset, error) {
+func DiscoverPresets(ctx context.Context, store Store, roots []Root) ([]Preset, error) {
 	seen := make(map[string]struct{}, len(roots)*4)
 	var all []Preset
 	for _, root := range roots {
-		presets, err := ScanRoot(root)
+		presets, err := ScanRoot(ctx, store, root)
 		if err != nil {
 			return nil, err
 		}

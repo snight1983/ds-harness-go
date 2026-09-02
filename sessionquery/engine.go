@@ -122,7 +122,7 @@ func (e *Engine) ReadSession(ctx context.Context, id session.SessionID) (LogSnap
 	if _, err := session.ValidateLog(loaded.Events); err != nil {
 		return LogSnapshot{}, wrap(CodeCorruptSession, err, "会话 %q 的日志重放不过", id)
 	}
-	if _, err := session.FoldSurface(loaded.Events); err != nil {
+	if _, err := session.FoldSurface(loaded.Events, session.LogBaseSeq(loaded.Events)); err != nil {
 		return LogSnapshot{}, wrap(CodeInvalidSurface, err, "会话 %q 的表面折不出来", id)
 	}
 	// loaded 已经是脱离的一份，本方法不再持有它，所以直接交出去，不必再克隆。
@@ -251,14 +251,19 @@ func (e *Engine) ReadEvent(ctx context.Context, request EventReadRequest) (Event
 	if !ok {
 		return EventWindow{}, fail(CodeEventNotFound, "会话 %q 里没有 seq 为 %d 的事件", request.SessionID, request.Seq)
 	}
-	startSeq := max(0, request.Seq-request.Before)
-	endSeq := min(len(loaded.Events)-1, request.Seq+request.After)
+	// 新增: 窗口的两端是 seq，不是下标。DSH 把它们当下标是因为那边日志从 0 起，
+	// 两者恰好相等；本仓库的日志会从最老的一头弹出事件，起始 seq 是个变量
+	// （见 docs/session-log-limit.md 原则第 1、2 条），所以夹取按 seq 做，
+	// 切片的时候当场减起点。
+	baseSeq := session.LogBaseSeq(loaded.Events)
+	startSeq := max(baseSeq, request.Seq-request.Before)
+	endSeq := min(baseSeq+len(loaded.Events)-1, request.Seq+request.After)
 	// loaded 是本次调用专有的一份脱离拷贝，所以窗口直接切它就行。目标事件
 	// 和窗口里的那一条共享同一份负载——DSH 也是同一个对象，行为一致。
 	return EventWindow{
 		Session:  loaded.Header,
 		Target:   target,
-		Events:   loaded.Events[startSeq : endSeq+1],
+		Events:   loaded.Events[startSeq-baseSeq : endSeq-baseSeq+1],
 		StartSeq: startSeq,
 		EndSeq:   endSeq,
 	}, nil

@@ -119,7 +119,7 @@
 | instructions install/projection | `context/instructions` | 加载、作用域、渲染和投影均存在 | 仍有项目根冻结、总读取上限 TODO | 部分等价 |
 | generic storage/domain | `storage` / `storage/domain` | KV 和串行领域写入存在 | 与会话事件 Backend 是不同接口 | 等价但不能替代会话持久化 |
 | PostgreSQL KV | `storage/postgres` | 真实 SQL 实现存在 | 无 DSN 时集成测试跳过，当前覆盖率 5.2% | 待真实验证 |
-| object store filesystem | `fs/objectstore` | 对象读写、列举等存在 | `ProcessPath` / `FileURL` 必定 panic | 部分等价 |
+| object store filesystem | `fs/objectstore` | 对象读写、列举等存在 | `ProcessPath` / `FileURL` 已移出必答接缝，进 `fs.OSPathFileSystem`；对象存储上没有进程路径也没有 file: URI，这里不实现它，调用方断言不过拿 error | 等价（那两个方法在这个后端上不是缺席能力，是不存在的问题） |
 
 ## 9. 总结
 

@@ -12,7 +12,7 @@ import (
 	"github.com/snight1983/ds-harness-go/session"
 )
 
-// 编排层的两个默认策略值。
+// 编排层的三个默认策略值。
 //
 // 源: packages/session/session-persistence/src/coordinator.ts:26-32
 const (
@@ -30,6 +30,14 @@ const (
 	// Go 这边直接是 [time.Duration]——[WriteBehind] 收的就是 Duration，
 	// 单位不必再靠名字里的 Ms 来记。
 	DefaultWriteBatchMaxDelay = 200 * time.Millisecond
+
+	// DefaultMaxStoredEvents 是一份存档最多留几条事件，超了就从**最老**那头丢。
+	//
+	// 新增: 上游没有这一条——它的日志只追加、永不删除，而那正是本仓库推翻掉的
+	// 前提（见 docs/session-log-limit.md 的决定第 1、13 条）。取 1000 是因为
+	// 全量事件的用途是审计而不是恢复：拼给模型的那一串由压缩自己管窗口
+	// （compaction/basic/config.go:17-22），够不够长不取决于这个数。
+	DefaultMaxStoredEvents = 1000
 )
 
 // Backend 是编排层和一个具体介质之间的存储契约：编排要用到的那一小组
@@ -55,6 +63,10 @@ type Backend interface {
 	//
 	// 返回的 Revision 必须标识恰好这些值，而且和 [Backend.ReadStoredRevision]
 	// 用同一套表示。TornMarker 非 nil 当且仅当后面挂着一截要截掉的坏尾巴。
+	//
+	// BaseSeq 必须填：它是这份存档现存最早一条事件的 seq，存档为空时是下一条要写的
+	// seq。不弹出事件的后端填 0，会弹的后端填它当前的起点。见
+	// [StoredPrefix.BaseSeq]。
 	LoadStored(ctx context.Context, id session.SessionID) (StoredPrefix, error)
 
 	// ReadStoredRevision 只读出一个会话当前的变更令牌，不读它的事件日志。
@@ -113,6 +125,10 @@ type SeekableBackend interface {
 	// 顺序那侧的过度拒绝是接受的，代价比把寻址那侧的读放大要小。
 	//
 	// fromSeq 由调用方保证非负。身份不存在时返回 [ErrSessionNotFound]。
+	//
+	// BaseSeq 必须填，而且填的是**整份存档**的起点，不是这一截后缀的起点：
+	// 读的一方要靠它分清「请求的水位早就被弹掉了」和「那一段压根没写过」。
+	// 见 [StoredSuffix.BaseSeq]。
 	LoadStoredFrom(ctx context.Context, id session.SessionID, fromSeq int) (StoredSuffix, error)
 }
 
@@ -140,6 +156,32 @@ type ClosableBackend interface {
 
 	// Close 收掉这个后端占着的东西。
 	Close(ctx context.Context) error
+}
+
+// TrimmingBackend 是一个能从最老那头丢弃事件的后端。
+//
+// 新增: 上游没有这道缝，它的日志只追加、永不删除。本仓库按条数封顶、先进先出
+// （docs/session-log-limit.md 的决定第 1、3、4 条），而决定第 3 条明说这件事
+// 「单独一个接口承担，不揉进现有写入路径」——所以它是一道**独立的可选缝**，
+// 不是 [Backend.AppendBatch] 的一个副作用。写进 AppendBatch 的话，一个只想
+// 追加的调用方就没法不丢东西，而「丢多少」是编排层的策略、不是介质的。
+//
+// 实现不了的后端（比如顺序文件）整条不实现，于是它的存档永远从 0 起。读的一侧
+// 本来就不许假设起点是 0（原则第 1 条），所以两种后端在读那边没有分别。
+type TrimmingBackend interface {
+	Backend
+
+	// TrimBefore 丢掉一个会话里 seq **严格小于** beforeSeq 的那些事件。
+	//
+	// 丢的必须是连续的一头：本包分「被弹掉了」和「日志真坏了」靠的就是
+	// 「现存的是一整段」这条（决定第 15 条），从中间挖走一条会让这两种再也分不开。
+	//
+	// 它是幂等的：那一段已经不在了就什么也不做，不是错。beforeSeq 越过存档末尾
+	// 会把它整个清空，这也**不是**错——那时候起点由「下一条要写的 seq」回答，
+	// 见 [StoredPrefix.BaseSeq]。
+	//
+	// 身份不存在时返回 [ErrSessionNotFound]。beforeSeq 由调用方保证非负。
+	TrimBefore(ctx context.Context, id session.SessionID, beforeSeq int) error
 }
 
 // Seekable 问一个后端能不能按 seq 寻址。
@@ -170,6 +212,12 @@ func Closable(backend Backend) (ClosableBackend, bool) {
 	return closable, ok
 }
 
+// Trimming 问一个后端能不能从最老那头丢事件。
+func Trimming(backend Backend) (TrimmingBackend, bool) {
+	trimming, ok := backend.(TrimmingBackend)
+	return trimming, ok
+}
+
 // LocateWith 用一个后端（如果它认路）定位一份头对应的存档。
 //
 // 新增: 「有位置就带上、没有就算了」这个动作在造 [FormatUnsupportedError]
@@ -182,10 +230,11 @@ func LocateWith(backend Backend, meta session.SessionHeader) (Location, bool) {
 	return locating.Locate(meta)
 }
 
-// 这三行钉住「更宽的接口真的更宽」：哪天有人从 [Backend] 上删掉一个方法、
-// 或者把三个可选接口之一改得不再包含它，这里当场编译不过。
+// 这四行钉住「更宽的接口真的更宽」：哪天有人从 [Backend] 上删掉一个方法、
+// 或者把四个可选接口之一改得不再包含它，这里当场编译不过。
 var (
 	_ Backend = SeekableBackend(nil)
 	_ Backend = LocatingBackend(nil)
 	_ Backend = ClosableBackend(nil)
+	_ Backend = TrimmingBackend(nil)
 )

@@ -1,4 +1,4 @@
-// 本文件验路径与对象键之间的换算，以及那两个 panic 的方法。
+// 本文件验路径与对象键之间的换算，以及这个后端认下了哪几道接缝。
 //
 // 这一组**一次网络都不发**：换算是纯函数，这正是把它单独抽出来的意义。
 
@@ -6,7 +6,6 @@ package objectstore
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/fs"
@@ -288,38 +287,20 @@ func TestContainsComparesWholeSegments(t *testing.T) {
 	}
 }
 
-// TestProcessPathAndFileURLPanic 验那两个方法真的会炸，而且炸的时候说得清楚。
+// TestTheStoreDoesNotClaimTheOSPathSeam 钉住那条裁决：这个后端**不实现**
+// [fs.OSPathFileSystem]。
 //
-// 用例把这件事记下来，是因为「它 panic」在这里是**有意的契约**而不是没写完：
-// 对象存储上没有子进程能打开的路径，也没有 file: URI。返回一个假的串
-// 会让调用方在离这里很远的地方失败，现场只剩一条「找不到文件」。
-func TestProcessPathAndFileURLPanic(t *testing.T) {
+// 之前这两个方法在这里是 panic 的实现，用例验的是「它真的会炸」。那条路是坏的：
+// 「这个后端没有这项能力」是一件静态的事实，而 panic 把它推迟到运行期才说，
+// 还是用一个能带走整个进程的方式说——这个包嵌在长期运行的服务里跑。
+//
+// 现在这件事由类型系统说：断言不过就是「这条路在这个部署上走不通」，
+// 调用方拿到的是一个 error 而不是一次崩溃。
+func TestTheStoreDoesNotClaimTheOSPathSeam(t *testing.T) {
 	t.Parallel()
 
-	store := newStore(t, "w1")
-	target := fs.Target{TargetKey: "w1/a.txt", DisplayPath: "/a.txt"}
-
-	for _, item := range []struct {
-		name string
-		call func()
-	}{
-		{"ProcessPath", func() { store.ProcessPath(target) }},
-		{"FileURL", func() { store.FileURL(target) }},
-	} {
-		t.Run(item.name, func(t *testing.T) {
-			t.Parallel()
-
-			defer func() {
-				recovered := recover()
-				if recovered == nil {
-					t.Fatal("该 panic 的")
-				}
-				message, ok := recovered.(string)
-				if !ok || !strings.Contains(message, "/a.txt") {
-					t.Fatalf("panic 里该带上目标路径，实际 %v", recovered)
-				}
-			}()
-			item.call()
-		})
+	var backend fs.FileSystem = newStore(t, "w1")
+	if _, ok := backend.(fs.OSPathFileSystem); ok {
+		t.Fatal("对象存储上没有进程路径也没有 file: URI，不该认下这道可选接缝")
 	}
 }

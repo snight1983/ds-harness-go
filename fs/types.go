@@ -11,7 +11,8 @@ package fs
 //
 // **消费方不许解析它，也不许假定它是一条本地绝对路径**：本地后端用的是
 // realpath 那样的字符串，远端后端可能用工作区 URI 或者一个文件 id。
-// 需要一条子进程真能打开的路径时，问 [FileSystem.ProcessPath]。
+// 需要一条子进程真能打开的路径时，问 [OSPathFileSystem.ProcessPath]——
+// 那是一道可选接缝，不是每个后端都有。
 //
 // 新增: DSH 那边是 `Branded<'FsTargetKey'>`，配一个同名工厂函数把裸串标记成它。
 // 那个函数**自己写明不做任何校验**（types.ts:23），它存在的全部理由就是 TS

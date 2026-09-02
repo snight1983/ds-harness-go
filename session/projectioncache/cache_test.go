@@ -378,6 +378,47 @@ func TestColdSnapshotFoldsOnlyTheTailAboveAUsableRow(t *testing.T) {
 	}
 }
 
+func TestColdSnapshotRefoldsOverWhatSurvivesWhenTheRowFellInTheEvictedRange(t *testing.T) {
+	t.Parallel()
+
+	// 日志会从最老的一头弹出事件（见 docs/session-log-limit.md 的原则第 1 条），
+	// 于是一行缓存记的水位可能落在**已经没有了**的那一段里。地板照旧比它低一条，
+	// 从那儿读回来的就是现存的全部，那一行在 [projection.Registry.Restore] 里
+	// 判成不可用、被丢掉，每个单元在现存这一段上从 Init 重折一遍。
+	//
+	// 这条路不报错、也不多读一次：那次读已经是整读了。
+	f := newFixture(t, 1, time.Second)
+	mustRegister(t, f.registry, countUnit("count", 0))
+
+	meta := session.SessionHeader{ID: "s1", CreatedAt: 7}
+	f.store.put(meta, userEvent(500), otherEvent(501), userEvent(502))
+	if err := f.table.Put(context.Background(), "s1", Record{
+		Identity: IdentityOf(meta),
+		Rows:     projection.Checkpoint{"count": countRow(t, 0, 450, 100)},
+	}); err != nil {
+		t.Fatalf("摆记录不该失败：%v", err)
+	}
+
+	snapshot, err := f.cache.ColdSnapshot(context.Background(), "s1")
+	if err != nil {
+		t.Fatalf("不该报错：%v", err)
+	}
+	// 只数得出现存这一段里的两条。被弹掉那一段对应的状态丢了就丢了，
+	// 读照常走完——原则第 5 条。
+	if snapshot.AsOfSeq != 502 || snapshot.Values["count"] != 2 {
+		t.Fatalf("该在现存的日志上重折：%d %#v", snapshot.AsOfSeq, snapshot.Values)
+	}
+	if reads := f.store.reads(); len(reads) != 1 || reads[0] != 450 {
+		t.Fatalf("该只读一次、从地板 450 起：%v", reads)
+	}
+	if messages := f.sink.messages(); len(messages) != 0 {
+		t.Fatalf("这不是回退，不该留下痕迹：%v", messages)
+	}
+	if row := f.record(t, "s1").Rows["count"]; row.Seq != 502 || string(row.Val) != `{"count":2}` {
+		t.Fatalf("刷新出来的行该落回介质：%#v %s", row, row.Val)
+	}
+}
+
 func TestColdSnapshotWithoutARecordReadsTheWholeLogAndSeedsOne(t *testing.T) {
 	t.Parallel()
 

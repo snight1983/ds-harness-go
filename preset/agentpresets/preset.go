@@ -98,6 +98,12 @@ type Root struct {
 //
 // 源: packages/preset/agent-presets/src/preset.ts:52-62
 type Config struct {
+	// Store 是预设内容住的地方；必填，理由见 store.go。
+	//
+	// 新增: DSH 那边没有这个字段——它就地 `node:fs`。这里必须由装配方交进来，
+	// 因为一份预设住在哪儿是**部署**的事：单机跑的接 preset/presetstore/localdir，
+	// 服务化的接一个对象存储或者一张表，而本包两种都不认识。
+	Store Store
 	// Default 是调用方没点名字时装的那个 id。装的时候找不到会当场炸。
 	Default string
 	// Roots 是按优先级排的那些根；靠前的根赢下重名的 id。

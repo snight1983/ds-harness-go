@@ -60,8 +60,12 @@
 // # 谁来实现
 //
 // [Backend] 是给具体介质用的最小原始能力集；[Store] 是给使用方用的服务面。
-// 第一方的两个后端（JSONL、SQLite）在裁决表里是 OUT_OF_SCOPE
-// ——本仓库是一个空运行时，落盘介质由装配它的人挑。本包给出的是那道缝。
+// 上游第一方的两个后端（JSONL、SQLite）在裁决表里是 OUT_OF_SCOPE；本仓库自带的
+// 实现在 [github.com/snight1983/ds-harness-go/datastore/sessionstore]，
+// 换别的介质就自己实现 [Backend]。本包给出的是那道缝。
+//
+// 本包**不知道**下面是什么介质，也不该知道：数据库那一摊整个收在 datastore 底下，
+// 这条界线由 tools/dbcheck 把着。
 //
 // # 覆盖率为什么到不了 99%
 //

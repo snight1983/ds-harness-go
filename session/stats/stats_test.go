@@ -896,7 +896,7 @@ func TestTheUnitGoesIntoARegistryAndComesOutAsASnapshot(t *testing.T) {
 		t.Fatalf("检查点行不对：%#v", row)
 	}
 
-	restored, err := registry.Restore(rows, nil, 4)
+	restored, err := registry.Restore(rows, nil, 4, 0)
 	if err != nil {
 		t.Fatalf("从检查点恢复不该失败：%v", err)
 	}

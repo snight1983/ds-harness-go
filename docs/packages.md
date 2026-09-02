@@ -17,10 +17,14 @@
 | `github.com/snight1983/ds-harness-go/core/agentdefaultmodel` | [运行时设置](modules/settings.md) |
 | `github.com/snight1983/ds-harness-go/core/agentloop` | [Agent Loop](modules/agentloop.md) |
 | `github.com/snight1983/ds-harness-go/core/scope` | [Agent](modules/agent.md) |
-| `github.com/snight1983/ds-harness-go/core/session` | [Session](modules/session.md) |
+| `github.com/snight1983/ds-harness-go/core/session` | [活会话](modules/core-session.md) |
 | `github.com/snight1983/ds-harness-go/core/systemprompt` | [Skill、提示词与预设](modules/skill.md) |
 | `github.com/snight1983/ds-harness-go/core/tools` | [Tools](modules/tools.md) |
 | `github.com/snight1983/ds-harness-go/credentials` | [凭据](modules/credentials.md) |
+| `github.com/snight1983/ds-harness-go/datastore` | [持久化抽象层](modules/datastore.md) |
+| `github.com/snight1983/ds-harness-go/datastore/dbtest` | [持久化抽象层](modules/datastore.md) |
+| `github.com/snight1983/ds-harness-go/datastore/kvstore` | [持久化抽象层](modules/datastore.md) |
+| `github.com/snight1983/ds-harness-go/datastore/sessionstore` | [持久化抽象层](modules/datastore.md) |
 | `github.com/snight1983/ds-harness-go/example/minimalhost` | [嵌入 Go 服务](embedding.md) |
 | `github.com/snight1983/ds-harness-go/fs` | [文件系统](modules/filesystem.md) |
 | `github.com/snight1983/ds-harness-go/fs/objectstore` | [文件系统](modules/filesystem.md) |
@@ -48,13 +52,13 @@
 | `github.com/snight1983/ds-harness-go/plan/planmode` | [计划与待办](modules/planning.md) |
 | `github.com/snight1983/ds-harness-go/preset/agentpresets` | [Agent 预设与 Persona](modules/presets.md) |
 | `github.com/snight1983/ds-harness-go/preset/persona` | [Agent 预设与 Persona](modules/presets.md) |
+| `github.com/snight1983/ds-harness-go/preset/presetstore/localdir` | [Agent 预设与 Persona](modules/presets.md) |
 | `github.com/snight1983/ds-harness-go/schedule/schedule` | [耐久提醒](modules/schedule.md) |
 | `github.com/snight1983/ds-harness-go/sdk/sdkprotocol` | [SDK 协议与服务端](modules/sdk.md) |
 | `github.com/snight1983/ds-harness-go/sdk/sdkserver` | [SDK 协议与服务端](modules/sdk.md) |
 | `github.com/snight1983/ds-harness-go/session` | [Session](modules/session.md) |
 | `github.com/snight1983/ds-harness-go/session/checkpointpolicy` | [Session](modules/session.md) |
 | `github.com/snight1983/ds-harness-go/session/persistence` | [Session](modules/session.md) |
-| `github.com/snight1983/ds-harness-go/session/persistence/jsonl` | [Session](modules/session.md) |
 | `github.com/snight1983/ds-harness-go/session/projection` | [Session](modules/session.md) |
 | `github.com/snight1983/ds-harness-go/session/projectioncache` | [Session](modules/session.md) |
 | `github.com/snight1983/ds-harness-go/session/sessiontitle` | [Session](modules/session.md) |
@@ -70,7 +74,6 @@
 | `github.com/snight1983/ds-harness-go/spill/policy` | [大结果外置](modules/spill.md) |
 | `github.com/snight1983/ds-harness-go/storage` | [存储、文件与附件](modules/storage.md) |
 | `github.com/snight1983/ds-harness-go/storage/domain` | [存储、文件与附件](modules/storage.md) |
-| `github.com/snight1983/ds-harness-go/storage/postgres` | [存储、文件与附件](modules/storage.md) |
 | `github.com/snight1983/ds-harness-go/storage/storagetest` | [存储、文件与附件](modules/storage.md) |
 | `github.com/snight1983/ds-harness-go/subagent/controltool` | [多 Agent](modules/subagent.md) |
 | `github.com/snight1983/ds-harness-go/subagent/forkinprocess` | [多 Agent](modules/subagent.md) |
@@ -83,6 +86,7 @@
 | `github.com/snight1983/ds-harness-go/todo` | [计划与待办](modules/planning.md) |
 | `github.com/snight1983/ds-harness-go/tools/capmap` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/consumercheck` | [移植与文档门禁工具](modules/migration-tools.md) |
+| `github.com/snight1983/ds-harness-go/tools/dbcheck` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/doccheck` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/internal/rulingtable` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/internal/toolpath` | [移植与文档门禁工具](modules/migration-tools.md) |

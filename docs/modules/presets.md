@@ -2,7 +2,7 @@
 
 ## 定位
 
-`preset/agentpresets` 从磁盘发现能力组合，把静态链接的 Go 组装器挂到常驻作用域，并让 Agent 通过父作用域加入预设；`preset/persona` 提供替换系统人设的组合项。
+`preset/agentpresets` 发现能力组合，把静态链接的 Go 组装器挂到常驻作用域，并让 Agent 通过父作用域加入预设；`preset/presetstore/localdir` 是把这些内容落到本地目录的适配层；`preset/persona` 提供替换系统人设的组合项。
 
 ## 架构与预设结构
 
@@ -13,6 +13,12 @@
 ```
 
 发现过程不缓存目录清单，`Roster.List` 和 `Resolve` 每次重扫根目录。坏元数据只影响展示；坏组合仍在列表中，但 Mount 会明确失败，避免被占用的 ID 从界面消失。
+
+## 存储接缝
+
+`agentpresets` 自己不碰任何一种介质：它只对 `Config.Store` 这道窄接缝说话（`Stat`/`List`/`ReadFile`/`WriteFile`/`MakeDir`/`Remove`/`RemoveTree`）。接缝上的路径是斜杠分隔、对本包不透明的字符串，翻译成介质自己的形状是实现方的事。版本身份走 `Entry.Stamp` 这个不可解释的串——本地实现拼「修改时间 + 大小」，对象存储可以用 ETag，数据库可以用行版本；空串表示这份介质答不出身份，此时装载不换代。
+
+`preset/presetstore/localdir` 是随仓库发出的那一份实现，落在本地目录上。服务化部署换一份接到对象存储或表的实现即可，`agentpresets` 两种都不认识。
 
 ## 静态组装
 
@@ -44,6 +50,7 @@ Go 不支持运行时 import npm 包，因此组合行通过 `ComposerSet` 查�
 ## 相关源码
 
 - `preset/agentpresets/`
+- `preset/presetstore/localdir/`
 - `preset/persona/`
 - `core/scope/`
 - `core/systemprompt/`

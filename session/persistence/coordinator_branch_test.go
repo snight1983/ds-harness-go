@@ -107,7 +107,7 @@ func TestCoordinator对账时读不动存档(t *testing.T) {
 
 	// 摆一份「已经落过一条」的没主状态出来，好让对账那一步真的去读存档。
 	h.mutex.Lock()
-	h.states[id] = &sessionState{meta: testHeader(t, id), cursor: 1, materialized: true}
+	h.states[id] = &sessionState{meta: testHeader(t, id), nextSeq: 1, started: true, materialized: true}
 	h.mutex.Unlock()
 
 	boom := errors.New("盘坏了")
@@ -135,7 +135,7 @@ func TestCoordinator对账时存档里的身份对不上(t *testing.T) {
 	}
 	h.backend.mutex.Unlock()
 	h.mutex.Lock()
-	h.states[id] = &sessionState{meta: testHeader(t, id), cursor: 1, materialized: true}
+	h.states[id] = &sessionState{meta: testHeader(t, id), nextSeq: 1, started: true, materialized: true}
 	h.mutex.Unlock()
 
 	live := h.createLive(t, id, coresession.CreateOptions{Seed: seed})
@@ -154,7 +154,7 @@ func TestCoordinator对账只比游标以内那一段(t *testing.T) {
 	// 存档比游标长。对账要比的是「游标以内那一段」，把整段拿去比会误判成撞号。
 	h.backend.seed(testHeader(t, id), []session.Event{userEvent(t, 0, "甲"), userEvent(t, 1, "乙")}, nil)
 	h.mutex.Lock()
-	h.states[id] = &sessionState{meta: testHeader(t, id), cursor: 1, materialized: true}
+	h.states[id] = &sessionState{meta: testHeader(t, id), nextSeq: 1, started: true, materialized: true}
 	h.mutex.Unlock()
 
 	live := h.createLive(t, id, coresession.CreateOptions{Seed: seed})
@@ -290,7 +290,7 @@ func TestCoordinator准备时已经有活着的持久化主人(t *testing.T) {
 		t.Fatalf("恢复不出占位的会话：%v", err)
 	}
 	h.mutex.Lock()
-	h.states[id] = &sessionState{meta: testHeader(t, id), cursor: 1, materialized: true, owner: other}
+	h.states[id] = &sessionState{meta: testHeader(t, id), nextSeq: 1, started: true, materialized: true, owner: other}
 	h.mutex.Unlock()
 
 	if _, err := h.Prepare(t.Context(), id); err == nil {

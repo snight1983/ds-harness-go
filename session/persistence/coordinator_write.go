@@ -70,9 +70,10 @@ func (c *Coordinator) attachPrepared(
 	c.mutex.Lock()
 	mismatch := source.live != live ||
 		persisted.owner != nil ||
-		persisted.cursor != len(source.inspection.Events) ||
-		live.FirstLiveSeq() != persisted.cursor
-	cursor := persisted.cursor
+		!persisted.started ||
+		persisted.nextSeq != source.nextSeq ||
+		live.FirstLiveSeq() != persisted.nextSeq
+	nextSeq := persisted.nextSeq
 	c.mutex.Unlock()
 	if mismatch {
 		state.finish(fmt.Errorf(
@@ -80,9 +81,13 @@ func (c *Coordinator) attachPrepared(
 		return
 	}
 
-	events := live.Events()
+	_, unpublished, err := splitAt(live.ID(), live.Events(), nextSeq)
+	if err != nil {
+		state.finish(err)
+		return
+	}
 	var suffix []session.Event
-	for _, event := range events[cursor:] {
+	for _, event := range unpublished {
 		suffix = append(suffix, cloneEvent(event))
 	}
 
@@ -168,7 +173,8 @@ func (c *Coordinator) reconcileTracked(live *coresession.Session, seed []session
 	}
 
 	c.mutex.Lock()
-	owner, trackedCwd, cursor, materialized := tracked.owner, tracked.meta.Cwd, tracked.cursor, tracked.materialized
+	owner, trackedCwd, materialized := tracked.owner, tracked.meta.Cwd, tracked.materialized
+	nextSeq, started := tracked.nextSeq, tracked.started
 	c.mutex.Unlock()
 
 	if owner == live {
@@ -186,22 +192,29 @@ func (c *Coordinator) reconcileTracked(live *coresession.Session, seed []session
 				"session/persistence: 会话 %q 已经存在于另一个工作目录下（存档：%q，活的：%q），撞号了",
 				string(id), trackedCwd, live.Header().Cwd)
 		}
-		matches, err := c.seedMatchesPersisted(id, seed, cursor)
+		matches, err := c.seedMatchesPersisted(id, seed, nextSeq, started)
 		if err != nil {
 			return true, err
 		}
 		if !matches {
 			return true, fmt.Errorf(
-				"session/persistence: 会话 %q 已经落盘了 %d 条事件，和这个活会话对不上，撞号了",
-				string(id), cursor)
+				"session/persistence: 会话 %q 已经落盘到 seq %d，和这个活会话对不上，撞号了",
+				string(id), nextSeq)
 		}
 		c.mutex.Lock()
 		tracked.owner = live
 		c.mutex.Unlock()
 		// 把 seed 里超出已落盘前缀的那一截写下去。构造 seed 不会发
 		// session/event，所以那条攒批的缓冲永远看不到它们。
-		if cursor < len(seed) {
-			return true, c.appendCore(c.background, id, cloneEvents(seed[cursor:]))
+		fresh := seed
+		if started {
+			_, fresh, err = splitAt(id, seed, nextSeq)
+			if err != nil {
+				return true, err
+			}
+		}
+		if len(fresh) > 0 {
+			return true, c.appendCore(c.background, id, cloneEvents(fresh))
 		}
 		return true, nil
 	}
@@ -271,35 +284,47 @@ func (c *Coordinator) adoptLivePrefix(
 			return err
 		}
 	}
+	storedNext := nextSeqOf(stored.Events, stored.BaseSeq)
 	c.putState(id, &sessionState{
 		meta:         stored.Meta,
-		cursor:       len(stored.Events),
+		baseSeq:      stored.BaseSeq,
+		nextSeq:      storedNext,
+		started:      true,
 		materialized: true,
 		owner:        live,
 	})
-	if len(stored.Events) < len(seed) {
-		return c.appendCore(c.background, id, cloneEvents(seed[len(stored.Events):]))
+	_, fresh, err := splitAt(id, seed, storedNext)
+	if err != nil {
+		return err
+	}
+	if len(fresh) > 0 {
+		return c.appendCore(c.background, id, cloneEvents(fresh))
 	}
 	return nil
 }
 
-// seedMatchesPersisted 问一个活会话的 seed 复不复现得出已经落盘的头 cursor 条。
+// seedMatchesPersisted 问一个活会话的 seed 复不复现得出已经落盘的那一段
+//（也就是 seq 小于 nextSeq 的那些事件）。
 //
 // 源: packages/session/session-persistence/src/coordinator.ts:1215-1222
 //
-// cursor 为 0（还什么都没落盘）时无条件算对上。
+// started 为假（还什么都没落盘）时无条件算对上。
+//
+// 新增: 上游那道判据是 `cursor === 0`，靠的是「日志从 0 起」。见
+// [sessionState.started]。
 func (c *Coordinator) seedMatchesPersisted(
 	id session.SessionID,
 	seed []session.Event,
-	cursor int,
+	nextSeq int,
+	started bool,
 ) (bool, error) {
-	if cursor == 0 {
+	if !started {
 		return true, nil
 	}
 	stored, err := c.backend.LoadStored(c.background, id)
 	if err != nil {
 		if isNotFound(err) {
-			// 走不到：cursor 大于零意味着这个会话已经落过盘，那它就存在。
+			// 走不到：起点定下来了就意味着这个会话已经落过盘，那它就存在。
 			return false, nil
 		}
 		return false, err
@@ -307,11 +332,9 @@ func (c *Coordinator) seedMatchesPersisted(
 	if err := CheckStoredIdentity(id, stored.Meta); err != nil {
 		return false, err
 	}
-	prefix := stored.Events
-	// 新增: DSH 那句 `.slice(0, cursor)` 在 cursor 超过长度时给的是整段，
-	// 而 Go 的 `prefix[:cursor]` 会 panic。夹一下，语义和那边一致。
-	if cursor < len(prefix) {
-		prefix = prefix[:cursor]
+	prefix, _, err := splitAt(id, stored.Events, nextSeq)
+	if err != nil {
+		return false, err
 	}
 	return SeedCoversPrefix(seed, prefix)
 }
@@ -433,19 +456,59 @@ func (c *Coordinator) newWriteBehind(live *coresession.Session, state *liveState
 //
 // 源: packages/session/session-persistence/src/coordinator.ts:1355-1361
 func (c *Coordinator) appendLiveBatch(id session.SessionID, batch []session.Event) error {
-	cursor := 0
+	var nextSeq int
+	var started bool
 	if state := c.stateOf(id); state != nil {
 		c.mutex.Lock()
-		cursor = state.cursor
+		nextSeq, started = state.nextSeq, state.started
 		c.mutex.Unlock()
 	}
-	fresh := make([]session.Event, 0, len(batch))
-	for _, event := range batch {
-		if event.Seq >= cursor {
-			fresh = append(fresh, event)
+	fresh := batch
+	if started {
+		var err error
+		if _, fresh, err = splitAt(id, batch, nextSeq); err != nil {
+			return err
 		}
 	}
 	return c.appendCore(c.background, id, fresh)
+}
+
+// splitAt 把一段按 seq 连续的事件切成两半：seq 小于 at 的在前，大于等于的在后。
+//
+// at 落在这一段之前（那一截已经被弹掉了）时整段都算「在后」，落在这一段之后时
+// 整段都算「在前」——两种都不是错误，见 docs/session-log-limit.md 的原则第 4 条。
+// 落在这一段**之内**却对不上号才是日志真坏了。
+//
+// 新增: 上游这两处是 `events.slice(cursor)` 和 `events.slice(0, cursor)`，因为它的
+// cursor 同时是条数和 seq。本仓库的日志会从最老的一头弹出事件，下标得当场从 seq
+// 减出来，而且减完要核一遍——原则第 2 条。
+func splitAt(id session.SessionID, events []session.Event, at int) (before, from []session.Event, err error) {
+	if len(events) == 0 {
+		return nil, nil, nil
+	}
+	index := at - events[0].Seq
+	if index <= 0 {
+		return nil, events, nil
+	}
+	if index >= len(events) {
+		return events, nil, nil
+	}
+	if events[index].Seq != at {
+		return nil, nil, fmt.Errorf(
+			"session/persistence: 会话 %q 的事件不连续：下标 %d 上应该是 seq %d，实际是 %d",
+			string(id), index, at, events[index].Seq)
+	}
+	return events[:index], events[index:], nil
+}
+
+// nextSeqOf 给出这一段之后下一条事件的 seq：末条加一，空段就是 baseSeq。
+//
+// 新增: 上游这个数就是 `events.length`。日志的起点成为变量之后它不再是长度。
+func nextSeqOf(events []session.Event, baseSeq int) int {
+	if len(events) == 0 {
+		return baseSeq
+	}
+	return events[len(events)-1].Seq + 1
 }
 
 // cloneEvents 复制一整批事件，让这一批和调用方手上那份彻底分开。

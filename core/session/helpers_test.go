@@ -117,9 +117,15 @@ func itoa(value int) string {
 
 // seedOf 把一串事件按下标盖上 seq，凑成一份合法的构造 seed。
 func seedOf(events ...sessionlog.Event) []sessionlog.Event {
+	return seedFrom(0, events...)
+}
+
+// seedFrom 和 seedOf 一样，只是从 base 起编号——一份被从最老的一头弹掉过一截的
+// 日志，续跑起来就是这个样子。
+func seedFrom(base int, events ...sessionlog.Event) []sessionlog.Event {
 	seed := make([]sessionlog.Event, len(events))
 	for index, event := range events {
-		event.Seq = index
+		event.Seq = base + index
 		seed[index] = event
 	}
 	return seed

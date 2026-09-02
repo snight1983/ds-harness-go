@@ -121,9 +121,16 @@ func (b *memoryBackend) LoadStored(ctx context.Context, id session.SessionID) (S
 	if !ok {
 		return StoredPrefix{}, fmt.Errorf("%w: %q", ErrSessionNotFound, string(id))
 	}
+	// 起点照契约填现存最早那条，不是写死 0：这个替身也会被弹（见
+	// coordinator_trim_test.go），而读的一侧要靠它分辨「被弹掉了」。
+	base := 0
+	if len(log.events) > 0 {
+		base = log.events[0].Seq
+	}
 	return StoredPrefix{
 		Meta:       log.meta,
 		Events:     cloneEvents(log.events),
+		BaseSeq:    base,
 		Revision:   Revision(fmt.Sprintf("r%d", log.revision)),
 		TornMarker: log.torn,
 	}, nil
@@ -264,6 +271,18 @@ func newHarness(t *testing.T) *harness {
 func newHarnessOn(t *testing.T, wrap func(*memoryBackend) Backend) *harness {
 	t.Helper()
 
+	return newHarnessWith(t, wrap, CoordinatorOptions{})
+}
+
+// newHarnessWith 和 [newHarnessOn] 一样，只是让用例自己给一份编排器选项。
+//
+// 给得出选项才试得了那几条按策略走的分支——比如条数上限，用例要的是一个小得
+// 写几条就撞上的值，而不是默认那 1000 条。
+func newHarnessWith(
+	t *testing.T, wrap func(*memoryBackend) Backend, options CoordinatorOptions,
+) *harness {
+	t.Helper()
+
 	backend := newMemoryBackend()
 	var plugged Backend = backend
 	if wrap != nil {
@@ -280,7 +299,7 @@ func newHarnessOn(t *testing.T, wrap func(*memoryBackend) Backend) *harness {
 	// 一个会自己到点的定时器会让断言看运气。
 	coordinator, err := NewCoordinator(
 		CoordinatorDeps{Backend: plugged, Sessions: sessions},
-		CoordinatorOptions{},
+		options,
 	)
 	if err != nil {
 		t.Fatalf("造不出编排器：%v", err)
@@ -437,14 +456,32 @@ func TestCoordinator追加要接得上存档的尾巴(t *testing.T) {
 	if err := h.Create(t.Context(), testHeader(t, id)); err != nil {
 		t.Fatalf("登记失败：%v", err)
 	}
-	if err := h.Append(t.Context(), id, []session.Event{userEvent(t, 1, "跳号")}); err == nil {
-		t.Fatal("第一条 seq 是 1 不该写得下去")
+	if err := h.Append(t.Context(), id, []session.Event{userEvent(t, -1, "负号")}); !errors.Is(err, ErrMalformedSeq) {
+		t.Fatalf("第一条 seq 是负数该报 %v，拿到 %v", ErrMalformedSeq, err)
 	}
 	if err := h.Append(t.Context(), id, nil); err != nil {
 		t.Fatalf("空批次该是空操作：%v", err)
 	}
 	if h.backend.appends != 0 {
 		t.Fatalf("这两次都不该真的写到后端上，却写了 %d 次", h.backend.appends)
+	}
+
+	// 起点是变量：一个还什么都没落盘的身份，第一批的第一条**定下**它的起点，
+	// 不必是 0——一个从被弹过头部的来源分叉出来的子会话正是这样，
+	// 见 docs/session-log-limit.md 的原则第 1 条。
+	if err := h.Append(t.Context(), id, []session.Event{
+		userEvent(t, 500, "甲"), userEvent(t, 501, "乙"),
+	}); err != nil {
+		t.Fatalf("起点不是 0 的第一批该写得下去：%v", err)
+	}
+	// 定下来之后，接不上尾巴的那些照旧拒掉。
+	if err := h.Append(t.Context(), id, []session.Event{userEvent(t, 505, "跳号")}); err == nil {
+		t.Fatal("跳过 502..504 的一批不该写得下去")
+	}
+	if err := h.Append(t.Context(), id, []session.Event{
+		userEvent(t, 502, "丙"), userEvent(t, 504, "丁"),
+	}); err == nil {
+		t.Fatal("批次自己不连续也不该写得下去")
 	}
 }
 

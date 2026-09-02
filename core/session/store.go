@@ -268,6 +268,13 @@ type CreateOptions struct {
 	// 一回事）。
 	Seed []sessionlog.Event
 
+	// BaseSeq 是 Seed 第一条应有的 seq，也是这份日志的起点；默认 0。
+	// 见 [Options.BaseSeq]。
+	//
+	// 新增: 分叉一个头部被弹过的来源时，切出来的那段前缀不从 0 起，
+	// [Store.Fork] 把来源的 [Session.BaseSeq] 原样带过来。
+	BaseSeq int
+
 	// Cwd 是这个会话的工作目录，必须是本机上的绝对路径。存储后端拿它做目录键。
 	Cwd string
 
@@ -317,6 +324,9 @@ type RestoreOptions struct {
 
 	// Header 是存下来的那份会话头，原样接手（版本、标识、血统都照验）。
 	Header sessionlog.SessionHeader
+
+	// BaseSeq 是 Seed 第一条应有的 seq；默认 0。见 [Options.BaseSeq]。
+	BaseSeq int
 }
 
 // Create 建一个会话，登记进存储并公布出去，摘除挂在 owner 上。
@@ -393,7 +403,12 @@ func (s *Store) Prepare(id sessionlog.SessionID, options CreateOptions) (*Sessio
 		DelegationDepth: options.DelegationDepth,
 		AgentPreset:     options.AgentPreset,
 	}
-	return NewSession(sessionID, Options{Seed: options.Seed, Header: &header, Now: s.now})
+	return NewSession(sessionID, Options{
+		Seed:    options.Seed,
+		BaseSeq: options.BaseSeq,
+		Header:  &header,
+		Now:     s.now,
+	})
 }
 
 // PrepareRestored 造一个会话但不登记进存储，并**接手**这些持久化产物的所有权。
@@ -407,7 +422,7 @@ func (s *Store) PrepareRestored(id sessionlog.SessionID, options RestoreOptions)
 	if err != nil {
 		return nil, err
 	}
-	return RestoreSession(sessionID, options.Seed, options.Header, s.now)
+	return RestoreSession(sessionID, options.Seed, options.BaseSeq, options.Header, s.now)
 }
 
 // mintID 定下这次创建用的标识：没给就铸一个没被占的，给了就查一遍重名。

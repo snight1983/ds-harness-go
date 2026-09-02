@@ -7,7 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +19,7 @@ import (
 	"github.com/snight1983/ds-harness-go/interaction/userapproval"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/preset/agentpresets"
+	"github.com/snight1983/ds-harness-go/preset/presetstore/localdir"
 	"github.com/snight1983/ds-harness-go/session"
 )
 
@@ -121,7 +122,7 @@ func TestChildSessionMetaStampsTheLineage(t *testing.T) {
 // 「一份都没认」。要的正是这个——presets 在不在场那条分支和名册里有什么无关。
 func emptyRoster(t *testing.T) *agentpresets.Roster {
 	t.Helper()
-	roster, err := agentpresets.New(agentpresets.Config{Default: "base"}, nil)
+	roster, err := agentpresets.New(agentpresets.Config{Store: localdir.New(), Default: "base"}, nil)
 	if err != nil {
 		t.Fatalf("造预设名册失败：%v", err)
 	}
@@ -271,16 +272,20 @@ func TestApplyChildCompositionJoinsTheParentPresetWhenThereIsARoster(t *testing.
 func mountedRoster(t *testing.T, parentKey *scope.Key) *agentpresets.Roster {
 	t.Helper()
 
-	root := t.TempDir()
-	dir := filepath.Join(root, "demo")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	// 这道缝上的路径是斜杠分隔的（见 preset/agentpresets/store.go），而
+	// [testing.T.TempDir] 在 Windows 上给的是反斜杠，所以进包之前先翻一次。
+	store := localdir.New()
+	root := filepath.ToSlash(t.TempDir())
+	dir := path.Join(root, "demo")
+	if err := store.MakeDir(context.Background(), dir); err != nil {
 		t.Fatalf("建不出预设目录：%v", err)
 	}
-	path := filepath.Join(dir, agentpresets.CompositionFile)
-	if err := os.WriteFile(path, []byte("- name: alpha\n"), 0o600); err != nil {
+	file := path.Join(dir, agentpresets.CompositionFile)
+	if err := store.WriteFile(context.Background(), file, []byte("- name: alpha\n"), false); err != nil {
 		t.Fatalf("写不了组合文件：%v", err)
 	}
 	roster, err := agentpresets.New(agentpresets.Config{
+		Store:   store,
 		Default: "demo",
 		Roots:   []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
 		Composers: agentpresets.ComposerSet{

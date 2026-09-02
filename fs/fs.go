@@ -18,8 +18,8 @@
 // [TargetKey] 和 [Version] 都是后端自己定的字符串，**消费方不许解析、不许推断**。
 // 本地后端的 key 是 realpath 那样的东西，远端后端可能是工作区 URI 或者文件 id；
 // 版本在本地是高精度 stat 身份加新鲜度字段，在远端可能是一个修订号。
-// 需要一条真的能给子进程用的路径时，问 [FileSystem.ProcessPath]——
-// 它和 [TargetKey] 故意是两样东西。
+// 需要一条真的能给子进程用的路径时，问 [OSPathFileSystem.ProcessPath]——
+// 它和 [TargetKey] 故意是两样东西，而且**不是每个后端都有**（见那个接口）。
 //
 // # 守卫是可选的，原子性不是
 //
@@ -35,7 +35,11 @@
 // 新增: DSH 那边是 `abstract class FileSystem extends Service`，十二个抽象方法；
 // 另外三件事（fs/write-intent、fs/edit-intent、fs/observed）是它在 cordis 上
 // **声明**的事件，由容器分发。Go 没有那个容器，所以拆成两半：
-// 十二个方法是 [FileSystem] 接口，三个事件落在 [Policy] 这个具体类型上。
+// 那些方法落在接口上，三个事件落在 [Policy] 这个具体类型上。
+//
+// 十二个方法这边又分了一次：十个是每个后端都做得到的，留在 [FileSystem]；
+// processPath 和 fileUrl 两个只有「目标在操作系统里也有名字」的后端做得到，
+// 挪进可选的 [OSPathFileSystem]。理由写在那个接口上。
 //
 // 事件那一半不做成接口，理由和 credentials 包里的 [Notifier] 一样：
 // 它背后是一张活着的订阅表，那是**状态**，而接口存不下状态。
@@ -53,7 +57,7 @@
 // 接口方法上没有 ctx，实现方内部就没办法把取消传给它的 HTTP 客户端或者
 // 文件读取循环。一次连不上远端工作区的 Resolve 会把调用方的 goroutine 一直占着。
 //
-// 不收 ctx 的三个（[FileSystem.ProcessPath]、[FileSystem.FileURL]、
+// 不收 ctx 的三个（[OSPathFileSystem.ProcessPath]、[OSPathFileSystem.FileURL]、
 // [FileSystem.Contains]）在 DSH 那边也是同步方法：它们只对一个**已经解析好**的
 // 目标做纯计算，没有 I/O 可取消。
 package fs
@@ -63,7 +67,10 @@ import (
 	"iter"
 )
 
-// FileSystem 是文件系统提供方要实现的那十二个原语。
+// FileSystem 是文件系统提供方**必须**实现的那十个原语。
+//
+// 另外两个（进程路径、file: URI）不是每个后端都有，它们在可选的
+// [OSPathFileSystem] 上。
 //
 // 源: packages/fs/fs/src/index.ts:80-250
 //
@@ -86,22 +93,6 @@ type FileSystem interface {
 	// cwd 是相对路径的基准；留空表示用后端自己的默认基准。
 	// 空串不是一条合法的工作目录，所以这个映射不丢信息。
 	Resolve(ctx context.Context, path string, cwd string) (Target, error)
-
-	// ProcessPath 给出这个执行世界里的子进程能打开的规范绝对路径。
-	//
-	// 源: packages/fs/fs/src/index.ts:118-126
-	//
-	// 它和 [Target.TargetKey] **故意是两样东西**：这条路径可以交给别的操作系统能力
-	// （起一个进程、传给一个命令行参数），而目标标识必须继续被当成不透明的。
-	ProcessPath(target Target) string
-
-	// FileURL 给出这个执行世界里该目标的规范 file: URI。
-	//
-	// 源: packages/fs/fs/src/index.ts:128-135
-	//
-	// URI 编码由后端拥有，因为宿主机的平台可能和执行世界的平台不是同一个——
-	// 在 Linux 容器里跑的后端，被一台 Windows 宿主机驱动时，编码规则得按容器那边来。
-	FileURL(target Target) string
 
 	// Contains 判断 child 是不是 parent 本身或者它的后代。
 	//
@@ -186,4 +177,43 @@ type FileSystem interface {
 	//
 	// expected 为 nil 表示不带新鲜度前置条件地编辑当前内容。
 	EditText(ctx context.Context, target Target, edit EditRequest, expected *EditIntent) (EditOutcome, error)
+}
+
+// OSPathFileSystem 是一个**可选**能力：这个后端上的目标在操作系统的文件命名空间里
+// 也有一个名字。
+//
+// 源: packages/fs/fs/src/index.ts:118-135（processPath、fileUrl 两个抽象方法）
+//
+// 新增: DSH 把这两个方法和别的十个一起写在抽象类上，因为它那边每一个后端都架在
+// 一份真的文件系统上。本仓库不是：唯一的生产后端 [github.com/snight1983/ds-harness-go/fs/objectstore.Store]
+// 架在对象存储上，一个对象**没有**进程能打开的路径，也没有 file: URI。
+//
+// 强制它实现只剩三种写法，三种都是坏的：交回对象键或者 s3:// 串是一次静默的说谎，
+// 调用方会把它交给一次 open() 然后在很远的地方失败；交回空串是同一个谎，只是失败
+// 得更晚；panic 则把「这个后端没有这项能力」这件**静态**的事实，推迟到运行期才说，
+// 而且是用一个能带走整个进程的方式说——这个包是嵌在长期运行的服务里跑的。
+//
+// 所以它单独成一道接缝，语义交给类型系统：做得到的后端实现它，做不到的不实现，
+// 调用方类型断言，断言不过就是「这条路在这个部署上走不通」，一个 error 而不是一次
+// 崩溃。同样的手法见 [github.com/snight1983/ds-harness-go/session/persistence.SeekableBackend]。
+//
+// 本仓库目前**没有**调用方：会用到它的消费方（起子进程、拼命令行）整支在裁决里
+// 是范围外，见 README 的项目边界。留着这道接缝是为了宿主自己挂本地后端时有个
+// 说得清的位置，不是为了本仓库自己用。
+type OSPathFileSystem interface {
+	// ProcessPath 给出这个执行世界里的子进程能打开的规范绝对路径。
+	//
+	// 源: packages/fs/fs/src/index.ts:118-126
+	//
+	// 它和 [Target.TargetKey] **故意是两样东西**：这条路径可以交给别的操作系统能力
+	// （起一个进程、传给一个命令行参数），而目标标识必须继续被当成不透明的。
+	ProcessPath(target Target) string
+
+	// FileURL 给出这个执行世界里该目标的规范 file: URI。
+	//
+	// 源: packages/fs/fs/src/index.ts:128-135
+	//
+	// URI 编码由后端拥有，因为宿主机的平台可能和执行世界的平台不是同一个——
+	// 在 Linux 容器里跑的后端，被一台 Windows 宿主机驱动时，编码规则得按容器那边来。
+	FileURL(target Target) string
 }

@@ -98,7 +98,7 @@ func TestRestoreFloorAnchorsOneEventBelowSoAShrunkLogShowsUp(t *testing.T) {
 	}
 
 	// 日志缩到 seq 9 以下：从 9 读起什么都没有。
-	_, err := registry.Restore(checkpoint, nil, floor)
+	_, err := registry.Restore(checkpoint, nil, floor, 0)
 	if !errors.Is(err, ErrCheckpointUnusable) {
 		t.Fatalf("空尾巴该把这行判成越界：%v", err)
 	}
@@ -150,7 +150,7 @@ func TestRestoreFoldsTheTailOnTopOfAUsableRow(t *testing.T) {
 	// 行折到 seq 3、已经数了 4 条；尾巴从 seq 3 起给到 seq 5。
 	// seq 3 那条已经在行里了，不许再数一遍。
 	events := []session.Event{userEvent(3), userEvent(4), userEvent(5)}
-	restored, err := registry.Restore(Checkpoint{"count": countRow(t, 0, 3, 4)}, events, 3)
+	restored, err := registry.Restore(Checkpoint{"count": countRow(t, 0, 3, 4)}, events, 3, 0)
 	if err != nil {
 		t.Fatalf("不该报错：%v", err)
 	}
@@ -171,8 +171,8 @@ func TestRestoreFoldsTheTailOnTopOfAUsableRow(t *testing.T) {
 func TestRestoreRefoldsFromInitWhenTheWholeLogIsSupplied(t *testing.T) {
 	t.Parallel()
 
-	// baseSeq 为 0 就是「整份日志都在这儿」，这时候一行用不了直接从 Init 重折
-	// 是**成立**的——这也是唯一成立的场合。
+	// 请求的水位不高于存档起点，就是「现存的日志都在这儿」，这时候一行用不了
+	// 直接从 Init 重折是**成立**的——这也是唯一成立的场合。
 	events := []session.Event{userEvent(0), otherEvent(1), userEvent(2)}
 
 	cases := map[string]Checkpoint{
@@ -188,7 +188,7 @@ func TestRestoreRefoldsFromInitWhenTheWholeLogIsSupplied(t *testing.T) {
 			registry := NewRegistry()
 			defer mustRegister(t, registry, countUnit("count", 0))()
 
-			restored, err := registry.Restore(checkpoint, events, 0)
+			restored, err := registry.Restore(checkpoint, events, 0, 0)
 			if err != nil {
 				t.Fatalf("整份日志在手就该重折，不该报错：%v", err)
 			}
@@ -202,8 +202,8 @@ func TestRestoreRefoldsFromInitWhenTheWholeLogIsSupplied(t *testing.T) {
 func TestRestoreRefusesToRefoldOverAPartialLog(t *testing.T) {
 	t.Parallel()
 
-	// 重折只在完整日志上成立。给的是一截尾巴、行又用不了，就必须让调用方
-	// 从 seq 0 重读——在半截日志上从 Init 折出来的值是错的，不是旧的。
+	// 重折只在现存的整份日志上成立。给的是一截尾巴、行又用不了，就必须让调用方
+	// 从头重读——在半截日志上从 Init 折出来的值是错的，不是旧的。
 	events := []session.Event{userEvent(4), userEvent(5)}
 
 	cases := map[string]Checkpoint{
@@ -220,7 +220,7 @@ func TestRestoreRefusesToRefoldOverAPartialLog(t *testing.T) {
 			registry := NewRegistry()
 			defer mustRegister(t, registry, countUnit("count", 0))()
 
-			_, err := registry.Restore(checkpoint, events, 4)
+			_, err := registry.Restore(checkpoint, events, 4, 0)
 			if !errors.Is(err, ErrCheckpointUnusable) {
 				t.Fatalf("该拒掉：%v", err)
 			}
@@ -231,13 +231,68 @@ func TestRestoreRefusesToRefoldOverAPartialLog(t *testing.T) {
 	}
 }
 
+func TestRestoreRefoldsOverWhatSurvivesWhenTheHeadWasEvicted(t *testing.T) {
+	t.Parallel()
+
+	// 日志从最老的一头弹出事件，现存的这一段从 500 起（见
+	// docs/session-log-limit.md 的原则第 1 条）。地板问的是「从最前面读起」，
+	// 也就是 0——它算在读之前，问不出起点来。存储答复的起点是 500。
+	//
+	// 旧判据是 `baseSeq > 0`，在这里会把一次**整读**误判成半截日志，于是一行
+	// 用不了就报错，而调用方按提示「从 seq 0 重读」永远回不到 0。
+	events := []session.Event{userEvent(500), otherEvent(501), userEvent(502)}
+
+	cases := map[string]Checkpoint{
+		"压根没有行":    {},
+		"版本对不上":    {"count": countRow(t, 9, 501, 100)},
+		"行落在被弹区间里": {"count": countRow(t, 0, 450, 100)},
+	}
+
+	for name, checkpoint := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			registry := NewRegistry()
+			defer mustRegister(t, registry, countUnit("count", 0))()
+
+			restored, err := registry.Restore(checkpoint, events, 0, 500)
+			if err != nil {
+				t.Fatalf("现存的日志都在手，就该重折，不该报错：%v", err)
+			}
+			// 只数得出现存这一段里的两条 userEvent。被弹掉那一段对应的状态丢了
+			// 就丢了，读照常走完——原则第 5 条。
+			if restored.Snapshot.Values["count"] != 2 {
+				t.Fatalf("重折出来该是 2：%#v", restored.Snapshot.Values)
+			}
+			if restored.Snapshot.AsOfSeq != 502 {
+				t.Fatalf("水位该切在现存日志的末尾：%d", restored.Snapshot.AsOfSeq)
+			}
+		})
+	}
+}
+
+func TestRestoreStillRefusesAPartialTailAboveAnEvictedHead(t *testing.T) {
+	t.Parallel()
+
+	// 起点变成 500 之后，「半截日志」这件事本身没有消失：请求的水位真的高过
+	// 存档起点时，一行用不了照旧要拒。
+	registry := NewRegistry()
+	defer mustRegister(t, registry, countUnit("count", 0))()
+
+	events := []session.Event{userEvent(600), userEvent(601)}
+	_, err := registry.Restore(Checkpoint{}, events, 600, 500)
+	if !errors.Is(err, ErrCheckpointUnusable) {
+		t.Fatalf("该拒掉：%v", err)
+	}
+}
+
 func TestRestoreOnAnEmptyTailSitsOneBelowTheBase(t *testing.T) {
 	t.Parallel()
 
 	registry := NewRegistry()
 	defer mustRegister(t, registry, countUnit("count", 0))()
 
-	restored, err := registry.Restore(Checkpoint{}, nil, 0)
+	restored, err := registry.Restore(Checkpoint{}, nil, 0, 0)
 	if err != nil {
 		t.Fatalf("不该报错：%v", err)
 	}
@@ -259,7 +314,7 @@ func TestRestoreSurfacesABrokenRowInsteadOfQuietlyRefolding(t *testing.T) {
 	registry := NewRegistry()
 	defer mustRegister(t, registry, undecodableUnit("count"))()
 
-	_, err := registry.Restore(Checkpoint{"count": countRow(t, 0, -1, 0)}, nil, 0)
+	_, err := registry.Restore(Checkpoint{"count": countRow(t, 0, -1, 0)}, nil, 0, 0)
 	if !errors.Is(err, errDecode) {
 		t.Fatalf("该原样上抛那次解码失败：%v", err)
 	}
@@ -274,7 +329,7 @@ func TestRestoreRefusesAStateThatCannotBeWritten(t *testing.T) {
 	registry := NewRegistry()
 	defer mustRegister(t, registry, unmarshalableUnit("bad"))()
 
-	if _, err := registry.Restore(Checkpoint{}, nil, 0); err == nil {
+	if _, err := registry.Restore(Checkpoint{}, nil, 0, 0); err == nil {
 		t.Fatalf("排不出去的状态该报出来")
 	}
 }
@@ -285,7 +340,7 @@ func TestRestoreOmitsHostOnlyUnitsFromTheSnapshotButNotFromTheCheckpoint(t *test
 	registry := NewRegistry()
 	defer mustRegister(t, registry, hostOnlyUnit("hidden", 0))()
 
-	restored, err := registry.Restore(Checkpoint{}, []session.Event{userEvent(0)}, 0)
+	restored, err := registry.Restore(Checkpoint{}, []session.Event{userEvent(0)}, 0, 0)
 	if err != nil {
 		t.Fatalf("不该报错：%v", err)
 	}
@@ -322,7 +377,7 @@ func TestRestoreRoundTripsWithRestoreFloor(t *testing.T) {
 	if !ok || floor != 0 {
 		t.Fatalf("没有行时地板该是 0：%d %v", floor, ok)
 	}
-	first, err := registry.Restore(checkpoint, readFrom(floor), floor)
+	first, err := registry.Restore(checkpoint, readFrom(floor), floor, 0)
 	if err != nil {
 		t.Fatalf("第一轮不该报错：%v", err)
 	}
@@ -336,7 +391,7 @@ func TestRestoreRoundTripsWithRestoreFloor(t *testing.T) {
 	if !ok || floor != 3 {
 		t.Fatalf("地板该落在上一轮水位上：%d %v", floor, ok)
 	}
-	second, err := registry.Restore(first.Checkpoint, readFrom(floor), floor)
+	second, err := registry.Restore(first.Checkpoint, readFrom(floor), floor, 0)
 	if err != nil {
 		t.Fatalf("第二轮不该报错：%v", err)
 	}

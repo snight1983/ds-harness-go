@@ -151,8 +151,9 @@ func (c *Coordinator) createCore(ctx context.Context, meta session.SessionHeader
 	case !errors.Is(err, ErrSessionNotFound):
 		return err
 	}
-	// 纯懒：只记下这个意图，第一次追加之前磁盘上什么都不会有。
-	c.putState(meta.ID, &sessionState{meta: meta, cursor: 0, materialized: false})
+	// 纯懒：只记下这个意图，第一次追加之前磁盘上什么都不会有。起点也留到那时候
+	// 再定——这个身份还一条事件都没有，说不出它从哪儿起。
+	c.putState(meta.ID, &sessionState{meta: meta, started: false, materialized: false})
 	return nil
 }
 
@@ -196,15 +197,30 @@ func (c *Coordinator) appendCore(ctx context.Context, id session.SessionID, even
 	}
 
 	c.mutex.Lock()
-	cursor, meta, materialized := state.cursor, state.meta, state.materialized
+	baseSeq, nextSeq, started := state.baseSeq, state.nextSeq, state.started
+	meta, materialized := state.meta, state.materialized
 	c.mutex.Unlock()
+
+	if !started {
+		// 头一次写这个身份：这一批的第一条就定下了这份存档的起点。
+		//
+		// 新增: 上游这里写死 0（它的 cursor 建出来就是 0），因为它的日志必从 0 起。
+		// 本仓库的起点是变量——一个从被弹过头部的来源分叉出来的子会话，第一条就
+		// 不是 0，见 docs/session-log-limit.md 的原则第 1 条。
+		if events[0].Seq < 0 {
+			return fmt.Errorf(
+				"%w: 会话 %q 的第一条事件 seq 是 %d，不能是负数",
+				ErrMalformedSeq, string(id), events[0].Seq)
+		}
+		baseSeq, nextSeq = events[0].Seq, events[0].Seq
+	}
 
 	// 连续性契约：每条事件的 seq 必须接得上存档的尾巴。
 	for index, event := range events {
-		if event.Seq != cursor+index {
+		if event.Seq != nextSeq+index {
 			return fmt.Errorf(
 				"session/persistence: 会话 %q 的这一批 seq 对不上：第 %d 条应该是 %d，给的是 %d",
-				string(id), index, cursor+index, event.Seq)
+				string(id), index, nextSeq+index, event.Seq)
 		}
 	}
 
@@ -214,10 +230,49 @@ func (c *Coordinator) appendCore(ctx context.Context, id session.SessionID, even
 	// 那次耐久写就是这次事务：一提交就把「已经落地」和游标一起推上去。
 	c.mutex.Lock()
 	state.materialized = true
-	state.cursor = cursor + len(events)
+	state.baseSeq = baseSeq
+	state.nextSeq = nextSeq + len(events)
+	state.started = true
 	c.mutex.Unlock()
 	c.preparations.invalidate(id)
+
+	c.trim(ctx, id, state)
 	return nil
+}
+
+// trim 把这份存档裁回条数上限，从最老那头丢。
+//
+// 新增: 上游没有这一步，理由见 [TrimmingBackend]。条数不必去问介质：seq 在这条
+// 路上是连续的（上面那圈连续性契约保证），所以现存条数就是 nextSeq - baseSeq，
+// 编排器手里已经有这两个数。
+//
+// 弹出**失败不往上报**。这一批已经耐久写下去了，调用方的 Append 到此为止就是
+// 成功的；因为「没腾出地方」把一次成功的写回报成失败，只会让写入方去重试一批
+// 已经在盘上的事件。留不下来的后果是存档比上限长一点，下一批写会再试一次。
+func (c *Coordinator) trim(ctx context.Context, id session.SessionID, state *sessionState) {
+	if c.trimmer == nil {
+		return
+	}
+	c.mutex.Lock()
+	baseSeq, nextSeq := state.baseSeq, state.nextSeq
+	c.mutex.Unlock()
+
+	if nextSeq-baseSeq <= c.maxStoredEvents {
+		return
+	}
+	beforeSeq := nextSeq - c.maxStoredEvents
+	if err := c.trimmer.TrimBefore(ctx, id, beforeSeq); err != nil {
+		c.logger.WarnContext(ctx, "存档裁不动，这一份会暂时超过条数上限",
+			"session", string(id), "before_seq", beforeSeq, "error", err)
+		return
+	}
+	// 起点只在弹出真的成功之后才推：它是读那一侧分辨「被弹掉了」和「日志真坏了」
+	// 的依据（决定第 15 条），先推后弹会让一段还在盘上的事件被当成不存在。
+	c.mutex.Lock()
+	if state.baseSeq < beforeSeq {
+		state.baseSeq = beforeSeq
+	}
+	c.mutex.Unlock()
 }
 
 // adopt 把一个册子上还没有的身份认领进来——读一遍存档、修一次、记上状态。
@@ -283,7 +338,7 @@ func (c *Coordinator) ReadFrom(ctx context.Context, id session.SessionID, fromSe
 // 源: packages/session/session-persistence/src/coordinator.ts:840-869
 //
 // 后端带得动 [SeekableBackend] 时只读那一截后缀，否则读整个前缀再往前跳。
-// 跳过去那一步之所以是一次下标切片，靠的是「seq 从 0 起连续」这条契约。
+// 跳过去那一步靠的是「seq 从存档起点起连续」这条契约，见 [splitAt]。
 func (c *Coordinator) readFromCore(ctx context.Context, id session.SessionID, fromSeq int) (StoredSuffix, error) {
 	if err := ctx.Err(); err != nil {
 		return StoredSuffix{}, err
@@ -311,16 +366,15 @@ func (c *Coordinator) readFromCore(ctx context.Context, id session.SessionID, fr
 	if err != nil {
 		return StoredSuffix{}, err
 	}
-	events := whole.Events
-	// 新增: DSH 那句 `events.slice(fromSeq)` 在下标越界时给的是空数组，
-	// 而 Go 的 `events[fromSeq:]` 会 panic。fromSeq 落在存档之外返回空事件列表
-	// 是 [Store.ReadFrom] 上写着的契约，不是错误，所以这里显式夹一下。
-	if fromSeq >= len(events) {
-		events = nil
-	} else {
-		events = events[fromSeq:]
+	// 新增: DSH 那句 `events.slice(fromSeq)` 拿 seq 当下标，因为它的日志从 0 起
+	// 一条不删。本仓库的起点是变量（见 docs/session-log-limit.md），下标得当场减
+	// 出来。fromSeq 落在存档之外返回空事件列表是 [Store.ReadFrom] 上写着的契约，
+	// 落在存档**之前**（那一截已经被弹掉了）交回现存的全部，两种都不是错误。
+	_, events, err := splitAt(id, whole.Events, fromSeq)
+	if err != nil {
+		return StoredSuffix{}, err
 	}
-	return StoredSuffix{Meta: whole.Meta, Events: events}, nil
+	return StoredSuffix{Meta: whole.Meta, Events: events, BaseSeq: whole.BaseSeq}, nil
 }
 
 // readStoredPrefix 读一份物理前缀，不做任何逻辑修复、也不进准备池。

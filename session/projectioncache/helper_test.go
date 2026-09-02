@@ -201,7 +201,13 @@ func (s *fakeStore) ReadFrom(_ context.Context, id session.SessionID, fromSeq in
 			tail = append(tail, event)
 		}
 	}
-	return persistence.StoredSuffix{Meta: s.metas[id], Events: tail}, nil
+	// BaseSeq 是**整份存档**现存最早一条事件的 seq，不是这一截后缀的起点，
+	// 所以用的是 events 不是 tail。见 [persistence.StoredSuffix]。
+	return persistence.StoredSuffix{
+		Meta:    s.metas[id],
+		Events:  tail,
+		BaseSeq: session.LogBaseSeq(events),
+	}, nil
 }
 
 // 下面这些方法本包一条路都走不到，一律拒绝——真被调到时测试会当场看见，

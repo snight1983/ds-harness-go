@@ -133,7 +133,10 @@ func (s *Store) forkFrom(
 	}
 	header := source.Header()
 	return s.Create(ctx, owner, childID, CreateOptions{
-		Seed:          seed,
+		Seed: seed,
+		// 子会话继承的是来源那些事件**连同它们的 seq**，所以它的起点就是来源的
+		// 起点——来源的头部被弹过一截时那个数不是 0，见 [CreateOptions.BaseSeq]。
+		BaseSeq:       source.BaseSeq(),
 		Cwd:           header.Cwd,
 		ParentSession: source.ID(),
 		// 这里 len(seed) 就是血统边界：这一次分叉继承的前缀恰好是它。续跑一个存下来
@@ -172,7 +175,22 @@ func forkSeed(session *Session, requested *int) ([]sessionlog.Event, error) {
 			string(session.ID()), boundary,
 		)
 	}
-	if boundary >= len(events) {
+
+	// 新增: 上游把 boundary 直接当下标使（`events[boundary]`、`events.slice(0, boundary+1)`），
+	// 因为它那边「seq 恒等于下标」。本仓库的日志会从最老的一头弹出事件
+	//（见 docs/session-log-limit.md），于是 boundary 是个 seq，要先减掉起点。
+	baseSeq := session.BaseSeq()
+	index := boundary - baseSeq
+	if index < 0 {
+		// 这一段已经被弹掉了。分叉要的正是这些事件本身，不是从它们折出来的状态，
+		// 所以这里没有「残缺着往下走」这条路，只能如实说它不在了。
+		return nil, forkError(
+			ForkInvalidBoundary,
+			"fork boundary %d has been evicted from session %q (earliest seq: %d)",
+			boundary, string(session.ID()), baseSeq,
+		)
+	}
+	if index >= len(events) {
 		lastSeq := "none"
 		if len(events) > 0 {
 			lastSeq = strconv.Itoa(events[len(events)-1].Seq)
@@ -183,8 +201,8 @@ func forkSeed(session *Session, requested *int) ([]sessionlog.Event, error) {
 			boundary, string(session.ID()), lastSeq,
 		)
 	}
-	if events[boundary].Seq != boundary {
-		// 「seq 恒等于下标」是本包的连续性契约，这里再验一遍是因为分叉是一道会
+	if events[index].Seq != boundary {
+		// 「seq 恒等于起点加下标」是本包的连续性契约，这里再验一遍是因为分叉是一道会
 		// **生出新会话**的边界：一份不连续的日志切出来的 seed 建不起来，与其让
 		// 它在构造里报一句关于 seed 的话，不如在这里说清是边界对不上。
 		return nil, forkError(
@@ -194,10 +212,10 @@ func forkSeed(session *Session, requested *int) ([]sessionlog.Event, error) {
 		)
 	}
 
-	if err := rejectOpenTurn(session, events, boundary); err != nil {
+	if err := rejectOpenTurn(session, events, index); err != nil {
 		return nil, err
 	}
-	return slices.Clone(events[:boundary+1]), nil
+	return slices.Clone(events[:index+1]), nil
 }
 
 // rejectOpenTurn 挡住停在一个还开着的回合里的边界。
@@ -207,9 +225,12 @@ func forkSeed(session *Session, requested *int) ([]sessionlog.Event, error) {
 // 从边界往回找最近的那条回合边界事件：找到的是 turn/start 就说明这个回合还没关，
 // 是 turn/end 或者一条都没有就说明这段前缀停在回合之间。
 //
+// boundary 在这里是**下标**，不是 seq：调用方已经减过起点了。诊断里报的仍是 seq。
+//
 // 新增: DSH 是 `slice(0, boundary+1).findLast(…)`，那一步会先复制一份前缀。
 // Go 这边倒着扫到第一条就停，不复制。
 func rejectOpenTurn(session *Session, events []sessionlog.Event, boundary int) error {
+	boundarySeq := events[boundary].Seq
 	for index := boundary; index >= 0; index-- {
 		event := events[index]
 		if event.Type == sessionlog.EventTurnEnd {
@@ -225,13 +246,13 @@ func rejectOpenTurn(session *Session, events []sessionlog.Event, boundary int) e
 			return forkError(
 				ForkOpenTurn,
 				"fork boundary %d in session %q ends inside an open turn whose payload is unreadable: %v",
-				boundary, string(session.ID()), err,
+				boundarySeq, string(session.ID()), err,
 			)
 		}
 		return forkError(
 			ForkOpenTurn,
 			"fork boundary %d in session %q ends inside open turn %d",
-			boundary, string(session.ID()), data.Turn,
+			boundarySeq, string(session.ID()), data.Turn,
 		)
 	}
 	return nil

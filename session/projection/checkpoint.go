@@ -62,12 +62,19 @@ type Restored struct {
 // 源: packages/session/session-projection/src/index.ts:342-368
 //
 // 一行是「可用的」当且仅当它的 Ver 和当前单元的 [Definition.StateVersion] 相等；
-// 缺行或者版本对不上就把地板拉到 0——那个键必须重折整份日志。
+// 缺行或者版本对不上就把地板拉到 0——那个键必须从头重折一遍。
 //
 // **往下让一条**是承重的：这样读回来的尾巴就能证明存储里的日志还延伸到哪儿，
 // 于是 [Registry.Restore] 能发现一份缩短了的日志（崩溃收尾截过），
 // 而不是把一行过期的数据当成当前值端出去。从这个锚点读回来的空尾巴会给出一个
 // 低于所有水位的末尾，于是恢复被拒，调用方重读整份。
+//
+// 新增: 这里交出来的 0 读作「从存档现存的最前面读起」，不读作「从 seq 0 读起」
+// ——日志会从最老的一头弹出事件，起点是个变量（见 docs/session-log-limit.md
+// 的原则第 1 条）。这个数是一个**请求**，起点的实情由那次读答复：
+// [github.com/snight1983/ds-harness-go/session/persistence.StoredSuffix] 带着它，
+// 调用方再把它当作 [Registry.Restore] 的 baseSeq 传进去。地板本身问不出起点
+// ——它算在读之前，而起点要读了才知道。
 func (r *Registry) RestoreFloor(checkpoint Checkpoint) (int, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -128,25 +135,47 @@ func (r *Registry) ViewCheckpoint(checkpoint Checkpoint) map[string]any {
 //
 // 源: packages/session/session-projection/src/index.ts:398-454
 //
-// 调用方式是固定的：先 [Registry.RestoreFloor] 拿到 floor，用它去存储里
-// readFrom，再把读回来的 events 和**同一个** floor 当作 baseSeq 传进来。
-// 那个「往下让一条」的锚点让给进来的末尾变得可信，所以一份缩短了的日志会在
-// 这里被发现。
+// 调用方式是固定的：先 [Registry.RestoreFloor] 拿到 fromSeq，用它去存储里
+// readFrom，再把读回来的 events、**同一个** fromSeq、以及那次读答复的存档起点
+// 一起传进来。那个「往下让一条」的锚点让给进来的末尾变得可信，所以一份缩短了的
+// 日志会在这里被发现。
+//
+// baseSeq 是**整份存档**现存最早一条事件的 seq，由存储那一侧说出来
+//（[github.com/snight1983/ds-harness-go/session/persistence.StoredSuffix] 的同名
+// 字段）。请求的 fromSeq 落在它之前时，读回来的那截就是现存的全部。
 //
 // 一行是「可用的」当且仅当：版本和当前单元的 [Definition.StateVersion] 相等、
-// 它不早于 baseSeq（Seq >= baseSeq-1）、而且它不声称自己包含了超过给进来那截
+// 它不早于这截尾巴的起点（Seq >= start-1）、而且它不声称自己包含了超过给进来那截
 // 日志末尾的事件（Seq <= endSeq）。不可用的行会被丢掉、那个键从
-// [Definition.Init] 重折——而重折只在**完整**日志上才成立，所以 baseSeq > 0
-// 时遇到不可用的行会返回 [ErrCheckpointUnusable]，让调用方从 seq 0 重读。
+// [Definition.Init] 重折——而重折要求给进来的是现存的**全部**日志，所以只在
+// fromSeq 真的切掉了前面一段时才返回 [ErrCheckpointUnusable]，让调用方重读整份。
+//
+// 新增: 上游那道判据是 `baseSeq > 0`，靠的是「日志从 0 起，所以 0 就是整读」。
+// 本仓库的日志会从最老的一头弹出事件（见 docs/session-log-limit.md 的原则第 1
+// 条），整读的起点恒大于 0——照旧判的话遇到一行不可用就必报错，而调用方按提示
+// 「从 seq 0 重读」永远回不到 0，是一条读不出来也退不回去的死路。判据因此换成
+// 「这截尾巴是不是现存的全部」。
+//
+// 新增: 一份被弹过头部的日志重折出来的状态是**残缺的**——那些最后一次更新落在
+// 被弹区间里的单元丢了。这不阻断读，见原则第 5 条。
 //
 // 一行版本对得上却解不开，是**这个构建自己写坏了**，不是过期。这种情况原样
 // 上抛而不是退回重折：悄悄重折会把一个真实的缺陷盖住，而且盖住之后每次冷读
 // 都要白折一遍整份日志。
-func (r *Registry) Restore(checkpoint Checkpoint, events []session.Event, baseSeq int) (Restored, error) {
+func (r *Registry) Restore(
+	checkpoint Checkpoint,
+	events []session.Event,
+	fromSeq int,
+	baseSeq int,
+) (Restored, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	endSeq := baseSeq - 1
+	// 这截尾巴真正的起点：请求的水位落在存档起点之前时，读回来的是现存的全部。
+	start := max(fromSeq, baseSeq)
+	whole := fromSeq <= baseSeq
+
+	endSeq := start - 1
 	if len(events) > 0 {
 		endSeq = events[len(events)-1].Seq
 	}
@@ -158,16 +187,16 @@ func (r *Registry) Restore(checkpoint Checkpoint, events []session.Event, baseSe
 		row, present := checkpoint[def.key]
 		usable := present &&
 			row.Ver == def.stateVersion &&
-			row.Seq >= baseSeq-1 &&
+			row.Seq >= start-1 &&
 			row.Seq <= endSeq
-		if !usable && baseSeq > 0 {
+		if !usable && !whole {
 			return Restored{}, fmt.Errorf(
 				"%w：投影键 %q 从 seq %d 恢复不了，它的检查点行缺失、版本对不上、或者超出了给进来的日志末尾 %d",
-				ErrCheckpointUnusable, def.key, baseSeq, endSeq)
+				ErrCheckpointUnusable, def.key, start, endSeq)
 		}
 
 		state := def.init()
-		from := baseSeq - 1
+		from := start - 1
 		if usable {
 			decoded, err := def.decodeState(row.Val)
 			if err != nil {

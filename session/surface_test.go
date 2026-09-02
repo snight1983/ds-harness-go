@@ -187,7 +187,7 @@ func TestFoldSurfaceAppendsInLogOrder(t *testing.T) {
 		toolResultEvent(t, 3, 1, 1, "c1", "done"),
 	}
 
-	got, err := FoldSurface(events)
+	got, err := FoldSurface(events, 0)
 	if err != nil {
 		t.Fatalf("折不出来：%v", err)
 	}
@@ -214,7 +214,7 @@ func TestFoldSurfaceShadowsTheReplacedRange(t *testing.T) {
 		userMessageEvent(t, 4, "after"),
 	}
 
-	got, err := FoldSurface(events)
+	got, err := FoldSurface(events, 0)
 	if err != nil {
 		t.Fatalf("折不出来：%v", err)
 	}
@@ -227,6 +227,128 @@ func TestFoldSurfaceShadowsTheReplacedRange(t *testing.T) {
 	want := SurfaceFoldReplacement{Seq: 3, Start: 0, End: 2, ShadowedSeqs: []int{0, 1, 2}}
 	if !reflect.DeepEqual(got.Replacements[0], want) {
 		t.Fatalf("替换记录不对：\n想要 %#v\n实际 %#v", want, got.Replacements[0])
+	}
+}
+
+func TestFoldSurfaceFoldsALogWhoseHeadWasEvicted(t *testing.T) {
+	t.Parallel()
+
+	// 日志会从最老的一头弹出事件，剩下的这一段不从 0 起，
+	// 见 docs/session-log-limit.md 的原则第 1 条。表面上的位置一律是 seq。
+	replacement := userMessageEvent(t, 503, "summary")
+	replacement.SurfaceOp = ReplaceOp{Start: 500, End: 502}
+	replacement.SourceEventSeqs = []int{500, 501, 502}
+
+	events := []Event{
+		userMessageEvent(t, 500, "a"),
+		assistantMessageEvent(t, 501, 1, 1, llm.Content{llm.TextBlock{Text: "b"}}),
+		userMessageEvent(t, 502, "c"),
+		replacement,
+		userMessageEvent(t, 504, "after"),
+	}
+
+	got, err := FoldSurface(events, 500)
+	if err != nil {
+		t.Fatalf("折不出来：%v", err)
+	}
+	if !reflect.DeepEqual(got.Nodes, []int{503, 504}) {
+		t.Fatalf("表面上的节点不对：%v", got.Nodes)
+	}
+	want := SurfaceFoldReplacement{Seq: 503, Start: 500, End: 502, ShadowedSeqs: []int{500, 501, 502}}
+	if len(got.Replacements) != 1 || !reflect.DeepEqual(got.Replacements[0], want) {
+		t.Fatalf("替换记录不对：%#v", got.Replacements)
+	}
+	if base := LogBaseSeq(events); base != 500 {
+		t.Fatalf("这一段的起点该是 500，实际 %d", base)
+	}
+}
+
+func TestFoldSurfaceClampsAReplacementWhoseStartWasEvicted(t *testing.T) {
+	t.Parallel()
+
+	// 替换声明的区间是它写下来那一刻的，日志随后从最老的一头弹掉了起点那条。
+	// 定位不到的端点先分两种（原则第 4 条）：500 落在起点 501 之前，是被弹掉了，
+	// 不是这份日志坏了——区间往前收到表面的最前端，盖住现存的那两条。
+	replacement := userMessageEvent(t, 503, "summary")
+	replacement.SurfaceOp = ReplaceOp{Start: 500, End: 502}
+	replacement.SourceEventSeqs = []int{500, 501, 502}
+
+	events := []Event{
+		assistantMessageEvent(t, 501, 1, 1, llm.Content{llm.TextBlock{Text: "b"}}),
+		userMessageEvent(t, 502, "c"),
+		replacement,
+		userMessageEvent(t, 504, "after"),
+	}
+
+	got, err := FoldSurface(events, 501)
+	if err != nil {
+		t.Fatalf("起点被弹掉了不是违规：%v", err)
+	}
+	if !reflect.DeepEqual(got.Nodes, []int{503, 504}) {
+		t.Fatalf("表面上的节点不对：%v", got.Nodes)
+	}
+	// 被盖掉的只报现存的那两条：500 已经不在表面上了，说它被盖住是假话。
+	want := SurfaceFoldReplacement{Seq: 503, Start: 500, End: 502, ShadowedSeqs: []int{501, 502}}
+	if len(got.Replacements) != 1 || !reflect.DeepEqual(got.Replacements[0], want) {
+		t.Fatalf("替换记录不对：%#v", got.Replacements)
+	}
+}
+
+func TestFoldSurfaceDegradesAFullyEvictedReplacementToAnAppend(t *testing.T) {
+	t.Parallel()
+
+	// 整个区间都在被弹区间里。这条替换事件自己还在，它照旧要上表面——
+	// 只是它没盖住任何东西，所以不进 Replacements。
+	summary := userMessageEvent(t, 503, "summary")
+	summary.SurfaceOp = ReplaceOp{Start: 500, End: 502}
+	summary.SourceEventSeqs = []int{500, 501, 502}
+
+	// 工具结果那道「只能改内容」的检查也跳过：被它重写的原件已经没了，无从比起。
+	rewrite := toolResultEvent(t, 504, 1, 1, "c1", "rewritten")
+	rewrite.SurfaceOp = ReplaceOp{Start: 499, End: 499}
+	rewrite.SourceEventSeqs = []int{499}
+
+	got, err := FoldSurface([]Event{summary, rewrite}, 503)
+	if err != nil {
+		t.Fatalf("要盖的东西全没了不是违规：%v", err)
+	}
+	if !reflect.DeepEqual(got.Nodes, []int{503, 504}) {
+		t.Fatalf("两条都该落在表面上：%v", got.Nodes)
+	}
+	if len(got.Replacements) != 0 {
+		t.Fatalf("一条都没盖住，不该记替换：%#v", got.Replacements)
+	}
+}
+
+func TestFoldSurfaceStillRejectsADanglingEndpointAboveTheBase(t *testing.T) {
+	t.Parallel()
+
+	// 「被弹掉了」和「日志坏了」的分界就是起点这个 seq：不小于它却仍然不在表面上，
+	// 照旧是违规。
+	base := func() []Event {
+		return []Event{
+			userMessageEvent(t, 500, "a"),
+			userMessageEvent(t, 501, "b"),
+		}
+	}
+
+	cases := map[string]ReplaceOp{
+		"起点不小于 baseSeq 却不在表面上": {Start: 507, End: 501},
+		"终点不小于 baseSeq 却不在表面上": {Start: 500, End: 507},
+	}
+
+	for name, op := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			third := userMessageEvent(t, 502, "s")
+			third.SurfaceOp = op
+			third.SourceEventSeqs = []int{op.Start, op.End}
+
+			if _, err := FoldSurface(append(base(), third), 500); !errors.Is(err, ErrSurfaceViolation) {
+				t.Fatalf("该判违规：%v", err)
+			}
+		})
 	}
 }
 
@@ -298,7 +420,7 @@ func TestFoldSurfaceRejectsBrokenReplacements(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := FoldSurface(build()); !errors.Is(err, ErrSurfaceViolation) {
+			if _, err := FoldSurface(build(), 0); !errors.Is(err, ErrSurfaceViolation) {
 				t.Fatalf("想要 ErrSurfaceViolation，实际 %v", err)
 			}
 		})
@@ -311,7 +433,7 @@ func TestAssistantMessageMayDeclareAnEmptySourceList(t *testing.T) {
 	message := assistantMessageEvent(t, 0, 1, 1, llm.Content{llm.TextBlock{Text: "ok"}})
 	message.SourceEventSeqs = []int{}
 
-	if _, err := FoldSurface([]Event{message}); err != nil {
+	if _, err := FoldSurface([]Event{message}, 0); err != nil {
 		t.Fatalf("助手消息可以声明一个已知为空的来源清单：%v", err)
 	}
 }
@@ -352,7 +474,7 @@ func TestToolResultRewriteMayOnlyChangeTheContent(t *testing.T) {
 			ToolCallID: "c1", IsError: false,
 			Content: llm.Content{llm.TextBlock{Text: "trimmed"}},
 		}}
-		if _, err := FoldSurface([]Event{original, rewriteWith(t, data)}); err != nil {
+		if _, err := FoldSurface([]Event{original, rewriteWith(t, data)}, 0); err != nil {
 			t.Fatalf("只改内容不该被拒：%v", err)
 		}
 	})
@@ -390,7 +512,7 @@ func TestToolResultRewriteMayOnlyChangeTheContent(t *testing.T) {
 
 			data := decode(t, original)
 			mutate(&data)
-			_, err := FoldSurface([]Event{original, rewriteWith(t, data)})
+			_, err := FoldSurface([]Event{original, rewriteWith(t, data)}, 0)
 			if !errors.Is(err, ErrSurfaceViolation) {
 				t.Fatalf("想要 ErrSurfaceViolation，实际 %v", err)
 			}
@@ -412,7 +534,7 @@ func TestToolResultRewriteMustPointAtASingleToolResult(t *testing.T) {
 		wide.SurfaceOp = ReplaceOp{Start: 0, End: 1}
 		wide.SourceEventSeqs = []int{0, 1}
 
-		if _, err := FoldSurface(append(events, wide)); !errors.Is(err, ErrSurfaceViolation) {
+		if _, err := FoldSurface(append(events, wide), 0); !errors.Is(err, ErrSurfaceViolation) {
 			t.Fatalf("想要 ErrSurfaceViolation，实际 %v", err)
 		}
 	})
@@ -425,7 +547,7 @@ func TestToolResultRewriteMustPointAtASingleToolResult(t *testing.T) {
 		rewrite.SourceEventSeqs = []int{0}
 
 		events := []Event{userMessageEvent(t, 0, "hi"), rewrite}
-		if _, err := FoldSurface(events); !errors.Is(err, ErrSurfaceViolation) {
+		if _, err := FoldSurface(events, 0); !errors.Is(err, ErrSurfaceViolation) {
 			t.Fatalf("想要 ErrSurfaceViolation，实际 %v", err)
 		}
 	})
@@ -457,7 +579,7 @@ func TestToolResultRewriteComparesTheErrorIdentityItself(t *testing.T) {
 	rewrite.SurfaceOp = ReplaceOp{Start: 0, End: 0}
 	rewrite.SourceEventSeqs = []int{0}
 
-	_, err := FoldSurface([]Event{withError(t, 0, "X"), rewrite})
+	_, err := FoldSurface([]Event{withError(t, 0, "X"), rewrite}, 0)
 	if !errors.Is(err, ErrSurfaceViolation) {
 		t.Fatalf("想要 ErrSurfaceViolation，实际 %v", err)
 	}
@@ -468,7 +590,7 @@ func TestToolResultRewriteComparesTheErrorIdentityItself(t *testing.T) {
 		same := withError(t, 1, "X")
 		same.SurfaceOp = ReplaceOp{Start: 0, End: 0}
 		same.SourceEventSeqs = []int{0}
-		if _, err := FoldSurface([]Event{withError(t, 0, "X"), same}); err != nil {
+		if _, err := FoldSurface([]Event{withError(t, 0, "X"), same}, 0); err != nil {
 			t.Fatalf("错误身份没变不该被拒：%v", err)
 		}
 	})
@@ -492,7 +614,7 @@ func TestToolResultRewriteReportsABrokenPayloadOnEitherSide(t *testing.T) {
 		rewrite := toolResultEvent(t, 1, 1, 1, "c1", "trimmed")
 		rewrite.SurfaceOp = ReplaceOp{Start: 0, End: 0}
 		rewrite.SourceEventSeqs = []int{0}
-		if _, err := FoldSurface([]Event{broken(0), rewrite}); !errors.Is(err, ErrMalformedValue) {
+		if _, err := FoldSurface([]Event{broken(0), rewrite}, 0); !errors.Is(err, ErrMalformedValue) {
 			t.Fatalf("想要 ErrMalformedValue，实际 %v", err)
 		}
 	})
@@ -504,7 +626,7 @@ func TestToolResultRewriteReportsABrokenPayloadOnEitherSide(t *testing.T) {
 		rewrite.SurfaceOp = ReplaceOp{Start: 0, End: 0}
 		rewrite.SourceEventSeqs = []int{0}
 		original := toolResultEvent(t, 0, 1, 1, "c1", "raw")
-		if _, err := FoldSurface([]Event{original, rewrite}); !errors.Is(err, ErrMalformedValue) {
+		if _, err := FoldSurface([]Event{original, rewrite}, 0); !errors.Is(err, ErrMalformedValue) {
 			t.Fatalf("想要 ErrMalformedValue，实际 %v", err)
 		}
 	})
@@ -541,7 +663,7 @@ func TestFoldSurfaceRefusesASurfaceOpItCannotName(t *testing.T) {
 	stray := userMessageEvent(t, 0, "a")
 	stray.SurfaceOp = replaceLikeOp{}
 
-	if _, err := FoldSurface([]Event{stray}); !errors.Is(err, ErrSurfaceViolation) {
+	if _, err := FoldSurface([]Event{stray}, 0); !errors.Is(err, ErrSurfaceViolation) {
 		t.Fatalf("想要 ErrSurfaceViolation，实际 %v", err)
 	}
 }
@@ -552,7 +674,7 @@ func TestFoldSurfaceRefusesAnEligibleEventWithoutItsMark(t *testing.T) {
 	naked := toolResultEvent(t, 0, 1, 1, "c1", "done")
 	naked.SurfaceOp = nil
 
-	if _, err := FoldSurface([]Event{naked}); !errors.Is(err, ErrSurfaceViolation) {
+	if _, err := FoldSurface([]Event{naked}, 0); !errors.Is(err, ErrSurfaceViolation) {
 		t.Fatalf("想要 ErrSurfaceViolation，实际 %v", err)
 	}
 }
@@ -571,7 +693,7 @@ func TestSurfaceFolderMatchesTheWholeLogFold(t *testing.T) {
 		{Type: EventTurnStart, Seq: 3, Data: json.RawMessage(`{"turn":1}`)},
 	}
 
-	whole, err := FoldSurface(events)
+	whole, err := FoldSurface(events, 0)
 	if err != nil {
 		t.Fatalf("整段折不出来：%v", err)
 	}

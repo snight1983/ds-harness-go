@@ -6,9 +6,9 @@
 package agentpresets
 
 import (
+	"context"
 	"math"
-	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	yaml "go.yaml.in/yaml/v3"
@@ -81,8 +81,8 @@ func number(value any) *float64 {
 // 不在、解不动、形状不对，三种情形是同一个答案——空元数据——因为调用方渲染的是
 // 一个选择器，不是一份诊断。这里**不返回 error**：一份展示文字读不出来的预设照样
 // 装得起来，它只是显示自己的 id。
-func ReadMetadata(directory string) Metadata {
-	raw, err := os.ReadFile(filepath.Join(directory, MetadataFile))
+func ReadMetadata(ctx context.Context, store Store, directory string) Metadata {
+	raw, err := store.ReadFile(ctx, path.Join(directory, MetadataFile))
 	if err != nil {
 		// 不在是常态：元数据是可选的，而每一份靠复制别人建出来的预设都不带它。
 		return Metadata{}

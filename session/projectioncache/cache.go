@@ -221,9 +221,16 @@ func (c *Cache) CachedSnapshot(meta session.SessionHeader) (*projection.Snapshot
 //
 // 源: packages/session/session-projection-cache/src/index.ts:154-196
 //
-// 一条被缩短了的日志（崩溃修复截过尾）作废掉的缓存行会触发一次从 seq 0 的整读
+// 一条被缩短了的日志（崩溃修复截过尾）作废掉的缓存行会触发一次整读
 // ——阶梯最慢的那一级，但仍然不会崩。这个会话根本没有落地的日志时，
 // 错误从持久化那一侧原样穿过来（[persistence.ErrSessionNotFound]）。
+//
+// 新增: 一行缓存记的水位落在**已经被弹掉**的那一段里时（日志从最老的一头弹出
+// 事件，见 docs/session-log-limit.md），从地板读回来的就是现存的全部，那一行
+// 在 [projection.Registry.Restore] 里判成不可用、被丢掉，每个单元从 Init 在
+// 现存这一段上重折一遍。这条路不报错、也不多读一次：那次读已经是整读了。
+// 折出来的状态因此可能是残缺的（最后一次更新落在被弹区间里的单元丢了），
+// 这是原则第 5 条认下的代价。
 func (c *Cache) ColdSnapshot(ctx context.Context, id session.SessionID) (projection.Snapshot, error) {
 	record, hasRecord, err := c.table.Get(string(id))
 	if err != nil {
@@ -259,7 +266,7 @@ func (c *Cache) ColdSnapshot(ctx context.Context, id session.SessionID) (project
 	if hasRecord && record.Identity != IdentityOf(tail.Meta) {
 		reason = errUnrelatedIdentity
 	} else {
-		restored, reason = c.registry.Restore(cached, tail.Events, floor)
+		restored, reason = c.registry.Restore(cached, tail.Events, floor, tail.BaseSeq)
 	}
 
 	if reason != nil {
@@ -278,7 +285,7 @@ func (c *Cache) ColdSnapshot(ctx context.Context, id session.SessionID) (project
 		if wholeErr != nil {
 			return projection.Snapshot{}, wholeErr
 		}
-		restored, err = c.registry.Restore(nil, whole.Events, 0)
+		restored, err = c.registry.Restore(nil, whole.Events, 0, whole.BaseSeq)
 		if err != nil {
 			return projection.Snapshot{}, err
 		}

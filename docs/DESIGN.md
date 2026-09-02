@@ -530,7 +530,7 @@ skill 本来就是一堆文件，对象存储正是为这件事存在的——�
 「agent 有个工具，能按模型给的路径读写任意目录」；而「服务进程自己去某处取一份资源」
 是任何程序都在做的事。我们不装前者，后者走对象存储。
 
-### 数据库是 Postgres，不写 SQLite 后端
+### 生产数据库只有 Postgres
 
 `storage` 这条接缝是**键值**，不是文件系统——表名 + 键 + 一段不透明 JSON，
 而且它明写「记录键永远不会出现在文件路径里，这是后端的义务」
@@ -562,6 +562,17 @@ B 往自己的追一条，这两条毫不相干的写照样一前一后——不
 它的价值一分都没兑现——两个后端过同一套用例，「换后端不用改上层」
 才从一句主张变成每次 `go test` 都在验的事实。
 
+**后来补了一个 SQLite 方言**（`datastore.SQLite`），上面那条判据一个字没变：
+生产仍然只有 Postgres，理由还是单机还是多机。补它是为了另一件事——`datastore`
+底下那几千行**每一行都要一个真的数据库才执行得到**，而只认 Postgres 的时候，
+它们在开发机上永远跳过、在 CI 上只由一个环境变量决定跑不跑，于是「跑绿了」和
+「一行没跑」长得一模一样。缺省落在一个临时目录里的库文件上之后，这批用例进了
+`go test ./...`；设 `DSH_POSTGRES_DSN` 就把同一批用例体换到 Postgres 上再跑一遍。
+
+所以它和内存后端是同一个理由的两次应用：两种方言过同一套用例，`Dialect` 那道缝
+才从一句主张变成每次 `go test` 都在验的事实。上面那段 SQLite 的锁粒度依然成立，
+而它对一个一次只跑一条用例的测试进程不构成问题。
+
 ### 实现那一列
 
 DSH 的实现换成服务端的，接缝一行不动：
@@ -587,7 +598,7 @@ DSH 的实现换成服务端的，接缝一行不动：
 ```
 1. 底座        invariants  util/timeout  util/outputretention
                settings                   ← 已做完
-2. 持久化      storage → storage/memory → storage/domain → storage/postgres
+2. 持久化      storage → storage/memory → storage/domain → datastore → datastore/kvstore
                credentials  attachment  fs → fs/objectstore
                session/persistence
                session/projection  session/projectioncache

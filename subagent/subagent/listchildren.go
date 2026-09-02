@@ -479,7 +479,8 @@ func (l *listing) resolveColdIdentity(
 	}
 	// 和 [projectioncache.Cache.ColdSnapshot] 走的是同一份重折配方，只是这里
 	// 有意不写回缓存：列举是只读的，一次列举不该改动任何耐久状态。
-	restored, err := l.services.Projections.Restore(nil, inspected.Events, 0)
+	restored, err := l.services.Projections.Restore(
+		nil, inspected.Events, 0, session.LogBaseSeq(inspected.Events))
 	if err != nil {
 		return diagnosticRow(childID, DiagnosticCorrupt), nil
 	}
