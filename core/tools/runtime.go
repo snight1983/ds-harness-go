@@ -187,7 +187,26 @@ type Options struct {
 	// 用它的是系统提示装配：工具清单变了，缓存下来的提示词就得重算。
 	// 守卫的登记不触发它——守卫不改变**看得见什么**，只改变能不能跑。
 	OnChange func()
+
+	// MaxArgumentBytes 是一次调用的参数最多能有多少字节；零表示用
+	// [DefaultMaxArgumentBytes]，负数表示不设限。
+	//
+	// 新增: 见 [ErrArgsTooLarge]。缺省值定得比任何一份真实工具参数都宽，
+	// 所以现有部署感觉不到它——它挡的是「一个调用方把几十兆的载荷当参数递进来」
+	// 那种形状，而那份载荷会被拷进执行对象、写进会话事件、再进模型历史，
+	// 这一路上原本没有任何一处会拦它。
+	//
+	// 负数是明着关掉它的那个口子：一个宿主如果确实要让大载荷走这条路，
+	// 那该是一次显式的决定，而不是把上限调成一个大得看不出意图的数字。
+	MaxArgumentBytes int
 }
+
+// DefaultMaxArgumentBytes 是一次调用参数的缺省字节上限。
+//
+// 新增: 一兆。真实工具的参数是模型写的一小段 JSON，通常几百字节到几千字节；
+// 最宽的那些（贴一整段代码进去的编辑类工具）也在十万字节这个量级。
+// 一兆留了一个数量级的余量，同时把「几十兆的载荷」挡在外面。
+const DefaultMaxArgumentBytes = 1 << 20
 
 // Runtime 是工具注册表和派发管线。
 //
@@ -204,6 +223,8 @@ type Runtime struct {
 	approval Approval
 	// logger 用来报告观察者抛出来的错误。
 	logger *slog.Logger
+	// maxArgumentBytes 是一次调用参数的字节上限；非正数表示不设限。
+	maxArgumentBytes int
 }
 
 // NewRuntime 造一个注册表。
@@ -229,7 +250,16 @@ func NewRuntime(options Options) (*Runtime, error) {
 		// 它是 scope 那一侧的签名，本包无权改；照实转出去比在这里吞掉它诚实。
 		return nil, err
 	}
-	return &Runtime{layers: layers, approval: options.Approval, logger: logger}, nil
+	maxArgumentBytes := options.MaxArgumentBytes
+	if maxArgumentBytes == 0 {
+		maxArgumentBytes = DefaultMaxArgumentBytes
+	}
+	return &Runtime{
+		layers:           layers,
+		approval:         options.Approval,
+		logger:           logger,
+		maxArgumentBytes: maxArgumentBytes,
+	}, nil
 }
 
 // ErrInvalidDefinition 表示一份工具定义本身就不合法，注册被拒。

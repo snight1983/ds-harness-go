@@ -138,6 +138,43 @@ func (err *ArgsError) ErrorName() string { return "ToolArgsError" }
 // ErrorCode 交出这个错误的代号。
 func (err *ArgsError) ErrorCode() string { return CodeInvalidArgs }
 
+// ErrArgsTooLarge 表示模型给的那份参数超过了这次派发允许的字节数。
+//
+// 新增: DSH 那边没有这道上限——它的参数是模型响应解出来的对象，尺寸受制于
+// 模型自己的输出上限。本仓库是**服务端**运行时：[ExecutionInput.Arguments] 是
+// 一段 [json.RawMessage]，宿主可以从任何地方递进来（协议层、子 Agent、回放、
+// 一个直接调 Dispatch 的 HTTP 处理器），没有哪一条路保证它是模型写的。
+// 一份没有上限的参数会被完整拷进执行对象、写进会话事件、再进模型历史。
+var ErrArgsTooLarge = errors.New("tools: 参数太大")
+
+// ArgsTooLargeError 是一次超过字节上限的参数。
+//
+// 它同时是一个 [ArgsError]（[ErrInvalidArgs] 也认得出），因为对模型来说
+// 这就是「你给的参数不对」的一种——只是拒绝的理由是尺寸，不是形状。
+type ArgsTooLargeError struct {
+	// ToolName 是被点名的工具。
+	ToolName string
+	// Bytes 是这份参数实际有多少字节。
+	Bytes int
+	// Limit 是这次派发允许的上限。
+	Limit int
+}
+
+// Error 交出给模型看的那句话。
+func (err *ArgsTooLargeError) Error() string {
+	return fmt.Sprintf("invalid arguments: arguments for %q are %d bytes, over the %d byte limit",
+		err.ToolName, err.Bytes, err.Limit)
+}
+
+// Unwrap 让 errors.Is 同时认出 [ErrArgsTooLarge] 和 [ErrInvalidArgs]。
+func (err *ArgsTooLargeError) Unwrap() []error { return []error{ErrArgsTooLarge, ErrInvalidArgs} }
+
+// ErrorName 交出这个错误的名字。
+func (err *ArgsTooLargeError) ErrorName() string { return "ToolArgsError" }
+
+// ErrorCode 交出这个错误的代号。
+func (err *ArgsTooLargeError) ErrorCode() string { return CodeInvalidArgs }
+
 // ErrorInfo 是一次失败的结构化身份，和给模型看的那句话并排放着。
 //
 // 源: packages/core/tools/src/index.ts:467-471（ToolErrorInfo）

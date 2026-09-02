@@ -638,6 +638,15 @@ func (r *Runtime) createExecution(input ExecutionInput) (*RunContext, *Result) {
 	if definition, ok := r.Get(input.Name, input.Agent); ok {
 		exec.finalizer = definition.FinalizeContent
 	}
+	// 尺寸先于形状：一份几十兆的载荷不该先被 [json.Valid] 整个走一遍才被拒。
+	if r.maxArgumentBytes > 0 && len(input.Arguments) > r.maxArgumentBytes {
+		failure := failureResult(&ArgsTooLargeError{
+			ToolName: input.Name,
+			Bytes:    len(input.Arguments),
+			Limit:    r.maxArgumentBytes,
+		})
+		return exec, &failure
+	}
 	if len(input.Arguments) == 0 || !json.Valid(input.Arguments) {
 		failure := failureResult(&ArgsError{Violations: []string{"arguments must be valid JSON"}})
 		return exec, &failure
