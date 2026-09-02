@@ -238,14 +238,15 @@ type logScan struct {
 	committedBytes int64
 }
 
-// scanCheckpoint 是扫描进行到某一处时的三个游标。
+// 这里没有 checkpoint / rollback。
 //
 // 源: packages/session/session-persistence-jsonl/src/format.ts:358-368
-type scanCheckpoint struct {
-	inputBytes     int64
-	committedBytes int64
-	eventCount     int
-}
+//
+// 上游那对游标存档只服务一件事：从一个写坏的 zstd 块里捞出几条完整记录、试着
+// 补喂进扫描器，不成再退回去。明文编码下那件事不存在——一条没有换行的记录
+// 就是没写完，捞不出东西来，所以 [tornMarker.recoveredEvents] 恒为空。
+// 留一个没人调的 checkpoint 在这儿不会让那条路提前长好，只会多一处半成品。
+// 等真的接了按块封帧的编码，它和它的调用方一起加回来。
 
 // logScanner 增量扫一份存档里那些**完整**的事件记录，头由外面单独喂进来。
 //
@@ -326,18 +327,6 @@ func (s *logScanner) write(chunk []byte) error {
 		s.fragment = append(s.fragment, chunk[lineStart:]...)
 	}
 	return nil
-}
-
-// checkpoint 抓一张当下的游标快照，为的是在追加一段从坏尾巴里捞出来的明文之前
-// 记住「哪些是完整记录带来的」。
-//
-// 源: packages/session/session-persistence-jsonl/src/format.ts:358-368
-func (s *logScanner) checkpoint() scanCheckpoint {
-	return scanCheckpoint{
-		inputBytes:     s.inputBytes,
-		committedBytes: s.committedBytes,
-		eventCount:     len(s.events),
-	}
 }
 
 // finish 收工，把最后那条没有换行的记录当作断尾忽略掉。
