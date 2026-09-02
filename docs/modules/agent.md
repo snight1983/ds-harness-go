@@ -199,7 +199,7 @@ Observer 通过 `scope.Scope` 登记并按 Agent 的载体作用域过滤：
 - 派发顺序为全局层、祖先层，最后是 Agent 自身层。
 - Agent Dispose 时，其局部作用域资源随之释放。
 
-这种设计用显式作用域替代隐式全局插件状态，使宿主级能力、父 Agent 能力和单 Agent 能力可以同时存在而不互相泄漏。
+这种设计用显式作用域替代隐式全局插件状态，使宿主级能力、父 Agent 能力和单 Agent 能力可以同时存在而不互相泄漏。作用域本身——身份、父链、准入方向、所有权边界和分层注册表——见 [作用域](core-scope.md)。
 
 ## 发起者上下文
 
@@ -218,14 +218,7 @@ Observer 通过 `scope.Scope` 登记并按 Agent 的载体作用域过滤：
 
 选择内容包括 Provider、Model 和 Reasoning Effort。没有选择时保持 Agent 原始配置。
 
-## 作用域与默认模型
-
-`core/scope` 是 Agent 控制面的基础设施。每个作用域拥有不透明身份、可选父作用域和一组按后进先出顺序释放的资源。它同时解决两类问题：
-
-- 工具、提示词、Skill 和 Observer 沿父链继承，离 Agent 更近的同名注册覆盖外层注册。
-- Agent 事件只向自己的作用域和祖先作用域传播，不向子作用域或兄弟作用域传播。
-- 父链绑定拒绝重复绑定和成环；改链只能使用首次绑定返回的句柄。
-- `Scope.Dispose` 幂等执行全部清理，并汇总清理错误。
+## 默认模型
 
 `core/agentdefaultmodel` 管理部署级默认模型。组合配置给出基础选择，动态设置可以覆盖 Provider、Model 和 Reasoning Effort；保存后，新选择立即被读取，不要求重建 Agent。它只提供默认值，不替代单个 Agent 的显式模型选择，也不负责模型路由和凭据管理。
 
@@ -273,8 +266,6 @@ Observer 通过 `scope.Scope` 登记并按 Agent 的载体作用域过滤：
 | `core/agent/modelselection.go` | 动态模型选择及提示词/请求一致性接线 |
 | `core/agent/consumedwork.go` | 从事件日志折叠已消费和被取消的工作 |
 | `core/agent/doc.go` | 包级设计说明和移植裁决 |
-| `core/scope/scope.go` | 作用域身份、父链、事件准入和资源释放 |
-| `core/scope/layers.go` | 分层注册、继承与近层覆盖 |
 | `core/agentdefaultmodel/config.go` | 部署默认模型与动态设置覆盖 |
 
 ## 深入阅读

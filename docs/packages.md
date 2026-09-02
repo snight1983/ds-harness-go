@@ -16,7 +16,7 @@
 | `github.com/snight1983/ds-harness-go/core/agent` | [Agent](modules/agent.md) |
 | `github.com/snight1983/ds-harness-go/core/agentdefaultmodel` | [运行时设置](modules/settings.md) |
 | `github.com/snight1983/ds-harness-go/core/agentloop` | [Agent Loop](modules/agentloop.md) |
-| `github.com/snight1983/ds-harness-go/core/scope` | [Agent](modules/agent.md) |
+| `github.com/snight1983/ds-harness-go/core/scope` | [作用域](modules/core-scope.md) |
 | `github.com/snight1983/ds-harness-go/core/session` | [活会话](modules/core-session.md) |
 | `github.com/snight1983/ds-harness-go/core/systemprompt` | [Skill、提示词与预设](modules/skill.md) |
 | `github.com/snight1983/ds-harness-go/core/tools` | [Tools](modules/tools.md) |

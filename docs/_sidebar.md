@@ -6,6 +6,7 @@
   - [Go 包文档映射](packages.md)
 
 - 核心运行时
+  - [作用域](modules/core-scope.md)
   - [Agent](modules/agent.md)
   - [Agent Loop](modules/agentloop.md)
   - [Session](modules/session.md)

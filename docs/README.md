@@ -12,6 +12,7 @@
 
 | 模块 | 内容 |
 |---|---|
+| [作用域](modules/core-scope.md) | 身份、父子链、事件准入方向、所有权边界和分层注册表骨架 |
 | [Agent](modules/agent.md) | 活 Agent 契约、Registry、Inbox、作用域、生命周期和默认模型 |
 | [Agent Loop](modules/agentloop.md) | 回合、步骤、模型请求、工具循环、取消和维护任务 |
 | [Session](modules/session.md) | 事件日志、根据事件整理的当前状态、缓存、恢复和分叉 |
