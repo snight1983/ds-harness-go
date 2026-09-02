@@ -690,8 +690,24 @@ func (b *Backend) listSessionDirs(project string) ([]string, error) {
 // assertUsableRoot 要求一个已经存在的根必须是读得动的目录。
 //
 // 源: packages/session/session-persistence-jsonl/src/index.ts:816-824
+//
+// 新增: 「是不是目录」要单独 [os.Stat] 一次，不能只看 [os.ReadDir] 报没报错。
+// 根被一个普通文件占着时，POSIX 上 ReadDir 报 ENOTDIR，Windows 上报的却是
+// ERROR_PATH_NOT_FOUND——那个错映到 [fs.ErrNotExist]，会被下面那句「不存在是
+// 正常的」放过去，于是同一份配置在两个平台上一个拦得住、一个拦不住。
 func (b *Backend) assertUsableRoot() error {
-	if _, err := os.ReadDir(b.root); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	info, err := os.Stat(b.root)
+	if errors.Is(err, fs.ErrNotExist) {
+		// 根还不存在是正常的：它在第一次落地时建出来。
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("session/persistence/jsonl: 根 %q 已经存在，但它不是一个目录", b.root)
+	}
+	if _, err := os.ReadDir(b.root); err != nil {
 		return err
 	}
 	return nil
