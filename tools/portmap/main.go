@@ -31,6 +31,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/snight1983/ds-harness-go/tools/internal/toolpath"
 )
 
 // Export 是清单里的一行：某个文件的某一行导出了某个名字。
@@ -61,11 +63,24 @@ var (
 )
 
 func main() {
-	root := flag.String("root", `C:\codestudy\deepseek-harness-dsh-v0.1.2-alpha.3`, "DeepSeek Harness 源码根目录")
-	out := flag.String("out", `C:\code\ds-harness-go\docs\portmap\dsh-exports.tsv`, "清单输出路径")
+	root := flag.String("root", "", "DeepSeek Harness 源码根目录（留空＝读 "+toolpath.DSHRootEnv+" 环境变量）")
+	out := flag.String("out", "", "清单输出路径（留空＝仓库根下的 docs/portmap/dsh-exports.tsv）")
 	flag.Parse()
 
-	packagesDir := filepath.Join(*root, "packages")
+	dshRoot, err := toolpath.RequireDSHRoot(*root)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(2)
+	}
+	outPath := *out
+	if outPath == "" {
+		if outPath, err = toolpath.PortmapFile("dsh-exports.tsv"); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(2)
+		}
+	}
+
+	packagesDir := filepath.Join(dshRoot, "packages")
 	if _, err := os.Stat(packagesDir); err != nil {
 		fmt.Fprintf(os.Stderr, "找不到 packages 目录：%v\n", err)
 		os.Exit(1)
@@ -92,12 +107,12 @@ func main() {
 		return a.Name < b.Name
 	})
 
-	if err := writeTSV(*out, exports); err != nil {
+	if err := writeTSV(outPath, exports); err != nil {
 		fmt.Fprintf(os.Stderr, "写清单失败：%v\n", err)
 		os.Exit(1)
 	}
 
-	report(exports, files, *out)
+	report(exports, files, outPath)
 }
 
 // scanAll 遍历 packages 下所有非测试的 TypeScript 文件。

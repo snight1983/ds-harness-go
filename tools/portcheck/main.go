@@ -44,39 +44,76 @@ import (
 	"strings"
 
 	"github.com/snight1983/ds-harness-go/tools/internal/rulingtable"
+	"github.com/snight1983/ds-harness-go/tools/internal/toolpath"
 )
 
 func main() {
 	mode := flag.String("mode", "check", "sync（同步裁决表）、check（跑门禁）、audit（出审查报告）或 reanchor（对内容重锚溯源行号）")
-	exports := flag.String("exports", `C:\code\ds-harness-go\docs\portmap\dsh-exports.tsv`, "机器清单路径")
-	ruling := flag.String("ruling", `C:\code\ds-harness-go\docs\portmap\portmap.tsv`, "裁决表路径")
-	goRoot := flag.String("go-root", `C:\code\ds-harness-go`, "Go 代码根目录")
-	dshRoot := flag.String("dsh-root", `C:\codestudy\deepseek-harness-dsh-v0.1.2-alpha.3`, "DSH 源码根目录，用来验溯源注释")
-	auditOut := flag.String("audit-out", `C:\code\ds-harness-go\docs\portmap\audit-findings.md`, "audit 模式的报告输出路径")
-	reanchorOut := flag.String("reanchor-out", `C:\code\ds-harness-go\docs\portmap\reanchor-findings.md`, "reanchor 模式的报告输出路径")
+	exports := flag.String("exports", "", "机器清单路径（留空＝仓库根下的 docs/portmap/dsh-exports.tsv）")
+	ruling := flag.String("ruling", "", "裁决表路径（留空＝仓库根下的 docs/portmap/portmap.tsv）")
+	goRoot := flag.String("go-root", "", "Go 代码根目录（留空＝从当前目录向上找到的仓库根）")
+	dshRoot := flag.String("dsh-root", "", "DSH 源码根目录，用来验溯源注释（留空＝读 "+toolpath.DSHRootEnv+" 环境变量）")
+	auditOut := flag.String("audit-out", "", "audit 模式的报告输出路径（留空＝仓库根下的 docs/portmap/audit-findings.md）")
+	reanchorOut := flag.String("reanchor-out", "", "reanchor 模式的报告输出路径（留空＝仓库根下的 docs/portmap/reanchor-findings.md）")
 	// -fix 默认关：这个开关会改 Go 源文件，而「先看报告再决定改不改」是它唯一
 	// 安全的用法。默认开的话，一次手误就是全仓 6000 多条注释被机器改过一遍。
 	fix := flag.Bool("fix", false, "reanchor 模式下顺手改掉 DRIFT 的行号（只改行号，不动注释其余文字）")
+	// -no-provenance 是给没有上游快照的机器（典型是 CI）留的。它**不静默降级**：
+	// 走这条路的每一次运行都会在报告里打出一条横幅，说明这一轮没验溯源。
+	noProvenance := flag.Bool("no-provenance", false, "跳过溯源注释验真，只跑裁决表门禁（没有 DSH 快照的机器用）")
 	flag.Parse()
+
+	repoRoot, err := toolpath.RepoRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "定位仓库根失败：%v\n", err)
+		os.Exit(2)
+	}
+	portmapDir := filepath.Join(repoRoot, "docs", "portmap")
+	resolvedExports := toolpath.Resolve(*exports, filepath.Join(portmapDir, "dsh-exports.tsv"))
+	resolvedRuling := toolpath.Resolve(*ruling, filepath.Join(portmapDir, "portmap.tsv"))
+	resolvedGoRoot := toolpath.Resolve(*goRoot, repoRoot)
+	resolvedAuditOut := toolpath.Resolve(*auditOut, filepath.Join(portmapDir, "audit-findings.md"))
+	resolvedReanchorOut := toolpath.Resolve(*reanchorOut, filepath.Join(portmapDir, "reanchor-findings.md"))
+
+	envDSHRoot, dshExists := toolpath.DSHRoot()
+	resolvedDSHRoot := toolpath.Resolve(*dshRoot, envDSHRoot)
+	if *dshRoot != "" {
+		info, statErr := os.Stat(resolvedDSHRoot)
+		dshExists = statErr == nil && info.IsDir()
+	}
 
 	switch *mode {
 	case "sync":
-		if err := runSync(*exports, *ruling); err != nil {
+		if err := runSync(resolvedExports, resolvedRuling); err != nil {
 			fmt.Fprintf(os.Stderr, "同步失败：%v\n", err)
 			os.Exit(1)
 		}
 	case "check":
-		if err := runCheck(*exports, *ruling, *goRoot, *dshRoot); err != nil {
+		// 快照不在而又没显式说要跳过时直接停下。继续走的话每一条溯源注释都会
+		// 报「出处不存在」，把一个路径问题伪装成几千条移植缺失。
+		if !*noProvenance && !dshExists {
+			fmt.Fprintf(os.Stderr,
+				"找不到 DSH 源码根目录 %s\n设 %s 环境变量指向快照，或者传 -no-provenance 只跑裁决表门禁。\n",
+				resolvedDSHRoot, toolpath.DSHRootEnv)
+			os.Exit(2)
+		}
+		if err := runCheck(resolvedExports, resolvedRuling, resolvedGoRoot, resolvedDSHRoot, *noProvenance); err != nil {
 			fmt.Fprintf(os.Stderr, "\n门禁未通过：%v\n", err)
 			os.Exit(1)
 		}
 	case "audit":
-		if err := runAudit(*ruling, *goRoot, *auditOut); err != nil {
+		if err := runAudit(resolvedRuling, resolvedGoRoot, resolvedAuditOut); err != nil {
 			fmt.Fprintf(os.Stderr, "审查报告生成失败：%v\n", err)
 			os.Exit(1)
 		}
 	case "reanchor":
-		if err := runReanchor(*ruling, *goRoot, *dshRoot, *reanchorOut, *fix); err != nil {
+		if !dshExists {
+			fmt.Fprintf(os.Stderr,
+				"重锚要读 DSH 源码，但找不到 %s\n设 %s 环境变量指向快照。\n",
+				resolvedDSHRoot, toolpath.DSHRootEnv)
+			os.Exit(2)
+		}
+		if err := runReanchor(resolvedRuling, resolvedGoRoot, resolvedDSHRoot, resolvedReanchorOut, *fix); err != nil {
 			fmt.Fprintf(os.Stderr, "重锚失败：%v\n", err)
 			os.Exit(1)
 		}
@@ -174,7 +211,7 @@ func runSync(exportsPath, rulingPath string) error {
 }
 
 // runCheck 是门禁。默认答案是不通过，每一项都要主动证明自己是绿的。
-func runCheck(exportsPath, rulingPath, goRoot, dshRoot string) error {
+func runCheck(exportsPath, rulingPath, goRoot, dshRoot string, skipProvenance bool) error {
 	fresh, err := rulingtable.ReadExports(exportsPath)
 	if err != nil {
 		return err
@@ -254,11 +291,15 @@ func runCheck(exportsPath, rulingPath, goRoot, dshRoot string) error {
 	}
 
 	// 三、溯源注释验真。
-	provenance, addedNotes, provErrs, err := checkProvenance(goRoot, dshRoot)
-	if err != nil {
-		return err
+	var provenance, addedNotes int
+	if !skipProvenance {
+		var provErrs []string
+		provenance, addedNotes, provErrs, err = checkProvenance(goRoot, dshRoot)
+		if err != nil {
+			return err
+		}
+		failures = append(failures, provErrs...)
 	}
-	failures = append(failures, provErrs...)
 
 	// 四、PORTED 的 go_ref 必须指向真实存在的 Go 符号。
 	symbols, err := collectGoSymbols(goRoot)
@@ -279,7 +320,7 @@ func runCheck(exportsPath, rulingPath, goRoot, dshRoot string) error {
 		}
 	}
 
-	report(rows, counts, stales, provenance, addedNotes, pendingSamples)
+	report(rows, counts, stales, provenance, addedNotes, pendingSamples, skipProvenance)
 
 	if len(failures) > 0 {
 		fmt.Println("\n不通过的原因：")
@@ -292,7 +333,7 @@ func runCheck(exportsPath, rulingPath, goRoot, dshRoot string) error {
 	return nil
 }
 
-func report(rows []rulingtable.Row, counts map[string]int, stales, provenance, addedNotes int, pendingSamples []string) {
+func report(rows []rulingtable.Row, counts map[string]int, stales, provenance, addedNotes int, pendingSamples []string, skipProvenance bool) {
 	fmt.Printf("裁决表共 %d 行\n", len(rows))
 	kinds := make([]string, 0, len(counts))
 	for decision := range counts {
@@ -305,10 +346,16 @@ func report(rows []rulingtable.Row, counts map[string]int, stales, provenance, a
 	if stales > 0 {
 		fmt.Printf("  %-14s %d\n", "STALE", stales)
 	}
-	// 「验过出处」只说到出处存在、行号在界内。行号有没有漂是 reanchor 那一项的事，
-	// 这里把话说到边界为止——一句说过头的通过语比不通过更难发现。
-	fmt.Printf("源注释：%d 条，出处全部存在且行号在界内（是否漂移见 -mode reanchor）\n", provenance)
-	fmt.Printf("新增注释：%d 条\n", addedNotes)
+	if skipProvenance {
+		// 横幅要显眼且必印。这一轮门禁比平时弱一档，读报告的人必须知道，
+		// 否则一个「门禁通过」会被当成和全量跑同等的证据。
+		fmt.Println("!! 溯源注释验真已跳过（-no-provenance）——这一轮没有对过 DSH 源码 !!")
+	} else {
+		// 「验过出处」只说到出处存在、行号在界内。行号有没有漂是 reanchor 那一项的事，
+		// 这里把话说到边界为止——一句说过头的通过语比不通过更难发现。
+		fmt.Printf("源注释：%d 条，出处全部存在且行号在界内（是否漂移见 -mode reanchor）\n", provenance)
+		fmt.Printf("新增注释：%d 条\n", addedNotes)
+	}
 	if len(pendingSamples) > 0 {
 		fmt.Println("待裁决的头几条：")
 		for _, sample := range pendingSamples {

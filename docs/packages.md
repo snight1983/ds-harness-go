@@ -85,6 +85,7 @@
 | `github.com/snight1983/ds-harness-go/tools/consumercheck` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/doccheck` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/internal/rulingtable` | [移植与文档门禁工具](modules/migration-tools.md) |
+| `github.com/snight1983/ds-harness-go/tools/internal/toolpath` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/portcheck` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/portmap` | [移植与文档门禁工具](modules/migration-tools.md) |
 | `github.com/snight1983/ds-harness-go/tools/rule` | [移植与文档门禁工具](modules/migration-tools.md) |

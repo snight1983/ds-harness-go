@@ -27,10 +27,11 @@ import (
 	"strings"
 
 	"github.com/snight1983/ds-harness-go/tools/internal/rulingtable"
+	"github.com/snight1983/ds-harness-go/tools/internal/toolpath"
 )
 
 func main() {
-	rulingPath := flag.String("ruling", `C:\code\ds-harness-go\docs\portmap\portmap.tsv`, "裁决表路径")
+	rulingPath := flag.String("ruling", "", "裁决表路径（留空＝仓库根下的 docs/portmap/portmap.tsv）")
 	packageName := flag.String("package", "", "包名，形如 util/brand")
 	symbol := flag.String("name", "", "符号名，形如 Branded")
 	file := flag.String("file", "", "可选：源文件，同名符号出现在多个文件时用来消歧")
@@ -44,7 +45,16 @@ func main() {
 	force := flag.Bool("force", false, "允许覆盖已经裁决过的行")
 	flag.Parse()
 
-	if err := run(*rulingPath, *packageName, *file, *line, *symbol, *decision, *goRef, *note, *force); err != nil {
+	resolvedRuling := *rulingPath
+	if resolvedRuling == "" {
+		var err error
+		if resolvedRuling, err = toolpath.PortmapFile("portmap.tsv"); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(2)
+		}
+	}
+
+	if err := run(resolvedRuling, *packageName, *file, *line, *symbol, *decision, *goRef, *note, *force); err != nil {
 		fmt.Fprintf(os.Stderr, "填写失败：%v\n", err)
 		os.Exit(1)
 	}

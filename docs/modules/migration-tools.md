@@ -17,6 +17,14 @@
 
 `tools/internal/rulingtable` 是 `portcheck` 与 `rule` 共用的九列 TSV 读写实现，统一列数、排序、键和状态词汇。
 
+## 路径解析
+
+`tools/internal/toolpath` 负责回答两个问题：仓库根在哪、上游快照在哪。
+
+仓库根从当前工作目录逐级向上找 `go.mod`，认的是 `module` 行而不是文件名——只认文件名的话，工具在任何一个碰巧有 `go.mod` 的目录里都会「成功」，然后拿着错误的根去扫源码，把路径错误报成移植遗漏。账本文件一律落在仓库根的 `docs/portmap/` 下，四个工具不再各写一遍路径拼装。
+
+上游快照由 `DSH_ROOT` 环境变量指定，也可以用各工具的 `-root` / `-dsh-root` 覆盖。快照不存在时：`portmap`、`capmap` 和 `portcheck -mode reanchor` 直接退出（读不到源码就产不出清单，硬失败比产出一份空清单安全）；`portcheck -mode check` 要求显式传 `-no-provenance` 才继续，并在报告里打一行横幅说明这一轮没有对过源码。跳过是允许的，静默跳过不是。
+
 ## 仓库外消费门禁
 
 `consumercheck` 解决的是一类仓库内部验不出来的错。`go build ./...` 解析 import 时走的是主模块自己的 `module` 行加相对路径，所以 `go.mod` 写 `module ds-harness-go`、代码写 `github.com/snight1983/ds-harness-go/...` 时仓库内部全绿，而一个从 GitHub 路径引入的外部宿主会撞上 `package ds-harness-go/core/scope is not in std`。
@@ -72,5 +80,6 @@ go list ./... -> packages.md -> doccheck -> 文档覆盖门禁
 - `tools/rule/`
 - `tools/capmap/`
 - `tools/internal/rulingtable/`
+- `tools/internal/toolpath/`
 - `tools/doccheck/`
 - `tools/consumercheck/`

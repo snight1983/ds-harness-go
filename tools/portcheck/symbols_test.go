@@ -103,7 +103,7 @@ func TestCheckRejectsPortedPointingAtNothing(t *testing.T) {
 		"core/session\tpackages/core/session/src/index.ts\t2\tclass\tGhost\tsrc/index.ts\tPORTED\tsession.Ghost\t",
 	}, "\n")+"\n")
 
-	err := runCheck(exportsPath, rulingPath, goRoot, dshRoot)
+	err := runCheck(exportsPath, rulingPath, goRoot, dshRoot, false)
 	if err == nil {
 		t.Fatal("指向不存在符号的 PORTED 本该让门禁不通过")
 	}

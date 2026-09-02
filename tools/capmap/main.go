@@ -35,6 +35,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/snight1983/ds-harness-go/tools/internal/toolpath"
 )
 
 // Capability 是能力清单的一行：一个包，连同它自己声明的身份和边界。
@@ -61,11 +63,24 @@ var (
 )
 
 func main() {
-	root := flag.String("root", `C:\codestudy\deepseek-harness-dsh-v0.1.2-alpha.3`, "DSH 源码根目录")
-	out := flag.String("out", `C:\code\ds-harness-go\docs\portmap\dsh-capabilities.md`, "能力清单输出路径")
+	root := flag.String("root", "", "DSH 源码根目录（留空＝读 "+toolpath.DSHRootEnv+" 环境变量）")
+	out := flag.String("out", "", "能力清单输出路径（留空＝仓库根下的 docs/portmap/dsh-capabilities.md）")
 	flag.Parse()
 
-	packagesDir := filepath.Join(*root, "packages")
+	dshRoot, err := toolpath.RequireDSHRoot(*root)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(2)
+	}
+	outPath := *out
+	if outPath == "" {
+		if outPath, err = toolpath.PortmapFile("dsh-capabilities.md"); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(2)
+		}
+	}
+
+	packagesDir := filepath.Join(dshRoot, "packages")
 	capabilities, err := scanPackages(packagesDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "扫描失败：%v\n", err)
@@ -82,7 +97,7 @@ func main() {
 
 	cycles := assignLayers(capabilities)
 
-	if err := writeMarkdown(*out, capabilities, cycles); err != nil {
+	if err := writeMarkdown(outPath, capabilities, cycles); err != nil {
 		fmt.Fprintf(os.Stderr, "写清单失败：%v\n", err)
 		os.Exit(1)
 	}
@@ -95,7 +110,7 @@ func main() {
 			missing++
 		}
 	}
-	fmt.Printf("能力清单已写入：%s\n", *out)
+	fmt.Printf("能力清单已写入：%s\n", outPath)
 	fmt.Printf("包：%d 个，源码合计 %d 行\n", len(capabilities), total)
 
 	// 第 0 层是唯一能在不给任何东西编存根的前提下动笔的地方，所以直接打出来。
