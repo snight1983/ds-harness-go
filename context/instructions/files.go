@@ -6,6 +6,8 @@ package instructions
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -413,6 +415,49 @@ func DiscoverBaselineFiles(
 	return files, nil
 }
 
+// ErrInstructionsTooLarge 表示一次装载读进来的指令文件加起来超过了总量上限。
+//
+// 新增: 见 [Config.MaxTotalSourceBytes]。它是**错误**而不是「少读几份」：
+// 一份少了几个文件的基线看上去和一份完整基线没有区别，然后会被当成完整内容
+// 去算摘要、去和上一份比对——和 [readBounded] 里「不交出半份文件」的理由同源，
+// 只是这里的「半份」是半份基线。
+var ErrInstructionsTooLarge = errors.New("context/instructions: 指令文件总量超过上限")
+
+// sourceBudget 是一次装载的总量预算，跨文件累计。
+//
+// 新增: 每个文件那道上限在 [readBounded] 里，那一道超了是**跳过这个文件**
+// （上游行为）；这一道超了是整次装载失败。两道语义不同，所以不合并成一个数。
+type sourceBudget struct {
+	// remaining 是还能读多少字节。
+	remaining int
+	// unlimited 表示这一层关着，remaining 不看。
+	unlimited bool
+}
+
+// newSourceBudget 按配置起一份预算。
+func newSourceBudget(config ResolvedConfig) *sourceBudget {
+	return &sourceBudget{
+		remaining: config.MaxTotalSourceBytes,
+		unlimited: config.MaxTotalSourceBytes <= 0,
+	}
+}
+
+// take 记下一份刚读进来的文件；总量超了就报 [ErrInstructionsTooLarge]。
+//
+// 记账在文件读完**之后**：单份的峰值内存已经被每个文件那道上限压住了，
+// 所以这里最多超出一份文件的量，换来的是不必把两道语义不同的上限揉进同一个数。
+func (b *sourceBudget) take(displayPath string, bytes int) error {
+	if b.unlimited {
+		return nil
+	}
+	if bytes > b.remaining {
+		return fmt.Errorf("%w: 读到 %q 时还差 %d 字节就超了总量上限（这一份 %d 字节，剩余额度 %d 字节）",
+			ErrInstructionsTooLarge, displayPath, bytes-b.remaining, bytes, b.remaining)
+	}
+	b.remaining -= bytes
+	return nil
+}
+
 // readBounded 在字节上限里把一个目标读成文字；超限或者读不出来时第二个返回值是 false。
 //
 // 源: packages/context/agent-instructions/src/files.ts:327-357
@@ -421,9 +466,8 @@ func DiscoverBaselineFiles(
 // 所以流式读的过程里还要再数一遍字节。两道都要，缺一道就等于让一个
 // 无界大的文件进内存。
 //
-// TODO(total-instruction-read-bound): 这里的上限是**每个文件**的。
-// 一整份基线或者一整批对账的总量还没有上限——渲染预算是在每个文件都读完
-// 之后才施加的。
+// 这里的上限是**每个文件**的；一整份基线或者一整批对账的总量由
+// [sourceBudget] 另外压一道。
 func readBounded(
 	ctx context.Context,
 	fsys fs.FileSystem,
@@ -533,6 +577,7 @@ func LoadBaselineSet(
 	if err != nil {
 		return RenderedInstructionSet{}, false, err
 	}
+	budget := newSourceBudget(config)
 	loaded := make([]LoadedFile, 0, len(discovered))
 	for _, file := range discovered {
 		content, ok, err := readBounded(ctx, fsys, file.target, file.size, config.MaxSourceBytes)
@@ -541,6 +586,9 @@ func LoadBaselineSet(
 		}
 		if !ok {
 			continue
+		}
+		if err := budget.take(file.DisplayPath, byteLength(content)); err != nil {
+			return RenderedInstructionSet{}, false, err
 		}
 		loaded = append(loaded, LoadedFile{
 			AbsolutePath: file.AbsolutePath,

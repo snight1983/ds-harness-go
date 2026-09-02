@@ -16,6 +16,17 @@ import (
 // 源: packages/context/agent-instructions/src/config.ts:14
 const DefaultMaxSourceBytes = 1 << 20 // 1_048_576
 
+// DefaultMaxTotalSourceBytes 是一次装载读进内存的总字节上限。
+//
+// 新增: 上游只有每个文件的上限。每个文件一兆是够用的，但一次发现能扫出**多少**
+// 个文件取决于 cwd 到项目根之间有多少层目录、每层有多少个候选名在场——那个数
+// 由工作区的形状决定，不由配置决定。八份一兆的文件各自都在上限之内，加起来
+// 却是八兆，而这八兆会被完整拿在手上直到渲染那一步才裁掉。
+//
+// 十六兆：按缺省的每文件一兆算，等于允许十六份满额文件。真实工作区里
+// 一份指令通常几千字节，所以这个数在正常路径上碰不到。
+const DefaultMaxTotalSourceBytes = 16 << 20 // 16_777_216
+
 // 默认的根标记与候选文件名。
 //
 // 源: packages/context/agent-instructions/src/config.ts:11-13
@@ -70,6 +81,14 @@ type Config struct {
 	// 归给「没填」。要关掉这一层就填负数。
 	MaxSourceBytes int
 
+	// MaxTotalSourceBytes 是一次装载（一份基线或者一批对账）读进内存的
+	// 全部指令文件加起来的字节上限。
+	//
+	// 新增: 留零表示用 [DefaultMaxTotalSourceBytes]，理由和 [Config.MaxSourceBytes]
+	// 那一项一样。小于零表示关掉这一层，让总量只受每个文件的上限乘以发现到的
+	// 文件数约束——那个乘数由工作区的形状决定，所以关掉它应该是一次显式的决定。
+	MaxTotalSourceBytes int
+
 	// InstructionFileCandidates 是同一个目录里按序尝试的基础候选文件名。
 	//
 	// 在场的**全部**加载，同一个目录里去掉首尾空白之后内容重复的，
@@ -98,6 +117,7 @@ type ResolvedConfig struct {
 	LocalInstructionFileCandidates []string
 	MaxBytes                       int
 	MaxSourceBytes                 int
+	MaxTotalSourceBytes            int
 }
 
 // Resolve 补齐默认值，并且把不能当文件名用的候选筛掉。
@@ -112,6 +132,10 @@ func (c Config) Resolve() ResolvedConfig {
 	if maxSourceBytes == 0 {
 		maxSourceBytes = DefaultMaxSourceBytes
 	}
+	maxTotalSourceBytes := c.MaxTotalSourceBytes
+	if maxTotalSourceBytes == 0 {
+		maxTotalSourceBytes = DefaultMaxTotalSourceBytes
+	}
 	return ResolvedConfig{
 		UserGlobalRoot:                 c.UserGlobalRoot,
 		ProjectRootMarkers:             markers,
@@ -119,6 +143,7 @@ func (c Config) Resolve() ResolvedConfig {
 		LocalInstructionFileCandidates: resolveCandidates(c.LocalInstructionFileCandidates, defaultLocalInstructionFileCandidates),
 		MaxBytes:                       c.MaxBytes,
 		MaxSourceBytes:                 maxSourceBytes,
+		MaxTotalSourceBytes:            maxTotalSourceBytes,
 	}
 }
 
@@ -160,6 +185,12 @@ func resolveCandidates(candidates []string, fallback []string) []string {
 //
 // 项目根记的是**相对 cwd 的位置**而不是绝对路径：同一个仓库被挂在不同的
 // 绝对路径下仍然是同一份基线，而根相对 cwd 挪了一层就不是了。
+//
+// 新增: [ResolvedConfig.MaxTotalSourceBytes] **故意**不在这份载荷里。这里编的是
+// 「这份基线是按什么口径产出的」——发现范围、优先级、预算。总量上限不是口径，
+// 它是一道资源闸：正常路径上碰不到，碰到了那一次装载会直接失败，不会悄悄产出
+// 一份少了几个文件的基线。把它编进去只会让「运维调了一下这个数」变成
+// 「所有在途会话的基线全部判成不兼容」。
 func WorkspaceBaselineIdentity(config ResolvedConfig, cwd string, projectRoot string) string {
 	// 字段顺序就是 DSH 那个对象字面量的顺序，encoding/json 按结构体字段序输出。
 	// 顺序变了串就变了，而串一变所有在途会话的基线都会被判成不兼容。

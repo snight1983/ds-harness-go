@@ -423,6 +423,7 @@ func Reconcile(
 		versions:         request.Versions,
 		seenAbsolute:     map[string]struct{}{},
 		keptTrimmedByDir: map[string]map[string]struct{}{},
+		budget:           newSourceBudget(config),
 	}
 	for _, group := range groupScopesByDirectory(scopes.all()) {
 		if err := state.reconcileDirectory(ctx, fsys, config, request, effective,
@@ -547,6 +548,8 @@ type reconcileState struct {
 	seenAbsolute map[string]struct{}
 	// keptTrimmedByDir 是这一趟里每个目录已经留下的去空白身份。
 	keptTrimmedByDir map[string]map[string]struct{}
+	// budget 是这一趟读进内存的总字节预算，跨目录累计。
+	budget *sourceBudget
 
 	items          []ChangeRenderItem
 	versionUpdates []VersionUpdate
@@ -692,6 +695,11 @@ func (s *reconcileState) reconcileDirectory(
 		}
 		if !ok {
 			continue
+		}
+		// 总量记在这里而不是缓存命中那条路上：命中的那份没有重新读进内存，
+		// 它不占这一趟的预算。
+		if err := s.budget.take(file.DisplayPath, byteLength(file.Content)); err != nil {
+			return err
 		}
 		currentDigest := ContentDigest(file.Content)
 		trimmedDigest := TrimmedDigest(file.Content)
