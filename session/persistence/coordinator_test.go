@@ -791,15 +791,13 @@ func TestCoordinator工作目录不同也是撞号(t *testing.T) {
 	h := newHarness(t)
 	h.drainMayFail = true
 	id := session.SessionID("目录不同")
-	// 工作目录得是**本机上**的绝对路径（core/session 那道校验跟着平台走），
-	// 所以这里向 testing 要两个真目录，而不是写死一个 POSIX 风格的字面量。
 	meta := testHeader(t, id)
-	meta.Cwd = t.TempDir()
+	meta.WorkspaceID = "ws-这一处"
 	h.backend.seed(meta, []session.Event{userEvent(t, 0, "甲")}, nil)
 
 	live := h.createLive(t, id, coresession.CreateOptions{
-		Seed: []session.Event{userEvent(t, 0, "甲")},
-		Cwd:  t.TempDir(),
+		Seed:        []session.Event{userEvent(t, 0, "甲")},
+		WorkspaceID: "ws-另一处",
 	})
 	if err := h.flush(live); err == nil {
 		t.Fatal("工作目录不同该被当成撞号")

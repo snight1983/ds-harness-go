@@ -7,8 +7,6 @@ package sessionref
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,11 +30,11 @@ import (
 //   - 一个被否掉的步骤上仍然去读了几个会话的表面，白花 I/O。
 //   - 准备失败时步骤照样进去了，于是那批带着未解记号的消息真的发给了模型。
 
-// workspaceCwd 是这个 agent 报出来的工作目录。
+// workspaceID 是这个 agent 归属的工作区登记。
 //
-// 会话头要求 cwd 在**本机**上绝对（见 core/session/validate.go 那条），
-// 所以不能写死一个 POSIX 字面量——那会让 Windows 上的用例全部造不出会话。
-var workspaceCwd = filepath.Join(os.TempDir(), "ds-harness-go-sessionref", "here")
+// 新增: 它是一个不透明标识，不是路径，也和文件系统里有什么东西没有关系，
+// 见 [session.SessionHeader.WorkspaceID]。
+var workspaceID = session.WorkspaceID("ws-sessionref")
 
 // ---- 假注册表 ----
 
@@ -142,7 +140,7 @@ func newStubAgent(t *testing.T, id session.SessionID) *stubAgent {
 	t.Helper()
 
 	live, err := coresession.NewSession(id, coresession.Options{
-		Header: &session.SessionHeader{ID: id, Cwd: workspaceCwd},
+		Header: &session.SessionHeader{ID: id, WorkspaceID: workspaceID},
 	})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)

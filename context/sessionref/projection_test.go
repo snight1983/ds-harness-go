@@ -14,7 +14,7 @@ import (
 )
 
 func TestProject只留用户自己的话和助手的回答(t *testing.T) {
-	snapshot := snapshotOf("s1", "/work", []session.Event{
+	snapshot := snapshotOf("s1", "ws-1", []session.Event{
 		userEvent(t, 1, "用户说的"),
 		injectedEvent(t, 2, "工作区说明，别的层注入的"),
 		assistantEvent(t, 3, llm.TextBlock{Text: "助手答的"}),
@@ -94,7 +94,7 @@ func TestProject碰上不该出现在表面上的事件就报出来(t *testing.T
 }
 
 func TestRetain预算够时原样留下(t *testing.T) {
-	snapshot := snapshotOf("s1", "/work", []session.Event{
+	snapshot := snapshotOf("s1", "ws-1", []session.Event{
 		userEvent(t, 1, "一"),
 		assistantEvent(t, 2, llm.TextBlock{Text: "二"}),
 	})
@@ -109,7 +109,7 @@ func TestRetain预算够时原样留下(t *testing.T) {
 	if retained.Stats != want {
 		t.Fatalf("记账是 %+v，要的是 %+v", retained.Stats, want)
 	}
-	if retained.Data.SessionID != "s1" || retained.Data.Label != "标签" || retained.Data.Cwd != "/work" {
+	if retained.Data.SessionID != "s1" || retained.Data.Label != "标签" || retained.Data.WorkspaceID != "ws-1" {
 		t.Fatalf("固定字段不对：%+v", retained.Data)
 	}
 	if retained.Data.CapturedThroughSeq != 2 || !retained.Data.CapturedAny {
@@ -212,7 +212,7 @@ func TestRetain第二轮才去截断最长的那条(t *testing.T) {
 }
 
 func TestRetain预算连固定字段都装不下时说塞不下(t *testing.T) {
-	snapshot := snapshotOf("很长的会话名字很长的会话名字", "/一个很长的工作目录", []session.Event{
+	snapshot := snapshotOf("很长的会话名字很长的会话名字", "ws-一个很长的工作区标识", []session.Event{
 		userEvent(t, 1, "一句话"),
 	})
 	_, fits, err := RetainReferencedSession(snapshot, "标签", 8)
@@ -244,8 +244,8 @@ func TestRetain一条消息都没有时给出空对话(t *testing.T) {
 	if !strings.Contains(string(encoded), `"capturedThroughSeq":null`) {
 		t.Fatalf("空日志的捕获点没排成 null：%s", encoded)
 	}
-	if !strings.Contains(string(encoded), `"cwd":null`) {
-		t.Fatalf("没有工作目录时没排成 null：%s", encoded)
+	if !strings.Contains(string(encoded), `"workspaceId":null`) {
+		t.Fatalf("不属于任何工作区时没排成 null：%s", encoded)
 	}
 }
 

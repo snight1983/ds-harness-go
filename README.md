@@ -229,6 +229,8 @@ ds-harness-go/
 
 数据库那一摊整个收在 `datastore` 底下：它是唯一 import `database/sql`、唯一挂驱动、唯一写 SQL 的地方，`session` 和 `storage` 两棵树里不许出现任何一处提到数据库。这条界线由 `tools/dbcheck` 把着，详见[持久化抽象层](docs/modules/datastore.md)。
 
+内容存储那一摊同理，收在 `fs.FileSystem` 一条接缝上：业务包只声明它要读出什么、写进什么，挂对象存储（`fs/objectstore`）还是将来挂外接硬盘是装配时的配置。这个服务跑的地方没有可用硬盘，所以业务代码里不许出现直接的宿主机文件 I/O——不许调 `os` 包里那些碰文件系统的函数，不许 import `path/filepath` 和 `io/ioutil`。这条界线由 `tools/oscheck` 把着，理由和豁免名单写在 `tools/oscheck/doc.go` 里。
+
 以下检查当前通过：
 
 ```powershell
@@ -239,6 +241,7 @@ go test -race ./...
 go run ./tools/doccheck
 go run ./tools/consumercheck
 go run ./tools/dbcheck
+go run ./tools/oscheck
 ```
 
 `tools/consumercheck` 在临时目录里建一个仓库外的模块，用公开 module path 把全部可发布包引进去，编译、vet，再跑一遍最小闭环。它是 module path 和「每个公开包都对外可引」这两件事唯一测得到的地方。
@@ -275,10 +278,11 @@ Remove-Item Env:CGO_ENABLED
 go run ./tools/doccheck
 go run ./tools/consumercheck
 go run ./tools/dbcheck
+go run ./tools/oscheck
 go run ./tools/portcheck
 ```
 
-这串命令同时由 `.github/workflows/ci.yml` 在每次 push 和 PR 上跑一遍，分成三个 job：`gates`（格式、构建、vet、测试、竞态、四道门禁）、`postgres`（起一个 `postgres:16` service container，跑那批只有真库才执行得到的后端契约）、`cross`（linux / darwin / windows 三个目标各编一次）。分开是因为它们红的时候含义不同：代码有问题、真库跑不通、换个平台编不过，混在一个 job 里说不清是哪一类。
+这串命令同时由 `.github/workflows/ci.yml` 在每次 push 和 PR 上跑一遍，分成三个 job：`gates`（格式、构建、vet、测试、竞态、五道门禁）、`postgres`（起一个 `postgres:16` service container，跑那批只有真库才执行得到的后端契约）、`cross`（linux / darwin / windows 三个目标各编一次）。分开是因为它们红的时候含义不同：代码有问题、真库跑不通、换个平台编不过，混在一个 job 里说不清是哪一类。
 
 `portcheck` 的溯源注释验真需要 DSH 上游快照，路径由 `DSH_ROOT` 环境变量给出。CI 上没有那份快照，所以显式传 `-no-provenance` 只跑裁决表门禁；工具会打一行横幅说明这一轮没有对过源码，不静默降级。
 

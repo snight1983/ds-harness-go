@@ -11,7 +11,6 @@ import (
 	"errors"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/snight1983/ds-harness-go/session"
 )
@@ -26,9 +25,9 @@ func workspaceIDs(list []Workspace) []WorkspaceID {
 }
 
 // mustList 取一份展示次序，失败即用例失败。
-func mustList(t *testing.T, registry *Registry) []Workspace {
+func mustList(t *testing.T, ctx context.Context, registry *Registry) []Workspace {
 	t.Helper()
-	list, err := registry.List()
+	list, err := registry.List(ctx)
 	if err != nil {
 		t.Fatalf("列举工作区不该失败：%v", err)
 	}
@@ -65,9 +64,9 @@ func seedRecord(t *testing.T, ctx context.Context, registry *Registry, id Worksp
 }
 
 // mustRecord 读一条落盘的工作区记录，失败或不存在即用例失败。
-func mustRecord(t *testing.T, registry *Registry, id WorkspaceID) Record {
+func mustRecord(t *testing.T, ctx context.Context, registry *Registry, id WorkspaceID) Record {
 	t.Helper()
-	record, found, err := registry.workspace.Get(string(id))
+	record, found, err := registry.workspace.Get(ctx, string(id))
 	if err != nil {
 		t.Fatalf("读工作区 %q 不该失败：%v", id, err)
 	}
@@ -124,7 +123,7 @@ func TestOpen可选依赖留空时用得起来(t *testing.T) {
 	if created.ID() == "" {
 		t.Fatal("回落的发号器应该给出一个非空 id")
 	}
-	if created.CreatedAt().IsZero() {
+	if mustCreatedAt(t, ctx, created).IsZero() {
 		t.Fatal("回落的时钟应该给出一个非零时刻")
 	}
 }
@@ -134,10 +133,10 @@ func TestOpen一份空介质盖上初始化标记且不再白花一次列举(t *
 	h := newHarness(t)
 	registry := h.open(ctx)
 
-	if list := mustList(t, registry); len(list) != 0 {
+	if list := mustList(t, ctx, registry); len(list) != 0 {
 		t.Fatalf("空介质上不该有工作区，拿到 %v", workspaceIDs(list))
 	}
-	if !registry.snapshotState().Initialized {
+	if !mustState(t, ctx, registry).Initialized {
 		t.Fatal("bootstrap 跑完之后必须盖上 initialized 标记")
 	}
 	if h.persistence.count() != 1 {
@@ -192,7 +191,7 @@ func TestClose幂等且关掉之后一切都报没启动(t *testing.T) {
 		t.Fatalf("重复关闭应该是空操作，拿到 %v", err)
 	}
 
-	if _, err := registry.List(); !errors.Is(err, CodeNotStarted) {
+	if _, err := registry.List(ctx); !errors.Is(err, CodeNotStarted) {
 		t.Fatalf("List 要的是 CodeNotStarted，拿到 %v", err)
 	}
 	if _, err := registry.Create(ctx, "/a", ""); !errors.Is(err, CodeNotStarted) {
@@ -214,35 +213,31 @@ func TestClose幂等且关掉之后一切都报没启动(t *testing.T) {
 
 // -- 历史 bootstrap --------------------------------------------------------
 
-func TestOpenBootstrap把已落地会话按工作目录聚成工作区(t *testing.T) {
+func TestOpenBootstrap把已落地会话并进它们点名的工作区(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	h.filesystem.addDir("/home/alpha")
 	h.filesystem.addDir("/home/beta")
+	ids := h.seedWorkspaces(ctx, "/home/alpha", "/home/beta")
+	alpha, beta := ids[0], ids[1]
 	h.persistence.set(
-		header("s1", "/home/alpha", 100),
-		header("s2", "/home/alpha", 300),
-		header("s3", "/home/beta", 200),
+		header("s1", alpha, 100),
+		header("s2", alpha, 300),
+		header("s3", beta, 200),
 	)
 	registry := h.open(ctx)
 
-	list := mustList(t, registry)
-	if got := workspaceIDs(list); !slices.Equal(got, []WorkspaceID{"ws-1", "ws-2"}) {
+	// 建出来的时候 beta 排在前面（新建的排最前），收编之后按「最新一条会话」重排，
+	// 于是这两个的位置对调——这一格钉的就是「次序确实被历史重排过」。
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{alpha, beta}) {
 		t.Fatalf("展示次序该按「最新一条会话」从新到旧，拿到 %v", got)
 	}
-	if list[0].Path() != "/home/alpha" || list[1].Path() != "/home/beta" {
-		t.Fatalf("路径对不上：%q、%q", list[0].Path(), list[1].Path())
-	}
-	if list[0].Title() != "alpha" || list[1].Title() != "beta" {
-		t.Fatalf("默认标题该取路径最后一段，拿到 %q、%q", list[0].Title(), list[1].Title())
-	}
 	// 组内按创建时刻从新到旧。
-	if got := list[0].SessionIDs(); !slices.Equal(got, []session.SessionID{"s2", "s1"}) {
+	if got := mustSessionIDs(t, ctx, mustGet(t, ctx, registry, alpha)); !slices.Equal(got, []session.SessionID{"s2", "s1"}) {
 		t.Fatalf("组内该按创建时刻从新到旧，拿到 %v", got)
 	}
-	// 收编的是历史，一份历史的年纪是它最新那条会话的时刻，不是被收编的那一刻。
-	if want := time.UnixMilli(300).UTC(); !list[0].CreatedAt().Equal(want) {
-		t.Fatalf("建时刻该是 %v，拿到 %v", want, list[0].CreatedAt())
+	if got := mustSessionIDs(t, ctx, mustGet(t, ctx, registry, beta)); !slices.Equal(got, []session.SessionID{"s3"}) {
+		t.Fatalf("拿到 %v", got)
 	}
 }
 
@@ -250,53 +245,48 @@ func TestOpenBootstrap同刻的会话按会话id定序(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	h.filesystem.addDir("/a")
+	ws := h.seedWorkspaces(ctx, "/a")[0]
 	h.persistence.set(
-		header("s-b", "/a", 100),
-		header("s-a", "/a", 100),
+		header("s-b", ws, 100),
+		header("s-a", ws, 100),
 	)
 	registry := h.open(ctx)
 
-	list := mustList(t, registry)
-	if got := list[0].SessionIDs(); !slices.Equal(got, []session.SessionID{"s-a", "s-b"}) {
+	if got := mustSessionIDs(t, ctx, mustGet(t, ctx, registry, ws)); !slices.Equal(got, []session.SessionID{"s-a", "s-b"}) {
 		t.Fatalf("同刻该按会话 id 定序好让结果可复现，拿到 %v", got)
 	}
 }
 
-func TestOpenBootstrap跳过工作目录用不了的会话头(t *testing.T) {
+func TestOpenBootstrap跳过归不进任何工作区的会话头(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	h.filesystem.addDir("/a")
-	h.filesystem.addFile("/f")
-	h.filesystem.failResolve("/bad", errBackend)
-	h.filesystem.failStat("/statfail", errBackend)
+	ws := h.seedWorkspaces(ctx, "/a")[0]
 	h.persistence.set(
-		header("s0", "", 10),
-		header("s1", "/bad", 20),
-		header("s2", "/statfail", 30),
-		header("s3", "/f", 40),
-		header("s4", "/nothere", 50),
-		header("s5", "/a", 60),
+		header("没点名工作区", "", 10),
+		header("点名了不存在的", "ws-根本没这个", 20),
+		header("s5", ws, 30),
 	)
 	registry := h.open(ctx)
 
-	list := mustList(t, registry)
-	if len(list) != 1 {
-		t.Fatalf("只有 /a 那一条会话头是能用的，拿到 %v", workspaceIDs(list))
-	}
-	if got := list[0].SessionIDs(); !slices.Equal(got, []session.SessionID{"s5"}) {
+	if got := mustSessionIDs(t, ctx, mustGet(t, ctx, registry, ws)); !slices.Equal(got, []session.SessionID{"s5"}) {
 		t.Fatalf("只该收编 s5，拿到 %v", got)
 	}
 
 	// 用不了的会话头一条都不该让登记册打不开，它们只留一条诊断理由。
 	registry.mutex.RLock()
 	invalid := len(registry.invalidSessions)
-	noCwd := registry.invalidSessions["s0"]
+	noWorkspace := registry.invalidSessions["没点名工作区"]
+	unknownWorkspace := registry.invalidSessions["点名了不存在的"]
 	registry.mutex.RUnlock()
-	if invalid != 5 {
-		t.Fatalf("五条会话头的工作目录用不了，实际记下 %d 条", invalid)
+	// 新增: DSH 那边这里有五种「用不了」，其中三种是路径解析的失败（解析不出来、
+	// stat 出故障、不是一个存在的目录）。归属改由工作区标识判之后没有解析这一步，
+	// 剩下的只有这两种：压根没点名，和点名了一个登记册里没有的工作区。
+	if invalid != 2 {
+		t.Fatalf("两条会话头归不进任何工作区，实际记下 %d 条", invalid)
 	}
-	if noCwd == "" {
-		t.Fatal("没有工作目录的会话头也该留下一条理由")
+	if noWorkspace == "" || unknownWorkspace == "" {
+		t.Fatalf("两条都该留下理由，拿到 %q、%q", noWorkspace, unknownWorkspace)
 	}
 }
 
@@ -304,13 +294,17 @@ func TestOpenBootstrap被打断之后重跑会并进已有的工作区(t *testin
 	ctx := context.Background()
 	h := newHarness(t)
 	h.filesystem.addDir("/a")
+	ws := h.seedWorkspaces(ctx, "/a")[0]
 	h.persistence.set(
-		header("s1", "/a", 100),
-		header("s2", "/a", 200),
+		header("s1", ws, 100),
+		header("s2", ws, 200),
 	)
-	// bootstrap 的第二次全局写（盖 initialized 标记那一次）失败：
-	// 介质上于是留下「记录已经写好、initialized 还是假」这个中间态。
-	h.backend.armGlobal(map[int]error{2: errBackend})
+	// bootstrap 盖 initialized 标记那一次全局写失败：介质上于是留下
+	// 「账目已经并好、initialized 还是假」这个中间态。
+	//
+	// 新增: 这里点名的是**第一次**全局写。bootstrap 只在算出来的次序和上一份不同时
+	// 才多写一次；这里只有一个工作区，次序不会变，所以整趟 bootstrap 只写一次全局槽。
+	h.backend.armGlobal(map[int]error{1: errBackend})
 
 	if _, err := h.tryOpen(ctx); !errors.Is(err, CodeStorageFailed) {
 		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
@@ -318,75 +312,67 @@ func TestOpenBootstrap被打断之后重跑会并进已有的工作区(t *testin
 
 	h.backend.armGlobal(nil)
 	h.persistence.set(
-		header("s1", "/a", 100),
-		header("s2", "/a", 200),
-		header("s3", "/a", 300),
+		header("s1", ws, 100),
+		header("s2", ws, 200),
+		header("s3", ws, 300),
 	)
 	registry := h.open(ctx)
 
-	list := mustList(t, registry)
-	if got := workspaceIDs(list); !slices.Equal(got, []WorkspaceID{"ws-1"}) {
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{ws}) {
 		t.Fatalf("重跑不该再建一个工作区，拿到 %v", got)
 	}
-	if got := list[0].SessionIDs(); !slices.Equal(got, []session.SessionID{"s3", "s2", "s1"}) {
+	if got := mustSessionIDs(t, ctx, mustGet(t, ctx, registry, ws)); !slices.Equal(got, []session.SessionID{"s3", "s2", "s1"}) {
 		t.Fatalf("历史候选该补到前面，拿到 %v", got)
 	}
-	// 建时刻是第一次收编时定下的，重跑不重定。
-	if want := time.UnixMilli(200).UTC(); !list[0].CreatedAt().Equal(want) {
-		t.Fatalf("建时刻该还是 %v，拿到 %v", want, list[0].CreatedAt())
-	}
 }
 
-func TestOpenBootstrap候选已经全被别人认领的目录不建工作区(t *testing.T) {
+func TestOpenBootstrap候选已经记在别的工作区名下时不重复收编(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	h.filesystem.addDir("/a")
 	h.filesystem.addDir("/b")
-	h.persistence.set(header("s1", "/a", 100))
-	h.backend.armGlobal(map[int]error{2: errBackend})
-	if _, err := h.tryOpen(ctx); !errors.Is(err, CodeStorageFailed) {
-		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
-	}
-
-	// s1 的工作目录改指到 /b：它那一组落在一个还没有工作区的目标上，
-	// 但它自己已经记在 ws-1 的账目里了，于是这一组一个候选都不剩。
-	h.filesystem.alias("/a", "/b")
-	h.backend.armGlobal(nil)
 	registry := h.open(ctx)
+	here := mustCreate(t, ctx, registry, "/a", "").ID()
+	elsewhere := mustCreate(t, ctx, registry, "/b", "").ID()
+	// s1 的会话头点名 here，可它已经被记在 elsewhere 的账目里了——
+	// 一次收编到一半崩掉、事后又有人手工挪过账目，介质上就是这个样子。
+	record := mustRecord(t, ctx, registry, elsewhere)
+	record.SessionIDs = []session.SessionID{"s1"}
+	seedRecord(t, ctx, registry, elsewhere, record)
+	state := mustState(t, ctx, registry)
+	state.Initialized = false
+	seedState(t, ctx, registry, state)
+	h.close(ctx)
 
-	list := mustList(t, registry)
-	if got := workspaceIDs(list); !slices.Equal(got, []WorkspaceID{"ws-1"}) {
-		t.Fatalf("不该为一组空候选建工作区，拿到 %v", got)
+	h.persistence.set(header("s1", here, 100))
+	registry = h.open(ctx)
+
+	// 一个会话只会被收进一个工作区，这一组于是一个候选都不剩。
+	if got := mustRecord(t, ctx, registry, here).SessionIDs; len(got) != 0 {
+		t.Fatalf("已经有账目的候选不该重复收编，拿到 %v", got)
 	}
-	if got := list[0].SessionIDs(); len(got) != 0 {
-		t.Fatalf("s1 的工作目录已经不是这个工作区的了，该被筛掉，拿到 %v", got)
-	}
-	// 被筛掉的候选**不抹**：目录可能只是临时被移走了。
-	if got := mustRecord(t, registry, "ws-1").SessionIDs; !slices.Equal(got, []session.SessionID{"s1"}) {
-		t.Fatalf("落盘的候选账目不该被读操作抹掉，拿到 %v", got)
+	// 也不该去动认领它的那一家。
+	if got := mustRecord(t, ctx, registry, elsewhere).SessionIDs; !slices.Equal(got, []session.SessionID{"s1"}) {
+		t.Fatalf("认领它的那一家不该被动，拿到 %v", got)
 	}
 }
 
-func TestOpenBootstrap重跑时上一份次序里的工作区排在新收编的前面(t *testing.T) {
+func TestOpenBootstrap两组打平时按上一份次序排(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	h.filesystem.addDir("/a")
 	h.filesystem.addDir("/b")
-	h.persistence.set(header("s1", "/a", 100))
-	h.backend.armGlobal(map[int]error{2: errBackend})
-	if _, err := h.tryOpen(ctx); !errors.Is(err, CodeStorageFailed) {
-		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
-	}
-
-	// s2 和 s1 同刻：两组的「最新时刻」打平，胜负由上一份次序里的位置定。
-	h.backend.armGlobal(nil)
+	ids := h.seedWorkspaces(ctx, "/a", "/b")
+	first, second := ids[0], ids[1]
+	// 建出来的次序是「后建的排最前」，也就是 second、first。
+	// 两条会话同刻，两组的「最新时刻」打平，胜负于是由上一份次序里的位置定。
 	h.persistence.set(
-		header("s1", "/a", 100),
-		header("s2", "/b", 100),
+		header("s1", first, 100),
+		header("s2", second, 100),
 	)
 	registry := h.open(ctx)
 
-	if got := workspaceIDs(mustList(t, registry)); !slices.Equal(got, []WorkspaceID{"ws-1", "ws-2"}) {
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{second, first}) {
 		t.Fatalf("打平时该按上一份次序排，拿到 %v", got)
 	}
 }
@@ -400,8 +386,8 @@ func TestCreate同一个目标标识只建一个工作区(t *testing.T) {
 	registry := h.open(ctx)
 
 	first := mustCreate(t, ctx, registry, "/a", "初号")
-	if first.ID() != "ws-1" || first.Path() != "/a" || first.Title() != "初号" {
-		t.Fatalf("新建的工作区对不上：%q %q %q", first.ID(), first.Path(), first.Title())
+	if first.ID() != "ws-1" || mustPath(t, ctx, first) != "/a" || mustTitle(t, ctx, first) != "初号" {
+		t.Fatalf("新建的工作区对不上：%q %q %q", first.ID(), mustPath(t, ctx, first), mustTitle(t, ctx, first))
 	}
 
 	// 末尾斜杠折成同一个目标标识：交出已有的那一个，且**不改它的标题**。
@@ -409,10 +395,10 @@ func TestCreate同一个目标标识只建一个工作区(t *testing.T) {
 	if again.ID() != first.ID() {
 		t.Fatalf("同一个目录该交出同一个工作区，拿到 %q 和 %q", first.ID(), again.ID())
 	}
-	if again.Title() != "初号" {
-		t.Fatalf("重复建不该改标题，拿到 %q", again.Title())
+	if mustTitle(t, ctx, again) != "初号" {
+		t.Fatalf("重复建不该改标题，拿到 %q", mustTitle(t, ctx, again))
 	}
-	if got := workspaceIDs(mustList(t, registry)); len(got) != 1 {
+	if got := workspaceIDs(mustList(t, ctx, registry)); len(got) != 1 {
 		t.Fatalf("只该有一个工作区，拿到 %v", got)
 	}
 }
@@ -424,8 +410,8 @@ func TestCreate标题留空时取展示路径最后一段(t *testing.T) {
 	registry := h.open(ctx)
 
 	created := mustCreate(t, ctx, registry, "/home/项目", "")
-	if created.Title() != "项目" {
-		t.Fatalf("默认标题该是 %q，拿到 %q", "项目", created.Title())
+	if mustTitle(t, ctx, created) != "项目" {
+		t.Fatalf("默认标题该是 %q，拿到 %q", "项目", mustTitle(t, ctx, created))
 	}
 }
 
@@ -469,12 +455,12 @@ func TestCreate新建的排在展示次序最前面(t *testing.T) {
 	mustCreate(t, ctx, registry, "/b", "")
 	mustCreate(t, ctx, registry, "/c", "")
 
-	if got := workspaceIDs(mustList(t, registry)); !slices.Equal(got, []WorkspaceID{"ws-3", "ws-2", "ws-1"}) {
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{"ws-3", "ws-2", "ws-1"}) {
 		t.Fatalf("新建的该排最前，拿到 %v", got)
 	}
 	// 重启之后次序照旧。
 	registry = h.reopen(ctx)
-	if got := workspaceIDs(mustList(t, registry)); !slices.Equal(got, []WorkspaceID{"ws-3", "ws-2", "ws-1"}) {
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{"ws-3", "ws-2", "ws-1"}) {
 		t.Fatalf("次序该落盘，重开之后拿到 %v", got)
 	}
 }
@@ -484,7 +470,7 @@ func TestGet不认识的id报不在(t *testing.T) {
 	h := newHarness(t)
 	registry := h.open(ctx)
 
-	if _, ok := registry.Get("没有这个"); ok {
+	if present(t, ctx, registry, "没有这个") {
 		t.Fatal("不认识的 id 该报不在")
 	}
 }
@@ -508,7 +494,7 @@ func TestResolveByPath只查不建(t *testing.T) {
 	if _, _, err := registry.ResolveByPath(ctx, "/bad"); !errors.Is(err, CodeInvalidPath) {
 		t.Fatalf("要的是 CodeInvalidPath，拿到 %v", err)
 	}
-	if got := workspaceIDs(mustList(t, registry)); len(got) != 1 {
+	if got := workspaceIDs(mustList(t, ctx, registry)); len(got) != 1 {
 		t.Fatalf("查询不该建出东西来，拿到 %v", got)
 	}
 }
@@ -534,7 +520,7 @@ func TestDelete幂等且落盘(t *testing.T) {
 	}
 
 	registry = h.reopen(ctx)
-	if got := workspaceIDs(mustList(t, registry)); !slices.Equal(got, []WorkspaceID{"ws-2"}) {
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{"ws-2"}) {
 		t.Fatalf("删除该落盘，重开之后拿到 %v", got)
 	}
 }
@@ -571,7 +557,7 @@ func TestInsertBefore按锚点挪位并落盘(t *testing.T) {
 	}
 
 	registry = h.reopen(ctx)
-	if got := workspaceIDs(mustList(t, registry)); !slices.Equal(got, []WorkspaceID{"ws-3", "ws-2", "ws-1"}) {
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{"ws-3", "ws-2", "ws-1"}) {
 		t.Fatalf("次序该落盘，重开之后拿到 %v", got)
 	}
 }
@@ -611,7 +597,7 @@ func TestInsertBefore点名不在次序里的工作区时不写(t *testing.T) {
 	if _, err := registry.InsertBefore(ctx, "ws-1", "没有这个"); !errors.Is(err, CodeOrderInvalid) {
 		t.Fatalf("锚点不在次序里也该报 CodeOrderInvalid，拿到 %v", err)
 	}
-	if got := workspaceIDs(mustList(t, registry)); !slices.Equal(got, []WorkspaceID{"ws-1"}) {
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{"ws-1"}) {
 		t.Fatalf("失败的挪位不该改次序，拿到 %v", got)
 	}
 }
@@ -622,8 +608,9 @@ func TestArchiveSession收下活着的和已落地的会话(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	h.filesystem.addDir("/a")
-	h.persistence.set(header("已落地", "/a", 100))
-	h.live.add(header("活着的", "/a", 200))
+	ws := h.seedWorkspaces(ctx, "/a")[0]
+	h.persistence.set(header("已落地", ws, 100))
+	h.live.add(header("活着的", ws, 200))
 	registry := h.open(ctx)
 
 	if err := registry.ArchiveSession(ctx, "已落地"); err != nil {
@@ -638,11 +625,11 @@ func TestArchiveSession收下活着的和已落地的会话(t *testing.T) {
 	}
 
 	want := []session.SessionID{"已落地", "活着的"}
-	if got := registry.ArchivedSessionIDs(); !slices.Equal(got, want) {
+	if got := mustArchived(t, ctx, registry); !slices.Equal(got, want) {
 		t.Fatalf("归档集合该按归档顺序，拿到 %v", got)
 	}
 	registry = h.reopen(ctx)
-	if got := registry.ArchivedSessionIDs(); !slices.Equal(got, want) {
+	if got := mustArchived(t, ctx, registry); !slices.Equal(got, want) {
 		t.Fatalf("归档集合该落盘，重开之后拿到 %v", got)
 	}
 }
@@ -651,14 +638,15 @@ func TestArchiveSession不动工作区账目(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	h.filesystem.addDir("/a")
-	h.persistence.set(header("s1", "/a", 100), header("s2", "/a", 200))
+	ws := h.seedWorkspaces(ctx, "/a")[0]
+	h.persistence.set(header("s1", ws, 100), header("s2", ws, 200))
 	registry := h.open(ctx)
 
 	if err := registry.ArchiveSession(ctx, "s1"); err != nil {
 		t.Fatalf("归档不该失败：%v", err)
 	}
 	// 归档叠在账目**之上**：取消归档要能还原到原位，所以位置必须留着。
-	if got := mustList(t, registry)[0].SessionIDs(); !slices.Equal(got, []session.SessionID{"s2", "s1"}) {
+	if got := mustSessionIDs(t, ctx, mustGet(t, ctx, registry, ws)); !slices.Equal(got, []session.SessionID{"s2", "s1"}) {
 		t.Fatalf("归档不该动账目，拿到 %v", got)
 	}
 }
@@ -695,10 +683,10 @@ func TestCreate待恢复标记写不下去时什么都不留(t *testing.T) {
 	if _, err := registry.Create(ctx, "/a", ""); !errors.Is(err, CodeStorageFailed) {
 		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
 	}
-	if _, ok := registry.Get("ws-1"); ok {
-		t.Fatal("失败的建不该在缓存里留下实体")
+	if present(t, ctx, registry, "ws-1") {
+		t.Fatal("失败的建不该在表里留下记录")
 	}
-	if got := workspaceIDs(mustList(t, registry)); len(got) != 0 {
+	if got := workspaceIDs(mustList(t, ctx, registry)); len(got) != 0 {
 		t.Fatalf("失败的建不该留下工作区，拿到 %v", got)
 	}
 }
@@ -713,7 +701,7 @@ func TestCreate记录写不下去时把标记撤回去(t *testing.T) {
 	if _, err := registry.Create(ctx, "/a", ""); !errors.Is(err, CodeStorageFailed) {
 		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
 	}
-	if registry.snapshotState().PendingMutation != nil {
+	if mustState(t, ctx, registry).PendingMutation != nil {
 		t.Fatal("标记该被撤回去")
 	}
 	// 撤干净之后还能接着建。
@@ -749,14 +737,14 @@ func TestCreate次序写不下去时把记录和标记都撤掉(t *testing.T) {
 	if _, err := registry.Create(ctx, "/a", ""); !errors.Is(err, CodeStorageFailed) {
 		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
 	}
-	if registry.snapshotState().PendingMutation != nil {
+	if mustState(t, ctx, registry).PendingMutation != nil {
 		t.Fatal("标记该被撤回去")
 	}
 	registry = h.reopen(ctx)
-	if got := workspaceIDs(mustList(t, registry)); len(got) != 0 {
+	if got := workspaceIDs(mustList(t, ctx, registry)); len(got) != 0 {
 		t.Fatalf("重开之后不该看见那条孤儿记录，拿到 %v", got)
 	}
-	size, err := registry.workspace.Size()
+	size, err := registry.workspace.Size(ctx)
 	if err != nil || size != 0 {
 		t.Fatalf("表里该是空的，拿到 %d %v", size, err)
 	}
@@ -792,17 +780,17 @@ func TestCreate次序写入和记录回滚都失败时留着标记等下次收�
 	if _, err := registry.Create(ctx, "/a", ""); !errors.Is(err, CodeStorageFailed) {
 		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
 	}
-	pending := registry.snapshotState().PendingMutation
+	pending := mustState(t, ctx, registry).PendingMutation
 	if pending == nil || pending.Operation != OperationCreate || pending.WorkspaceID != "ws-1" {
 		t.Fatalf("标记该留着，拿到 %v", pending)
 	}
 
 	// 下一次启动照着标记把那条孤儿记录收掉。
 	registry = h.reopen(ctx)
-	if registry.snapshotState().PendingMutation != nil {
+	if mustState(t, ctx, registry).PendingMutation != nil {
 		t.Fatal("启动时该把标记收掉")
 	}
-	size, err := registry.workspace.Size()
+	size, err := registry.workspace.Size(ctx)
 	if err != nil || size != 0 {
 		t.Fatalf("孤儿记录该被删掉，拿到 %d %v", size, err)
 	}
@@ -821,7 +809,7 @@ func TestDelete次序写不下去时不删(t *testing.T) {
 	if _, err := registry.Delete(ctx, "ws-1"); !errors.Is(err, CodeStorageFailed) {
 		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
 	}
-	if _, ok := registry.Get("ws-1"); !ok {
+	if !present(t, ctx, registry, "ws-1") {
 		t.Fatal("次序都没写成，工作区该原封不动")
 	}
 }
@@ -837,10 +825,10 @@ func TestDelete记录删不掉时把工作区放回去(t *testing.T) {
 	if _, err := registry.Delete(ctx, "ws-1"); !errors.Is(err, CodeStorageFailed) {
 		t.Fatalf("要的是 CodeStorageFailed，拿到 %v", err)
 	}
-	if _, ok := registry.Get("ws-1"); !ok {
-		t.Fatal("删失败之后工作区该被放回缓存")
+	if !present(t, ctx, registry, "ws-1") {
+		t.Fatal("删失败之后记录该还在表里")
 	}
-	if got := workspaceIDs(mustList(t, registry)); !slices.Equal(got, []WorkspaceID{"ws-1"}) {
+	if got := workspaceIDs(mustList(t, ctx, registry)); !slices.Equal(got, []WorkspaceID{"ws-1"}) {
 		t.Fatalf("次序该被还原，拿到 %v", got)
 	}
 }
@@ -863,13 +851,28 @@ func TestDelete记录删不掉且次序回滚也失败时站在可恢复的方�
 	if !errors.As(coded.Cause, &joined) || len(joined.Unwrap()) != 2 {
 		t.Fatalf("两条错误都该留下，拿到 %v", coded.Cause)
 	}
-	// 落盘的标记仍然说「这次删除要做完」，缓存必须站在那个方向上。
-	if _, ok := registry.Get("ws-1"); ok {
-		t.Fatal("缓存不该重新发布一条已经不在落盘次序里的记录")
+	// 落盘的次序和标记必须一起站在「这次删除要做完」那一边。
+	//
+	// 新增: 这里原来断言的是「缓存不该重新发布一条已经不在落盘次序里的记录」。
+	// 缓存没了之后那句话没有对象了，而它想说的事——介质站在可恢复的方向上——
+	// 直接读介质更说得清：记录还在表里（删本来就没成），但它已经不在次序里，
+	// 且标记点着它。[Registry.Get] 此刻仍然认它，那和建到一半那条记录同一个
+	// 道理（见 [Registry.entityByTargetKey]）：表是表，次序是次序。
+	state := mustState(t, ctx, registry)
+	if len(state.WorkspaceIDs) != 0 {
+		t.Fatalf("次序该已经不含它了，拿到 %v", state.WorkspaceIDs)
+	}
+	if state.PendingMutation == nil ||
+		state.PendingMutation.Operation != OperationDelete ||
+		state.PendingMutation.WorkspaceID != "ws-1" {
+		t.Fatalf("标记该仍然点着这次删除，拿到 %+v", state.PendingMutation)
+	}
+	if !present(t, ctx, registry, "ws-1") {
+		t.Fatal("删本来就没成，记录该还在表里")
 	}
 
 	registry = h.reopen(ctx)
-	if got := workspaceIDs(mustList(t, registry)); len(got) != 0 {
+	if got := workspaceIDs(mustList(t, ctx, registry)); len(got) != 0 {
 		t.Fatalf("下一次启动该把这次删除做完，拿到 %v", got)
 	}
 }
@@ -895,7 +898,7 @@ func TestDelete删成了但标记没清掉时只记日志(t *testing.T) {
 
 	// 下一次操作之前会把这个标记收掉，它不能被下一次建/删覆盖过去。
 	mustCreate(t, ctx, registry, "/b", "")
-	if registry.snapshotState().PendingMutation != nil {
+	if mustState(t, ctx, registry).PendingMutation != nil {
 		t.Fatal("下一次操作之前该把标记收掉")
 	}
 }
@@ -943,7 +946,7 @@ func TestOpen介质对不上时报错而不修(t *testing.T) {
 			name: "一个目录被两个工作区认领",
 			seed: func(t *testing.T, ctx context.Context, h *harness, registry *Registry) {
 				mustCreate(t, ctx, registry, "/a", "")
-				seedRecord(t, ctx, registry, "ws-9", mustRecord(t, registry, "ws-1"))
+				seedRecord(t, ctx, registry, "ws-9", mustRecord(t, ctx, registry, "ws-1"))
 				seedState(t, ctx, registry, DomainState{
 					Initialized:  true,
 					WorkspaceIDs: []WorkspaceID{"ws-1", "ws-9"},
@@ -956,7 +959,7 @@ func TestOpen介质对不上时报错而不修(t *testing.T) {
 				mustCreate(t, ctx, registry, "/a", "")
 				mustCreate(t, ctx, registry, "/b", "")
 				for _, id := range []WorkspaceID{"ws-1", "ws-2"} {
-					record := mustRecord(t, registry, id)
+					record := mustRecord(t, ctx, registry, id)
 					record.SessionIDs = []session.SessionID{"s1"}
 					seedRecord(t, ctx, registry, id, record)
 				}
@@ -991,18 +994,22 @@ func TestOpen介质对不上时报错而不修(t *testing.T) {
 	}
 }
 
-func TestList次序指到缓存外时报不一致(t *testing.T) {
+func TestList次序指到表外时报不一致(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
 	registry := h.open(ctx)
 
 	// 这一步在真实运行里做不出来（打开时的校验会先拦住），所以只能直接摆出来：
 	// 它钉的是「List 遇到这种局面报错，而不是安静地少给一条」。
-	registry.mutex.Lock()
-	registry.state.WorkspaceIDs = []WorkspaceID{"幽灵"}
-	registry.mutex.Unlock()
+	//
+	// 新增: 原来是把幽灵 id 按进内存那份状态。状态搬回介质之后
+	// （见 [Registry.readState]）只能绕过登记册往介质上写，
+	// 而那也正是这个局面在生产上唯一的来路。
+	state := mustState(t, ctx, registry)
+	state.WorkspaceIDs = []WorkspaceID{"幽灵"}
+	seedState(t, ctx, registry, state)
 
-	if _, err := registry.List(); !errors.Is(err, CodeInconsistentState) {
+	if _, err := registry.List(ctx); !errors.Is(err, CodeInconsistentState) {
 		t.Fatalf("要的是 CodeInconsistentState，拿到 %v", err)
 	}
 }
@@ -1012,27 +1019,36 @@ func TestList次序指到缓存外时报不一致(t *testing.T) {
 func TestOpen候选没通过归属判据时留下诊断且不抹数据(t *testing.T) {
 	ctx := context.Background()
 
+	// 新增: DSH 那边这里还有两格——「工作目录解析不出来了」和「工作目录换到了
+	// 别的地方」。归属改由工作区标识判之后，一个候选筛不出来只剩三种可能：
+	// 它的会话头此刻列举不到、改口说自己属于别人、或者干脆不再点名任何工作区。
+	//
+	// 这三格分别走 [Registry.reportFilteredCandidates] 里那三条取原因的路：
+	// 索引里已经记着一条现成的理由、会话头查不到、以及会话头点着别人。
 	cases := []struct {
 		name string
 		// arrange 在会话已经挂上来之后改动外部世界，让候选在下一次打开时筛不出来。
-		arrange  func(h *harness)
+		arrange  func(h *harness, here, elsewhere WorkspaceID)
 		fragment string
 	}{
 		{
-			name:     "工作目录解析不出来了",
-			arrange:  func(h *harness) { h.filesystem.failResolve("/a", errBackend) },
-			fragment: "解析不出来",
+			name: "会话头改点名别人了",
+			arrange: func(h *harness, _, elsewhere WorkspaceID) {
+				h.persistence.set(header("s1", elsewhere, 100))
+			},
+			fragment: "它的会话头记的是工作区",
 		},
 		{
-			name: "工作目录换到了别的地方",
-			arrange: func(h *harness) {
-				h.filesystem.alias("/a", "/b")
+			name: "会话头不再点名任何工作区",
+			arrange: func(h *harness, _, _ WorkspaceID) {
+				h.persistence.set(header("s1", "", 100))
 			},
-			fragment: "不是这个工作区的",
+			// 这条理由是索引那一步就记下来的，诊断直接取现成的那条。
+			fragment: "会话头里没有点名工作区",
 		},
 		{
 			name:     "会话头整个不见了",
-			arrange:  func(h *harness) { h.persistence.set() },
+			arrange:  func(h *harness, _, _ WorkspaceID) { h.persistence.set() },
 			fragment: "找不到它的会话头",
 		},
 	}
@@ -1044,24 +1060,26 @@ func TestOpen候选没通过归属判据时留下诊断且不抹数据(t *testin
 			h.logger = sink.logger()
 			h.filesystem.addDir("/a")
 			h.filesystem.addDir("/b")
-			h.persistence.set(header("s1", "/a", 100))
+			ids := h.seedWorkspaces(ctx, "/a", "/b")
+			here, elsewhere := ids[0], ids[1]
+			h.persistence.set(header("s1", here, 100))
 			registry := h.open(ctx)
-			// bootstrap 已经把 s1 收进 /a 那个工作区了。
-			if got := mustList(t, registry)[0].SessionIDs(); !slices.Equal(got, []session.SessionID{"s1"}) {
+			// bootstrap 已经把 s1 并进 here 了。
+			if got := mustSessionIDs(t, ctx, mustGet(t, ctx, registry, here)); !slices.Equal(got, []session.SessionID{"s1"}) {
 				t.Fatalf("前置条件不成立，拿到 %v", got)
 			}
 
-			one.arrange(h)
+			one.arrange(h, here, elsewhere)
 			registry = h.reopen(ctx)
 
-			if got := mustList(t, registry)[0].SessionIDs(); len(got) != 0 {
+			if got := mustSessionIDs(t, ctx, mustGet(t, ctx, registry, here)); len(got) != 0 {
 				t.Fatalf("这个候选该被筛掉，拿到 %v", got)
 			}
 			if !sink.contains("没能通过归属判据", one.fragment) {
 				t.Fatalf("该留下一条说得清原因的诊断，日志是：%v", sink.dump())
 			}
-			// 只记日志，**不抹数据**：目录可能只是临时被移走了。
-			if got := mustRecord(t, registry, "ws-1").SessionIDs; !slices.Equal(got, []session.SessionID{"s1"}) {
+			// 只记日志，**不抹数据**：那条会话头可能只是这一刻列举不到。
+			if got := mustRecord(t, ctx, registry, here).SessionIDs; !slices.Equal(got, []session.SessionID{"s1"}) {
 				t.Fatalf("落盘的账目不该被读操作改掉，拿到 %v", got)
 			}
 		})

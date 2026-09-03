@@ -1,13 +1,11 @@
-// 本文件的作用：跨进程后端那一侧词汇的测试——诊断截断、能力申报、时限与工作目录
-// 这两道校验、那次绝不报错的结果结清，以及那个幂等的运行句柄。
+// 本文件的作用：跨进程后端那一侧词汇的测试——诊断截断、能力申报、时限校验、
+// 那次绝不报错的结果结清，以及那个幂等的运行句柄。
 
 package subagent
 
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -76,95 +74,6 @@ func TestAssertPositiveTimeoutRejectsANonPositiveDuration(t *testing.T) {
 	}
 	if err := AssertPositiveTimeout("后端", "拆解时限", time.Second); err != nil {
 		t.Fatalf("正的时长该收下，实际 %v", err)
-	}
-}
-
-// ---- 工作目录 ----
-
-func TestAssertUsableCwdRejectsARelativePath(t *testing.T) {
-	if err := AssertUsableCwd("后端", "cwd", filepath.Join("relative", "path")); err == nil {
-		t.Fatal("相对路径该被拒")
-	}
-}
-
-func TestAssertUsableCwdRejectsAnythingThatIsNotAnEnterableDirectory(t *testing.T) {
-	root := t.TempDir()
-	file := filepath.Join(root, "not-a-directory")
-	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
-		t.Fatalf("造文件失败：%v", err)
-	}
-
-	for name, path := range map[string]string{
-		"不存在": filepath.Join(root, "从来没有过"),
-		"是文件": file,
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := AssertUsableCwd("后端", "cwd", path); err == nil {
-				t.Fatal("这条路径当不了 cwd，该被拒")
-			}
-		})
-	}
-	if err := AssertUsableCwd("后端", "cwd", root); err != nil {
-		t.Fatalf("一个现存的目录该收下，实际 %v", err)
-	}
-}
-
-// 空串就是本仓库通行的「没给」，不是一次失败。
-func TestValidateConfiguredCwdTreatsTheEmptyStringAsAbsent(t *testing.T) {
-	resolved, err := ValidateConfiguredCwd("后端", "")
-	if err != nil || resolved != "" {
-		t.Fatalf("没给该交回空串，实际 %q err=%v", resolved, err)
-	}
-}
-
-// 配置里那一项按宿主的启动目录解释，交回来的一定是绝对路径。
-func TestValidateConfiguredCwdResolvesARelativeOverride(t *testing.T) {
-	resolved, err := ValidateConfiguredCwd("后端", ".")
-	if err != nil {
-		t.Fatalf("当前目录该验得过，实际 %v", err)
-	}
-	if !filepath.IsAbs(resolved) {
-		t.Fatalf("交回来的该是绝对路径，实际 %q", resolved)
-	}
-}
-
-func TestValidateConfiguredCwdRejectsAnUnusableOverride(t *testing.T) {
-	if _, err := ValidateConfiguredCwd("后端", filepath.Join(t.TempDir(), "从来没有过")); err == nil {
-		t.Fatal("配了个不存在的目录该被拒")
-	}
-}
-
-// 配了覆盖就用它——那一项在装载时已经验过，开工这一刻不重验。
-func TestResolveChildCwdPrefersTheConfiguredOverride(t *testing.T) {
-	resolved, err := ResolveChildCwd("后端", testAbsolutePath, t.TempDir())
-	if err != nil {
-		t.Fatalf("解算失败：%v", err)
-	}
-	if resolved != testAbsolutePath {
-		t.Fatalf("该用配置里那一项，实际 %q", resolved)
-	}
-}
-
-// 没配覆盖就用父会话那个工作区，而且在这里验。
-func TestResolveChildCwdFallsBackToTheParentWorkspace(t *testing.T) {
-	parent := t.TempDir()
-	resolved, err := ResolveChildCwd("后端", "", parent)
-	if err != nil {
-		t.Fatalf("解算失败：%v", err)
-	}
-	if resolved != parent {
-		t.Fatalf("该用父会话那个工作区，实际 %q", resolved)
-	}
-
-	if _, err := ResolveChildCwd("后端", "", filepath.Join(parent, "从来没有过")); err == nil {
-		t.Fatal("父会话那个 cwd 立不住时该被拒")
-	}
-}
-
-// 两样都没有时大声失败：退回宿主进程的 cwd 会把孩子悄悄绑在服务的启动目录上。
-func TestResolveChildCwdRefusesToFallBackToTheHostProcess(t *testing.T) {
-	if _, err := ResolveChildCwd("后端", "", ""); err == nil {
-		t.Fatal("一个都没有时该失败，而不是退回宿主进程的 cwd")
 	}
 }
 

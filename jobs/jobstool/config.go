@@ -63,13 +63,13 @@ const (
 // **本包不是生产方**，它一件作业都起不了；那条「变了」的流也归别人。
 type Service interface {
 	// List 列出调用方看得见的那些作业。
-	List(caller agent.Agent) []jobs.Snapshot
+	List(ctx context.Context, caller agent.Agent) ([]jobs.Snapshot, error)
 	// Get 取一份不消费的快照。
-	Get(id jobs.JobID, caller agent.Agent) (jobs.Snapshot, error)
+	Get(ctx context.Context, id jobs.JobID, caller agent.Agent) (jobs.Snapshot, error)
 	// Read 取下一段增量，或者结算之后那份幂等的最终输出。
-	Read(id jobs.JobID, caller agent.Agent) (jobs.Read, error)
+	Read(ctx context.Context, id jobs.JobID, caller agent.Agent) (jobs.Read, error)
 	// Kill 请求取消。
-	Kill(id jobs.JobID, caller agent.Agent, reason string) (jobs.KillResult, error)
+	Kill(ctx context.Context, id jobs.JobID, caller agent.Agent, reason string) (jobs.KillResult, error)
 	// Wait 等到结算或者超时。
 	Wait(ctx context.Context, id jobs.JobID, timeout time.Duration, caller agent.Agent) (jobs.Snapshot, error)
 	// OnJobDone 登记一个按作用域圈定的完成监听器。

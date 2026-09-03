@@ -210,12 +210,20 @@ func (i *installer) compose(
 	state.composing.Lock()
 	defer state.composing.Unlock()
 
-	cwd := absPath(live.Session().Header().Cwd)
-	projectRoot, err := FindProjectRoot(ctx, i.fsys, cwd, i.config.ProjectRootMarkers)
+	// 一个不属于任何工作区的会话没有根可走，这一层这一步就什么都不说。
+	rawRoot, rooted, err := i.workspaceRoot(ctx, live.Session().Header().WorkspaceID)
 	if err != nil {
 		return llm.Message{}, false, err
 	}
-	identity := WorkspaceBaselineIdentity(i.config, cwd, projectRoot)
+	if !rooted {
+		return llm.Message{}, false, nil
+	}
+	workspaceRoot := absPath(rawRoot)
+	projectRoot, err := FindProjectRoot(ctx, i.fsys, workspaceRoot, i.config.ProjectRootMarkers)
+	if err != nil {
+		return llm.Message{}, false, err
+	}
+	identity := WorkspaceBaselineIdentity(i.config, workspaceRoot, projectRoot)
 
 	authority := slices.Clone(claimed)
 	visibleBaseline, baselinePresent := visibleBaselineSource(live.Session(), authority)
@@ -235,7 +243,7 @@ func (i *installer) compose(
 
 	if !baselinePresent || !keepVisibleBaseline || !excludedKnown {
 		replacePrevious := baselinePresent && !keepVisibleBaseline
-		loaded, present, err := LoadBaselineSet(ctx, i.fsys, i.config, cwd, projectRoot, replacePrevious)
+		loaded, present, err := LoadBaselineSet(ctx, i.fsys, i.config, workspaceRoot, projectRoot, replacePrevious)
 		if err != nil {
 			return llm.Message{}, false, err
 		}
@@ -301,7 +309,7 @@ func (i *installer) compose(
 	request := ReconcileRequest{
 		Effective:             visibleChanges(live.Session(), authority),
 		Versions:              state.versions,
-		Cwd:                   cwd,
+		WorkspaceRoot:         workspaceRoot,
 		ProjectRoot:           projectRoot,
 		ScopeHints:            changesOf(pending),
 		TouchedPaths:          touchedPaths,

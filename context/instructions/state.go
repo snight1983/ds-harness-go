@@ -343,7 +343,7 @@ func (i *changeIndex) scopes() []string { return i.order }
 //
 // 源: packages/context/agent-instructions/src/state.ts:246-259
 //
-// 新增: DSH 这里第一个参数是 `Agent`，从它身上取会话、表面层和 cwd，
+// 新增: DSH 这里第一个参数是 `Agent`，从它身上取会话、表面层和工作目录，
 // 再自己把「模型现在看得见哪些迁移」算出来（`visibleInstructionChanges`）。
 // 本包不认识 Agent——那一层在 DESIGN.md 第八节的第 6 块。算可见状态需要的是
 // 会话表面层，和指令这件事没有关系，所以它被推给了调用方：
@@ -358,8 +358,13 @@ type ReconcileRequest struct {
 	// 已渲染那部分的提交另走 [VersionUpdate]，见 [RetainedVersionUpdates]。
 	Versions map[string]VersionState
 
-	// Cwd 是会话的工作目录，绝对路径。
-	Cwd string
+	// WorkspaceRoot 是这个会话那份工作区的根，一条 [fs.FileSystem] 命名空间里的
+	// 绝对路径。
+	//
+	// 新增: DSH 这里是会话的宿主机工作目录。本仓库没有那样东西（见
+	// [github.com/snight1983/ds-harness-go/session.SessionHeader.WorkspaceID]），
+	// 这条路径由装配方从工作区标识换出来，见 [Deps.WorkspaceRoot]。
+	WorkspaceRoot string
 
 	// ProjectRoot 留空表示让 [Reconcile] 自己去找。
 	//
@@ -406,10 +411,10 @@ func Reconcile(
 	request ReconcileRequest,
 ) (Reconciled, bool, error) {
 	effective := newChangeIndex(request.Effective)
-	cwd := absPath(request.Cwd)
+	workspaceRoot := absPath(request.WorkspaceRoot)
 	projectRoot := request.ProjectRoot
 	if projectRoot == "" {
-		found, err := FindProjectRoot(ctx, fsys, cwd, config.ProjectRootMarkers)
+		found, err := FindProjectRoot(ctx, fsys, workspaceRoot, config.ProjectRootMarkers)
 		if err != nil {
 			return Reconciled{}, false, err
 		}
@@ -417,7 +422,7 @@ func Reconcile(
 	}
 	projectRoot = absPath(projectRoot)
 
-	scopes, baselineScopes := collectScopes(config, request, effective, projectRoot, cwd)
+	scopes, baselineScopes := collectScopes(config, request, effective, projectRoot, workspaceRoot)
 
 	state := &reconcileState{
 		versions:         request.Versions,
@@ -457,7 +462,7 @@ func collectScopes(
 	request ReconcileRequest,
 	effective *changeIndex,
 	projectRoot string,
-	cwd string,
+	workspaceRoot string,
 ) (scopes *scopeSet, baselineScopes *scopeSet) {
 	scopes = newScopeSet()
 	baselineScopes = newScopeSet()
@@ -475,7 +480,7 @@ func collectScopes(
 	}
 
 	baselineScopes.add(CandidateScopeKey(UserGlobalDirectory, UserGlobalFile))
-	for _, dir := range AncestorChain(projectRoot, cwd) {
+	for _, dir := range AncestorChain(projectRoot, workspaceRoot) {
 		addProjectScopes(baselineScopes, dir)
 	}
 	if request.IncludeBaselineScopes {
@@ -505,7 +510,7 @@ func collectScopes(
 	}
 
 	for _, touchedPath := range request.TouchedPaths {
-		for _, dir := range DescendantDirsBetween(cwd, touchedPath) {
+		for _, dir := range DescendantDirsBetween(workspaceRoot, touchedPath) {
 			addProjectScopes(scopes, dir)
 		}
 	}

@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 
 	"github.com/google/uuid"
@@ -794,7 +793,11 @@ func (b *Bridge) NewSession(ctx context.Context, params wire.NewSessionRequest) 
 	if err != nil {
 		return wire.NewSessionResponse{}, err
 	}
-	if err := validateWorkspaceParams(params.Cwd, params.AdditionalDirectories); err != nil {
+	if err := validateWorkspaceParams(params.AdditionalDirectories); err != nil {
+		return wire.NewSessionResponse{}, err
+	}
+	workspaceID, err := b.workspaceOf(ctx, params.Cwd)
+	if err != nil {
 		return wire.NewSessionResponse{}, err
 	}
 
@@ -802,8 +805,10 @@ func (b *Bridge) NewSession(ctx context.Context, params wire.NewSessionRequest) 
 	sessionID := sessionlog.SessionID(uuid.NewString())
 	control := b.newModelControl(fallback)
 	handle, err := b.config.Agents.Create(ctx, owner, agent.CreateOptions{
-		SessionID:    sessionID,
-		Cwd:          params.Cwd,
+		SessionID: sessionID,
+		// 线上那条 cwd 是客户端那台机器上的写法，服务端认不得。落进会话头的是它换出来
+		// 的工作区标识，见 [WorkspaceResolver]——路径到这条边界为止，一个字都不往下传。
+		WorkspaceID:  workspaceID,
 		AgentOptions: agent.Options{Provider: fallback.Provider, Model: fallback.Model},
 		Setup:        b.sessionSetup(control, params.McpServers),
 	})
@@ -954,17 +959,48 @@ func (b *Bridge) abandon(ctx context.Context, sessionID sessionlog.SessionID, re
 //
 // 源: packages/acp/acp/src/index.ts:514-524（validateWorkspaceParams）
 //
-// `session/new` 和 `session/resume` 共用这一条：两边收的是同一对字段，判据也该是同一个。
+// `session/new` 和 `session/resume` 共用这一条：两边收的是同一个字段，判据也该是同一个。
 // mcpServers 不在这里拒——那一支由 [MountMCPServers] 判，因为它认不认得出来取决于这条线
 // 上挂没挂 MCP 宿主。
-func validateWorkspaceParams(cwd string, additionalDirectories []string) error {
-	switch {
-	case !filepath.IsAbs(cwd):
-		return invalidParams(fmt.Sprintf("cwd must be an absolute path: %s", cwd))
-	case len(additionalDirectories) > 0:
+//
+// 新增: DSH 这里还查一遍 cwd 绝不绝对。那道检查删掉了：cwd 是**客户端**那台机器上的
+// 写法，它长什么样是客户端的事，服务端连它指着什么都不知道，更没有立场规定它的形状。
+// 服务端对它只做一件事，就是 [Bridge.workspaceOf] 那次换算。
+func validateWorkspaceParams(additionalDirectories []string) error {
+	if len(additionalDirectories) > 0 {
 		return invalidParams("additionalDirectories is not supported")
 	}
 	return nil
+}
+
+// workspaceOf 把线上那条 cwd 换成一个工作区标识。
+//
+// 新增: 见 [WorkspaceResolver]。没挂登记册、或者这条 cwd 没人认领，都给空工作区——
+// 两者对这条线是同一件事：这个会话不属于任何工作区。
+func (b *Bridge) workspaceOf(ctx context.Context, cwd string) (sessionlog.WorkspaceID, error) {
+	if b.config.Workspaces == nil {
+		return "", nil
+	}
+	id, found, err := b.config.Workspaces.WorkspaceOf(ctx, cwd)
+	if err != nil {
+		return "", internalError(fmt.Sprintf("workspace lookup failed: %v", err))
+	}
+	if !found {
+		return "", nil
+	}
+	return id, nil
+}
+
+// workspaceDisplay 给出一个工作区标识拿给客户端看的那条路径；没有就是空串。
+func (b *Bridge) workspaceDisplay(ctx context.Context, id sessionlog.WorkspaceID) string {
+	if id == "" || b.config.Workspaces == nil {
+		return ""
+	}
+	display, found, err := b.config.Workspaces.WorkspaceDisplay(ctx, id)
+	if err != nil || !found {
+		return ""
+	}
+	return display
 }
 
 // Prompt 把一轮用户输入准入、排进这个会话，然后一直等到它结算出一个停止原因。
@@ -1163,7 +1199,11 @@ func (b *Bridge) ResumeSession(ctx context.Context, params wire.ResumeSessionReq
 	if err != nil {
 		return wire.ResumeSessionResponse{}, err
 	}
-	if err := validateWorkspaceParams(params.Cwd, params.AdditionalDirectories); err != nil {
+	if err := validateWorkspaceParams(params.AdditionalDirectories); err != nil {
+		return wire.ResumeSessionResponse{}, err
+	}
+	workspaceID, err := b.workspaceOf(ctx, params.Cwd)
+	if err != nil {
 		return wire.ResumeSessionResponse{}, err
 	}
 
@@ -1174,7 +1214,7 @@ func (b *Bridge) ResumeSession(ctx context.Context, params wire.ResumeSessionReq
 	}
 	defer release()
 
-	persisted, err := b.resumableHeader(ctx, sessionID, params.Cwd)
+	persisted, err := b.resumableHeader(ctx, sessionID, workspaceID)
 	if err != nil {
 		return wire.ResumeSessionResponse{}, err
 	}
@@ -1232,7 +1272,7 @@ func (b *Bridge) beginActivation(sessionID sessionlog.SessionID) (func(), error)
 func (b *Bridge) resumableHeader(
 	ctx context.Context,
 	sessionID sessionlog.SessionID,
-	cwd string,
+	workspaceID sessionlog.WorkspaceID,
 ) (sessionlog.SessionHeader, error) {
 	headers, err := b.config.Persistence.List(ctx)
 	if err != nil {
@@ -1245,7 +1285,10 @@ func (b *Bridge) resumableHeader(
 		if header.Origin == sessionlog.OriginSubagent || header.ParentSession != "" {
 			break
 		}
-		if !sameDirectory(header.Cwd, cwd) {
+		// 新增: DSH 比的是两条工作目录字符串（realpath 之后）。这里比的是两个不透明的
+		// 工作区标识：请求那一侧由 [Bridge.workspaceOf] 换出来，存档那一侧就是会话头
+		// 上那一个。一次相等，不碰文件系统，也不问跑着这个进程的机器上有没有那个目录。
+		if header.WorkspaceID != workspaceID {
 			return sessionlog.SessionHeader{}, invalidParams(
 				fmt.Sprintf("session cwd does not match: %s", sessionID))
 		}
@@ -1304,9 +1347,15 @@ func (b *Bridge) ListSessions(ctx context.Context, params wire.ListSessionsReque
 	if b.config.Persistence == nil {
 		return wire.ListSessionsResponse{}, wire.NewMethodNotFound("session/list")
 	}
-	if params.Cwd != nil && !filepath.IsAbs(*params.Cwd) {
-		return wire.ListSessionsResponse{}, invalidParams(
-			fmt.Sprintf("cwd must be an absolute path: %s", *params.Cwd))
+	// cwd 的形状不在这里验，理由见 [validateWorkspaceParams]；给了就换成一个工作区
+	// 标识，这一页只留归在那个工作区下的。
+	var wanted sessionlog.WorkspaceID
+	if params.Cwd != nil {
+		resolved, err := b.workspaceOf(ctx, *params.Cwd)
+		if err != nil {
+			return wire.ListSessionsResponse{}, err
+		}
+		wanted = resolved
 	}
 	cursor, hasCursor, err := decodeSessionListCursor(params.Cursor)
 	if err != nil {
@@ -1338,18 +1387,16 @@ func (b *Bridge) ListSessions(ctx context.Context, params wire.ListSessionsReque
 		if header.Origin == sessionlog.OriginSubagent || header.ParentSession != "" {
 			continue
 		}
-		// 没有工作目录、或者存的是一条相对路径的会话续不动：`session/resume` 那一步要
-		// 拿它和请求里的 cwd 比，而那两条判据都要求它是绝对的。
-		if header.Cwd == "" || !filepath.IsAbs(header.Cwd) {
-			continue
-		}
-		if params.Cwd != nil && !sameDirectory(header.Cwd, *params.Cwd) {
+		// 新增: 原来这里先筛掉「没有工作目录」的会话，理由是 `session/resume` 要拿那条
+		// 路径和请求里的 cwd 比，没有就比不成。换成工作区标识之后这一筛没有了：空串是
+		// 一个合法的取值（「不属于任何工作区」），而那次比较照样成立。
+		if params.Cwd != nil && header.WorkspaceID != wanted {
 			continue
 		}
 		entries = append(entries, sessionListEntry{
-			sessionID: header.ID,
-			cwd:       header.Cwd,
-			createdAt: header.CreatedAt,
+			sessionID:   header.ID,
+			workspaceID: header.WorkspaceID,
+			createdAt:   header.CreatedAt,
 		})
 	}
 	sortSessionList(entries)
@@ -1373,7 +1420,9 @@ func (b *Bridge) ListSessions(ctx context.Context, params wire.ListSessionsReque
 	for _, entry := range page {
 		response.Sessions = append(response.Sessions, wire.SessionInfo{
 			SessionId: wire.SessionId(entry.sessionID),
-			Cwd:       entry.cwd,
+			// 线上这一项是给客户端看的那条路径，由登记册按标识给出；没挂登记册、
+			// 或者这条会话不属于任何工作区，就是空串。
+			Cwd: b.workspaceDisplay(ctx, entry.workspaceID),
 		})
 	}
 	if len(remaining) > len(page) {

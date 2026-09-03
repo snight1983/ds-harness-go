@@ -59,7 +59,7 @@
 //     所以它允许是 nil——那时候候选的显示名一律退回会话 id，
 //     和 DSH 里每个标题观察都失败的那条路完全一样。
 //  3. **收的是 [Target] 不是 Agent。**DSH 那两个方法收整个 Agent，用到的只有
-//     `agent.id` 和 `agent.session.header.cwd`。
+//     `agent.id` 和 `agent.session.header.cwd`（本仓库对应 WorkspaceID）。
 //  4. **AbortSignal 换成 context.Context。**DSH 得自己写
 //     `settleWithCancellation` 让每个 Promise 和信号赛跑；Go 的 context 顺着
 //     调用链往下传，本包只在几个关口上查 `ctx.Err()`。读失败时**先**查取消，

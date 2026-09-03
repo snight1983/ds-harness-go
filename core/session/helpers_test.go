@@ -5,8 +5,6 @@ package session
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -15,11 +13,11 @@ import (
 	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
-// testAbsolutePath 是一条在本机上确实绝对的路径。
+// testWorkspaceID 是这些用例里那个会话归属的工作区登记。
 //
-// 不能写死 `/tmp` 或者 `C:\tmp` 这样的字面量：validateSessionHeader 用的是
-// filepath.IsAbs，它跟着平台走，写死哪一边都会让另一边的测试变成假通过。
-var testAbsolutePath = filepath.Join(os.TempDir(), "ds-harness-go-session-test")
+// 新增: 它是一个不透明标识，不是路径，也和文件系统里有什么东西没有关系，
+// 见 [sessionlog.SessionHeader.WorkspaceID]。
+var testWorkspaceID = sessionlog.WorkspaceID("ws-session-test")
 
 // data 把一份负载排成字节，排不出去当场失败。
 func data(t testing.TB, payload any) json.RawMessage {

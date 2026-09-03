@@ -180,7 +180,7 @@ func coldHeader(
 		Version:       session.FormatVersion,
 		ID:            id,
 		CreatedAt:     createdAt,
-		Cwd:           testAbsolutePath,
+		WorkspaceID:   testWorkspaceID,
 		ParentSession: parent,
 		Origin:        origin,
 	}
@@ -212,7 +212,7 @@ func liveChild(
 	}
 	live, err := services.Sessions.Create(t.Context(), owner, id, coresession.CreateOptions{
 		Seed:          seed,
-		Cwd:           testAbsolutePath,
+		WorkspaceID:   testWorkspaceID,
 		ParentSession: parent,
 		SeedLength:    len(seed),
 		Origin:        session.OriginSubagent,

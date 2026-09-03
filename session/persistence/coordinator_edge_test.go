@@ -717,12 +717,12 @@ func TestCoordinator认领没主状态时工作目录不同是撞号(t *testing.
 	h.drainMayFail = true
 	id := session.SessionID("没主但目录不同")
 	meta := testHeader(t, id)
-	meta.Cwd = t.TempDir()
+	meta.WorkspaceID = "ws-这一处"
 	if err := h.Create(t.Context(), meta); err != nil {
 		t.Fatalf("登记失败：%v", err)
 	}
 
-	live := h.createLive(t, id, coresession.CreateOptions{Cwd: t.TempDir()})
+	live := h.createLive(t, id, coresession.CreateOptions{WorkspaceID: "ws-另一处"})
 	if err := h.flush(live); err == nil {
 		t.Fatal("工作目录不同该被当成撞号")
 	}

@@ -115,7 +115,7 @@ func ChildSessionMeta(
 ) agent.CreateOptions {
 	parentHeader := parent.Session().Header()
 	options := agent.CreateOptions{
-		Cwd:           parentHeader.Cwd,
+		WorkspaceID:   parentHeader.WorkspaceID,
 		ParentSession: parentHeader.ID,
 		// 只作导航分类用；模式和能不能续，权威始终是那条描述符。
 		Origin: session.OriginSubagent,

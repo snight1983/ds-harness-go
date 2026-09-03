@@ -50,6 +50,13 @@ func ValidateSnapshot(snapshot Snapshot, owner agent.Agent) error {
 		return fmt.Errorf("job %q startedAt must be set", id)
 	}
 
+	// 新增: DSH 没有这一条——它那台注册表只可能跑在一个进程里，「在谁那儿」不是
+	// 一个问题。本仓库里它是（见 [RunnerID]）：一条记录没有 runner，任何一个副本
+	// 都判断不了自己能不能 [Registry.Read] 或者 [Registry.Kill] 它，只能猜。
+	if snapshot.Runner == "" {
+		return fmt.Errorf("job %q runner must be set", id)
+	}
+
 	finished := !snapshot.FinishedAt.IsZero()
 	if snapshot.Status.IsTerminal() != finished {
 		return fmt.Errorf("job %q finishedAt must be present exactly for a terminal status", id)
@@ -120,7 +127,14 @@ func RegisterInvariants(
 	}
 
 	install := func(installCtx context.Context, installScope *invariants.Scope, fail invariants.Fail) error {
-		for _, snapshot := range jobs.List(nil) {
+		// 新增: 这次列举现在会失败（理由见 [Registry]）。列不出来就**装不上**这条
+		// 检查：一条装到一半、只订阅了后续结算而没走过当下那批记录的检查，会让
+		// 「带着坏记录起来」这件事悄悄溜过去，而那正是这条胳膊存在的理由。
+		snapshots, err := jobs.List(installCtx, nil)
+		if err != nil {
+			return err
+		}
+		for _, snapshot := range snapshots {
 			if err := ValidateSnapshot(snapshot, nil); err != nil {
 				fail(err.Error())
 			}

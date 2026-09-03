@@ -74,7 +74,7 @@ func TestCreateRegistersAnnouncesAndListsInOrder(t *testing.T) {
 	}
 	defer func() { _ = undo(ctx) }()
 
-	first := liveSession(t, store, owner, "a", CreateOptions{Cwd: testAbsolutePath})
+	first := liveSession(t, store, owner, "a", CreateOptions{WorkspaceID: testWorkspaceID})
 	second := liveSession(t, store, owner, "b", CreateOptions{})
 
 	if got, ok := store.Get("a"); !ok || got != first {
@@ -92,7 +92,7 @@ func TestCreateRegistersAnnouncesAndListsInOrder(t *testing.T) {
 	}
 	// 头上带着创建时给的那几项。
 	header := first.Header()
-	if header.Cwd != testAbsolutePath || header.ID != "a" || header.CreatedAt == 0 {
+	if header.WorkspaceID != testWorkspaceID || header.ID != "a" || header.CreatedAt == 0 {
 		t.Fatalf("装出来的头是 %#v", header)
 	}
 }
@@ -102,7 +102,7 @@ func TestCreateStampsTheDurableHeaderFields(t *testing.T) {
 	owner := rootScope(t)
 	session := liveSession(t, store, owner, "child", CreateOptions{
 		Seed:            seedOf(userEvent(t, "你好")),
-		Cwd:             testAbsolutePath,
+		WorkspaceID:     testWorkspaceID,
 		ParentSession:   "parent",
 		CreatedAt:       77,
 		SeedLength:      1,
@@ -115,7 +115,7 @@ func TestCreateStampsTheDurableHeaderFields(t *testing.T) {
 		Version:         sessionlog.FormatVersion,
 		ID:              "child",
 		CreatedAt:       77,
-		Cwd:             testAbsolutePath,
+		WorkspaceID:     testWorkspaceID,
 		ParentSession:   "parent",
 		SeedLength:      1,
 		Origin:          sessionlog.OriginSubagent,
@@ -165,10 +165,15 @@ func TestCreateRejectsADuplicateID(t *testing.T) {
 }
 
 func TestCreateRefusesAHeaderItCannotBuild(t *testing.T) {
-	// 装头这一步会验：一条相对路径的工作目录在这里就被挡下，会话根本没造出来。
+	// 装头这一步会验：一个负的血统边界在这里就被挡下，会话根本没造出来。
+	//
+	// 新增: 原来这条用例给的是一条相对路径的工作目录。会话头改记工作区标识之后
+	// 没有这条判据了——一个不透明标识没有「绝对性」可言，见
+	// [sessionlog.SessionHeader.WorkspaceID]。换一个仍然验得到的字段，这条用例
+	// 要问的「装头失败时不留半份登记」原样成立。
 	store := newStore(t)
 	owner := rootScope(t)
-	_, err := store.Create(context.Background(), owner, "a", CreateOptions{Cwd: "relative"})
+	_, err := store.Create(context.Background(), owner, "a", CreateOptions{SeedLength: -1})
 	if !errors.Is(err, ErrInvalidHeader) {
 		t.Fatalf("诊断是 %v", err)
 	}

@@ -141,7 +141,7 @@ func (r *Registry) ViewCheckpoint(checkpoint Checkpoint) map[string]any {
 // 日志会在这里被发现。
 //
 // baseSeq 是**整份存档**现存最早一条事件的 seq，由存储那一侧说出来
-//（[github.com/snight1983/ds-harness-go/session/persistence.StoredSuffix] 的同名
+// （[github.com/snight1983/ds-harness-go/session/persistence.StoredSuffix] 的同名
 // 字段）。请求的 fromSeq 落在它之前时，读回来的那截就是现存的全部。
 //
 // 一行是「可用的」当且仅当：版本和当前单元的 [Definition.StateVersion] 相等、

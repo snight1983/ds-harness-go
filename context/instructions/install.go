@@ -77,6 +77,20 @@ type Deps struct {
 	// 是查不出来的故障，而装不上去是当场就能看见的。
 	FS fs.FileSystem
 
+	// WorkspaceRoot 给出一个会话那份工作区在 [fs.FileSystem] 命名空间里的根路径，
+	// 必填。第二个返回值为假表示这个会话不属于任何工作区，这一层于是什么都不说。
+	//
+	// 新增: DSH 直接读会话头上的 `cwd`，那是一条宿主机路径。本仓库的会话头记的是
+	// 一个不透明的工作区标识（见 [session.SessionHeader.WorkspaceID]），从标识换到
+	// 根路径这一步归装配方做——它才认识工作区登记册，而本包不该认识。
+	//
+	// 新增: 交回的是**路径串**而不是 [fs.Target]，因为本包唯一真正需要一棵树的
+	// 地方（[FindProjectRoot] 和 [AncestorChain]）要逐级往上走，而 [fs.Target]
+	// 上没有可上行的坐标：[fs.Target.TargetKey] 不透明，[fs.Target.DisplayPath]
+	// 按 fs 包的规定只能给人看。这条路径和 [fs.FileSystem.Resolve] 收的是同一个
+	// 命名空间，和宿主机没有关系。
+	WorkspaceRoot func(ctx context.Context, workspaceID session.WorkspaceID) (string, bool, error)
+
 	// AgentOf 从一把作用域钥匙找到那个 agent，必填。
 	//
 	// 新增: DSH 的 `exec.agent` 直接就是 Agent 对象。Go 这边
@@ -94,10 +108,11 @@ type Deps struct {
 //
 // 源: packages/context/agent-instructions/src/index.ts:81-103
 type installer struct {
-	config  ResolvedConfig
-	fsys    fs.FileSystem
-	agentOf func(*scope.Key) (agent.Agent, error)
-	logger  *slog.Logger
+	config        ResolvedConfig
+	fsys          fs.FileSystem
+	workspaceRoot func(context.Context, session.WorkspaceID) (string, bool, error)
+	agentOf       func(*scope.Key) (agent.Agent, error)
+	logger        *slog.Logger
 
 	// lifetime 是那些异步投影用的长命 ctx，stop 把它整个掐掉。
 	//
@@ -167,6 +182,8 @@ func newInstaller(ctx context.Context, config Config, deps Deps) (*installer, er
 		return nil, errors.New("instructions: 需要一道工具结果广播")
 	case deps.FS == nil:
 		return nil, errors.New("instructions: 需要一个文件系统")
+	case deps.WorkspaceRoot == nil:
+		return nil, errors.New("instructions: 需要一条从工作区标识找到根路径的路")
 	case deps.AgentOf == nil:
 		return nil, errors.New("instructions: 需要一条从作用域钥匙找回 agent 的路")
 	}
@@ -179,14 +196,15 @@ func newInstaller(ctx context.Context, config Config, deps Deps) (*installer, er
 	// 后者一派发完就取消，而一次投影要活到自己跑完。
 	lifetime, stop := context.WithCancel(context.WithoutCancel(ctx))
 	return &installer{
-		config:   config.Resolve(),
-		fsys:     deps.FS,
-		agentOf:  deps.AgentOf,
-		logger:   logger,
-		lifetime: lifetime,
-		stop:     stop,
-		sessions: map[session.SessionID]*sessionState{},
-		touches:  map[tools.ExecutionToken][]touch{},
+		config:        config.Resolve(),
+		fsys:          deps.FS,
+		workspaceRoot: deps.WorkspaceRoot,
+		agentOf:       deps.AgentOf,
+		logger:        logger,
+		lifetime:      lifetime,
+		stop:          stop,
+		sessions:      map[session.SessionID]*sessionState{},
+		touches:       map[tools.ExecutionToken][]touch{},
 	}, nil
 }
 

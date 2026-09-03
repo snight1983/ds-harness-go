@@ -61,6 +61,8 @@ func (a *stubAgent) RunMaintenance(ctx context.Context, task func(context.Contex
 type stubRegistry struct {
 	// unowned 是 List(nil) 交回的那几行。
 	unowned []Snapshot
+	// listErr 不为 nil 时列举失败。
+	listErr error
 	// subscribeErr 不为 nil 时订阅完成失败。
 	subscribeErr error
 	// listeners 是还挂着的那些完成监听器。
@@ -71,11 +73,14 @@ type stubRegistry struct {
 	disposed int
 }
 
-func (r *stubRegistry) List(caller agent.Agent) []Snapshot {
-	if caller != nil {
-		return nil
+func (r *stubRegistry) List(_ context.Context, caller agent.Agent) ([]Snapshot, error) {
+	if r.listErr != nil {
+		return nil, r.listErr
 	}
-	return r.unowned
+	if caller != nil {
+		return nil, nil
+	}
+	return r.unowned, nil
 }
 
 func (r *stubRegistry) OnJobDone(
@@ -102,10 +107,17 @@ func (r *stubRegistry) announce(snapshot Snapshot, owner agent.Agent) {
 	}
 }
 
-func (r *stubRegistry) Start(Start) (JobID, error)               { return "", nil }
-func (r *stubRegistry) Get(JobID, agent.Agent) (Snapshot, error) { return Snapshot{}, nil }
-func (r *stubRegistry) Read(JobID, agent.Agent) (Read, error)    { return Read{}, nil }
-func (r *stubRegistry) Kill(JobID, agent.Agent, string) (KillResult, error) {
+func (r *stubRegistry) Start(context.Context, Start) (JobID, error) { return "", nil }
+
+func (r *stubRegistry) Get(context.Context, JobID, agent.Agent) (Snapshot, error) {
+	return Snapshot{}, nil
+}
+
+func (r *stubRegistry) Read(context.Context, JobID, agent.Agent) (Read, error) {
+	return Read{}, nil
+}
+
+func (r *stubRegistry) Kill(context.Context, JobID, agent.Agent, string) (KillResult, error) {
 	return KillRequested, nil
 }
 
@@ -137,6 +149,7 @@ func healthy() Snapshot {
 	return Snapshot{
 		ID:        "bash-1",
 		Kind:      KindBash,
+		Runner:    "replica-a",
 		Label:     "ls -la",
 		Status:    StatusRunning,
 		StartedAt: startedAt,
@@ -255,6 +268,12 @@ func TestValidateSnapshotRejectsEveryMalformedRecord(t *testing.T) {
 			message: "label must be non-empty",
 		},
 		{
+			// 新增: 这一条本仓库自有，理由见 [RunnerID]。
+			name:    "没说这件作业在谁那儿",
+			mutate:  func(s *Snapshot) { s.Runner = "" },
+			message: "runner must be set",
+		},
+		{
 			name:    "开工时刻没盖",
 			mutate:  func(s *Snapshot) { s.StartedAt = time.Time{} },
 			message: "startedAt must be set",
@@ -335,6 +354,19 @@ func TestTheInvariantCatchesABadRecordAlreadyInTheRegistry(t *testing.T) {
 	}
 	if !strings.Contains(failure.Message, "label must be non-empty") {
 		t.Fatalf("违例说的是 %q", failure.Message)
+	}
+}
+
+// 新增: 这一条本仓库自有——DSH 那次列举不会失败，这边会（理由见 [Registry]）。
+func TestTheInvariantRefusesToInstallWhenTheLedgerCannotBeListed(t *testing.T) {
+	t.Parallel()
+	// 列不出当下这批记录，就装不上这条检查：装到一半的话，一台带着坏记录起来的
+	// 注册表会悄悄溜过去，而那正是上一条用例压着的那条胳膊。
+	failure := errors.New("账本读不动")
+	_, err := RegisterInvariants(
+		t.Context(), newRegistry(t), &stubRegistry{listErr: failure}, scope.NewRoot())
+	if !errors.Is(err, failure) {
+		t.Fatalf("装载该把列举的失败原样报出来，收到 %v", err)
 	}
 }
 

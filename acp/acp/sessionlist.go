@@ -1,5 +1,5 @@
-// 本文件的作用：`session/list` 那一页——不透明游标的编解码、两个目录算不算同一个，
-// 以及「最新的排前面」那条定死的次序。
+// 本文件的作用：`session/list` 那一页——不透明游标的编解码，以及「最新的排前面」
+// 那条定死的次序。
 //
 // 源: packages/acp/acp/src/index.ts:457-512, 526-535
 
@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"sort"
 
@@ -22,8 +21,13 @@ import (
 // 源: packages/acp/acp/src/index.ts:316
 type sessionListEntry struct {
 	sessionID sessionlog.SessionID
-	cwd       string
-	createdAt int64
+	// workspaceID 是这条会话头上那个归属工作区；空串表示不属于任何工作区。
+	//
+	// 新增: DSH 那边这一项叫 cwd，装的是宿主机路径。本仓库的头存的是一个不透明的
+	// 工作区标识（见 [sessionlog.SessionHeader.WorkspaceID]），摆到线上给客户端看的
+	// 那条路径由 [WorkspaceResolver] 按这个标识给出。
+	workspaceID sessionlog.WorkspaceID
+	createdAt   int64
 }
 
 // sessionListCursor 是那条排序键：一个会话在「最新优先」这条序上的确切位置。
@@ -122,32 +126,4 @@ func sortSessionList(entries []sessionListEntry) {
 		}
 		return compareSessionIDs(string(entries[left].sessionID), string(entries[right].sessionID)) < 0
 	})
-}
-
-// sameDirectory 判两个工作目录算不算同一个，只看这两个字符串。
-//
-// 源: packages/acp/acp/src/index.ts:526-535
-//
-// 新增: **不碰文件系统。** DSH 那边先走 `node:fs` 的 realpath，解得开就按物理身份比，
-// 解不开才退回字面比较；这条移植最初照抄成了 [path/filepath.EvalSymlinks]。那是一台
-// 机器上跑一个 CLI 才成立的写法：进程就在那台机器上，那个目录就在眼前。
-//
-// 会话存档搬进数据库之后它不成立了。这个字段是**会话头里的一个标签**，判它和另一个
-// 标签相不相等，不该去问跑着这个进程的机器上有没有这么个目录、软链接解不解得开——
-// 同一份存档换台机器读会给出不同的答案，一个已经落档半年、目录早删了的会话续不续
-// 得上要看运维有没有把那个目录留着。服务化之后这两件事都是错的。
-//
-// 于是只剩字面这一支，也就是 DSH 那条退路：两边都 [path/filepath.Clean] 之后逐字比。
-// Clean 是纯字符串函数，不做任何 I/O。相对路径不必在这里操心——ACP 那一侧进得来的
-// cwd 都验过是绝对路径（见 [Bridge.newSession] 和 [Bridge.loadSession] 里的
-// [path/filepath.IsAbs]），存档头那一份由 core/session 的头校验把着。
-//
-// 代价是两条指向同一处的不同路径（软链接、`/tmp` 与 `/private/tmp`）不再算同一个，
-// 客户端得报出当初开会话时那一份。这是有意的：一个能被宿主机文件系统改写答案的判据，
-// 换来的确定性比它挡掉的那点不便值钱。
-func sameDirectory(left, right string) bool {
-	if left == "" {
-		return false
-	}
-	return filepath.Clean(left) == filepath.Clean(right)
 }

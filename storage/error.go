@@ -32,6 +32,13 @@ const (
 	CodeMalformedMedium ErrorCode = "malformed-medium"
 	// CodeClosed 表示这个单元或后端已经关掉了。
 	CodeClosed ErrorCode = "closed"
+	// CodeStaleRevision 表示一次带守卫的写没能满足它的前置条件。
+	//
+	// 新增: DSH 那套词汇里没有它，因为那边只有一个进程在写，一条记录读出来到写回去
+	// 之间不会有别人插进来。这个服务是多副本的，读-改-写中间那一段是真的会被别的副本
+	// 抢走。抢走这件事必须有个名字，否则调用方只能看见「写成功了」而它写的是一份
+	// 已经过期的值——那是一次静默的丢更新。
+	CodeStaleRevision ErrorCode = "stale-revision"
 )
 
 // Error 是中枢和后端实现共同抛出的、带类型的失败。

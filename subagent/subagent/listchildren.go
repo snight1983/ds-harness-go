@@ -443,7 +443,7 @@ func (l *listing) resolveColdIdentity(
 	if l.services.Cache != nil {
 		// 和下面那次权威重折不同，一次读崩了的缓存**不下任何判决**：缓存是派生
 		// 数据，它自己坏了（任何一个单元那行存坏了）就悄悄落到重折那一级去。
-		snapshot, err := l.services.Cache.CachedSnapshot(header)
+		snapshot, err := l.services.Cache.CachedSnapshot(ctx, header)
 		if err == nil && snapshot != nil {
 			cached, served := servedIdentity(*snapshot)
 			// 一个孩子**自己**那条描述符一旦追加就不可改，所以一行缓存里的身份
@@ -544,7 +544,7 @@ func sameLifecycle(meta, expected session.SessionHeader) bool {
 	return meta.Version == expected.Version &&
 		meta.ID == expected.ID &&
 		meta.CreatedAt == expected.CreatedAt &&
-		meta.Cwd == expected.Cwd &&
+		meta.WorkspaceID == expected.WorkspaceID &&
 		meta.ParentSession == expected.ParentSession &&
 		meta.SeedLength == expected.SeedLength &&
 		meta.DelegationDepth == expected.DelegationDepth &&

@@ -236,7 +236,7 @@ func (h *harness) attach(owner *scope.Scope) func(context.Context) error {
 // start 开一件活儿，失败就当场终止这个用例。
 func (h *harness) start(spec jobs.Start) jobs.JobID {
 	h.t.Helper()
-	id, err := h.registry.Start(spec)
+	id, err := h.registry.Start(h.t.Context(), spec)
 	if err != nil {
 		h.t.Fatalf("开工失败：%v", err)
 	}
@@ -259,10 +259,23 @@ func (h *harness) finish(producer *fakeProducer, outcome jobs.Outcome) jobs.Snap
 	}
 }
 
+// list 列一遍调用方看得见的作业，失败就当场终止这个用例。
+//
+// 新增: 列举现在会失败（见 [jobs.Registry]），而这台单进程注册表上它恒不失败，
+// 所以这里把那个错误收在一处，用例照旧只看那一串 id。
+func (h *harness) list(caller agent.Agent) []jobs.Snapshot {
+	h.t.Helper()
+	snapshots, err := h.registry.List(h.t.Context(), caller)
+	if err != nil {
+		h.t.Fatalf("列作业失败：%v", err)
+	}
+	return snapshots
+}
+
 // get 读一份快照，失败就当场终止这个用例。
 func (h *harness) get(id jobs.JobID, caller agent.Agent) jobs.Snapshot {
 	h.t.Helper()
-	snapshot, err := h.registry.Get(id, caller)
+	snapshot, err := h.registry.Get(h.t.Context(), id, caller)
 	if err != nil {
 		h.t.Fatalf("读快照失败：%v", err)
 	}
@@ -315,7 +328,7 @@ func TestNewFillsInItsDefaults(t *testing.T) {
 		producers = append(producers, producer)
 		h.start(producer.spec(jobs.KindBash, "ls", nil))
 	}
-	if _, err := h.registry.Start(newProducer().spec(jobs.KindBash, "ls", nil)); err == nil {
+	if _, err := h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", nil)); err == nil {
 		t.Fatal("第 11 件该被默认上限挡住")
 	}
 	// 默认时钟盖过表：开工时刻不是零值。
@@ -341,11 +354,11 @@ func TestStartRefusesAnOwnerNoControllerServes(t *testing.T) {
 	// 一个控制器都没挂：活儿开不了，也不该有任何执行资源被起起来。
 	h := newBareHarness(t, Config{})
 	producer := newProducer()
-	_, err := h.registry.Start(producer.spec(jobs.KindBash, "ls", nil))
+	_, err := h.registry.Start(h.t.Context(), producer.spec(jobs.KindBash, "ls", nil))
 	if err == nil || !strings.Contains(err.Error(), "no job controller serves this agent") {
 		t.Fatalf("报的是 %v，该说没有控制器服务这个属主", err)
 	}
-	if len(producer.cancelReasons()) != 0 || len(h.registry.List(nil)) != 0 {
+	if len(producer.cancelReasons()) != 0 || len(h.list(nil)) != 0 {
 		t.Fatal("被拒的开工不该留下任何痕迹")
 	}
 }
@@ -362,13 +375,13 @@ func TestAScopedControllerServesOnlyTheAgentsComposedUnderIt(t *testing.T) {
 	h.start(newProducer().spec(jobs.KindBash, "ls", inside))
 
 	// 无主作业落在全局链上，而全局层是空的：没人服务它。
-	if _, err := h.registry.Start(newProducer().spec(jobs.KindBash, "ls", nil)); err == nil {
+	if _, err := h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", nil)); err == nil {
 		t.Fatal("无主作业不该被一个圈了作用域的控制器服务")
 	}
 
 	// 另一个 agent 不在那条链上，同样没人服务。
 	outside := newOwner(t, "session-outside", agents)
-	if _, err := h.registry.Start(newProducer().spec(jobs.KindBash, "ls", outside)); err == nil {
+	if _, err := h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", outside)); err == nil {
 		t.Fatal("链外的 agent 不该被服务")
 	}
 }
@@ -405,11 +418,11 @@ func TestStartValidatesTheSpec(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			h := newHarness(t, Config{})
-			_, err := h.registry.Start(testCase.spec)
+			_, err := h.registry.Start(h.t.Context(), testCase.spec)
 			if err == nil || !strings.Contains(err.Error(), testCase.message) {
 				t.Fatalf("报的是 %v，该提到 %q", err, testCase.message)
 			}
-			if len(h.registry.List(nil)) != 0 {
+			if len(h.list(nil)) != 0 {
 				t.Fatal("被拒的开工不该留下记录")
 			}
 		})
@@ -422,10 +435,10 @@ func TestStartSurfacesAProducerThatCannotStart(t *testing.T) {
 	refused := errors.New("起不来")
 	producer := newProducer()
 	producer.startErr = refused
-	if _, err := h.registry.Start(producer.spec(jobs.KindBash, "ls", nil)); !errors.Is(err, refused) {
+	if _, err := h.registry.Start(h.t.Context(), producer.spec(jobs.KindBash, "ls", nil)); !errors.Is(err, refused) {
 		t.Fatalf("报的是 %v，该原样带上生产方那条错", err)
 	}
-	if len(h.registry.List(nil)) != 0 {
+	if len(h.list(nil)) != 0 {
 		t.Fatal("起不来的活儿不该被登记")
 	}
 }
@@ -446,10 +459,10 @@ func TestStartRejectsHooksMissingCancelOrDone(t *testing.T) {
 			h := newHarness(t, Config{})
 			producer := newProducer()
 			testCase.prepare(producer)
-			if _, err := h.registry.Start(producer.spec(jobs.KindBash, "ls", nil)); err == nil {
+			if _, err := h.registry.Start(h.t.Context(), producer.spec(jobs.KindBash, "ls", nil)); err == nil {
 				t.Fatal("缺手的钩子该被拒绝")
 			}
-			if len(h.registry.List(nil)) != 0 {
+			if len(h.list(nil)) != 0 {
 				t.Fatal("被拒的开工不该留下记录")
 			}
 		})
@@ -466,7 +479,7 @@ func TestStartNumbersJobsPerKindAndAnnouncesTheChange(t *testing.T) {
 		t.Fatalf("发的号是 %q/%q/%q", first, second, other)
 	}
 	// 登记顺序就是 List 的顺序。
-	if got := ids(h.registry.List(nil)); len(got) != 3 || got[0] != "bash-1" || got[2] != "subagent-1" {
+	if got := ids(h.list(nil)); len(got) != 3 || got[0] != "bash-1" || got[2] != "subagent-1" {
 		t.Fatalf("列出来的是 %v", got)
 	}
 	// 每一次登记都让可见集合真的变了。
@@ -489,7 +502,7 @@ func TestStartEnforcesTheConcurrencyLimitPerOwner(t *testing.T) {
 	h.start(first.spec(jobs.KindBash, "one", owner))
 	h.start(newProducer().spec(jobs.KindBash, "two", owner))
 
-	_, err := h.registry.Start(newProducer().spec(jobs.KindBash, "three", owner))
+	_, err := h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "three", owner))
 	if err == nil || !strings.Contains(err.Error(), "background job limit reached") {
 		t.Fatalf("报的是 %v，该说到上限了", err)
 	}
@@ -510,7 +523,7 @@ func TestOwnedJobsRequireTheAgentRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("造作用域失败：%v", err)
 	}
-	_, err = h.registry.Start(newProducer().spec(jobs.KindBash, "ls", &stubAgent{id: "session-1", own: own}))
+	_, err = h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", &stubAgent{id: "session-1", own: own}))
 	if err == nil || !strings.Contains(err.Error(), "requires the agent registry") {
 		t.Fatalf("报的是 %v，该说缺 agent 登记簿", err)
 	}
@@ -526,7 +539,7 @@ func TestOwnedJobsMustBeTheLiveRegisteredInstance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("造作用域失败：%v", err)
 	}
-	_, err = h.registry.Start(newProducer().spec(jobs.KindBash, "ls", &stubAgent{id: "ghost", own: own}))
+	_, err = h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", &stubAgent{id: "ghost", own: own}))
 	if err == nil || !strings.Contains(err.Error(), "not the registered agent instance") {
 		t.Fatalf("报的是 %v，该说这不是登记着的那个实例", err)
 	}
@@ -534,7 +547,7 @@ func TestOwnedJobsMustBeTheLiveRegisteredInstance(t *testing.T) {
 	// 同一个 id，另一个实例——这正是「属主已经被换掉了」的样子。
 	live := newOwner(t, "session-1", agents)
 	stale := &stubAgent{id: live.id, own: own}
-	_, err = h.registry.Start(newProducer().spec(jobs.KindBash, "ls", stale))
+	_, err = h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", stale))
 	if err == nil || !strings.Contains(err.Error(), "not the registered agent instance") {
 		t.Fatalf("报的是 %v，该拒掉那个过期实例", err)
 	}
@@ -546,7 +559,7 @@ func TestOwnedJobsNeedAnOwnerScopeToHangCleanupOn(t *testing.T) {
 	h := newHarness(t, Config{Agents: agents})
 	naked := &stubAgent{id: "session-1"}
 	agents.live[naked.id] = naked
-	_, err := h.registry.Start(newProducer().spec(jobs.KindBash, "ls", naked))
+	_, err := h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", naked))
 	if err == nil || !strings.Contains(err.Error(), "no scope") {
 		t.Fatalf("报的是 %v，该说没有作用域可挂清理", err)
 	}
@@ -561,10 +574,10 @@ func TestStartRefusesAnOwnerWhoseScopeIsAlreadyDisposed(t *testing.T) {
 	if err := owner.own.Dispose(t.Context()); err != nil {
 		t.Fatalf("释放属主作用域失败：%v", err)
 	}
-	if _, err := h.registry.Start(newProducer().spec(jobs.KindBash, "ls", owner)); err == nil {
+	if _, err := h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", owner)); err == nil {
 		t.Fatal("挂不上清理就该拒绝开工")
 	}
-	if len(h.registry.List(owner)) != 0 {
+	if len(h.list(owner)) != 0 {
 		t.Fatal("被拒的开工不该留下记录")
 	}
 }
@@ -621,10 +634,10 @@ func TestListShowsUnownedWorkAndOnlyTheCallersOwn(t *testing.T) {
 	h.start(newProducer().spec(jobs.KindBash, "mine", mine))
 	h.start(newProducer().spec(jobs.KindBash, "yours", yours))
 
-	if got := ids(h.registry.List(mine)); len(got) != 2 || got[0] != "bash-1" || got[1] != "bash-2" {
+	if got := ids(h.list(mine)); len(got) != 2 || got[0] != "bash-1" || got[1] != "bash-2" {
 		t.Fatalf("我看到的是 %v，该只有无主的和我自己的", got)
 	}
-	if got := ids(h.registry.List(nil)); len(got) != 1 || got[0] != "bash-1" {
+	if got := ids(h.list(nil)); len(got) != 1 || got[0] != "bash-1" {
 		t.Fatalf("没有身份的调用方看到的是 %v，该只有无主的", got)
 	}
 }
@@ -637,14 +650,14 @@ func TestGetRefusesUnknownIDsAndOtherSessions(t *testing.T) {
 	yours := newOwner(t, "session-yours", agents)
 	id := h.start(newProducer().spec(jobs.KindBash, "mine", mine))
 
-	if _, err := h.registry.Get("bash-99", mine); err == nil || !strings.Contains(err.Error(), "unknown job") {
+	if _, err := h.registry.Get(h.t.Context(), "bash-99", mine); err == nil || !strings.Contains(err.Error(), "unknown job") {
 		t.Fatalf("报的是 %v，该说不认得", err)
 	}
-	if _, err := h.registry.Get(id, yours); err == nil || !strings.Contains(err.Error(), "another session") {
+	if _, err := h.registry.Get(h.t.Context(), id, yours); err == nil || !strings.Contains(err.Error(), "another session") {
 		t.Fatalf("报的是 %v，该说这是别人的", err)
 	}
 	// 没有身份的调用方永远够不着一件有主作业。
-	if _, err := h.registry.Get(id, nil); err == nil {
+	if _, err := h.registry.Get(h.t.Context(), id, nil); err == nil {
 		t.Fatal("无身份的调用方不该够得着有主作业")
 	}
 	if h.get(id, mine).Label != "mine" {
@@ -664,7 +677,7 @@ func TestReadDrainsAStreamAndRepeatsAFinalOutput(t *testing.T) {
 	streaming.stream = []string{"第一段", "第二段"}
 	streamID := h.start(streaming.spec(jobs.KindBash, "tail -f", nil))
 
-	read, err := h.registry.Read(streamID, nil)
+	read, err := h.registry.Read(h.t.Context(), streamID, nil)
 	if err != nil || read.Text != "第一段" {
 		t.Fatalf("第一次读到 %q（%v）", read.Text, err)
 	}
@@ -672,19 +685,19 @@ func TestReadDrainsAStreamAndRepeatsAFinalOutput(t *testing.T) {
 	if read.Snapshot.Reported {
 		t.Fatal("活着的时候读不该认领汇报")
 	}
-	if read, _ = h.registry.Read(streamID, nil); read.Text != "第二段" {
+	if read, _ = h.registry.Read(h.t.Context(), streamID, nil); read.Text != "第二段" {
 		t.Fatalf("第二次读到 %q", read.Text)
 	}
 
 	// 只有最终输出那一类：活着时是空串，落定之后每次都交回同一份。
 	batch := newProducer()
 	batchID := h.start(batch.spec(jobs.KindBash, "ls", nil))
-	if read, _ = h.registry.Read(batchID, nil); read.Text != "" {
+	if read, _ = h.registry.Read(h.t.Context(), batchID, nil); read.Text != "" {
 		t.Fatalf("还没落定就读出了 %q", read.Text)
 	}
 	h.finish(batch, jobs.Outcome{Status: jobs.StatusCompleted, Output: "全部输出"})
 	for range 2 {
-		read, err = h.registry.Read(batchID, nil)
+		read, err = h.registry.Read(h.t.Context(), batchID, nil)
 		if err != nil || read.Text != "全部输出" {
 			t.Fatalf("终态读到 %q（%v）", read.Text, err)
 		}
@@ -694,7 +707,7 @@ func TestReadDrainsAStreamAndRepeatsAFinalOutput(t *testing.T) {
 		}
 	}
 
-	if _, err := h.registry.Read("bash-99", nil); err == nil {
+	if _, err := h.registry.Read(h.t.Context(), "bash-99", nil); err == nil {
 		t.Fatal("不认得的 id 该报错")
 	}
 }
@@ -707,7 +720,7 @@ func TestKillCancelsAndMarksStoppingAndReported(t *testing.T) {
 	producer := newProducer()
 	id := h.start(producer.spec(jobs.KindBash, "sleep 100", nil))
 
-	result, err := h.registry.Kill(id, nil, "用户不要了")
+	result, err := h.registry.Kill(h.t.Context(), id, nil, "用户不要了")
 	if err != nil || result != jobs.KillRequested {
 		t.Fatalf("停的结果是 %q（%v）", result, err)
 	}
@@ -730,7 +743,7 @@ func TestKillOnASettledJobIsAnAcceptedNoop(t *testing.T) {
 	id := h.start(producer.spec(jobs.KindBash, "ls", nil))
 	h.finish(producer, jobs.Outcome{Status: jobs.StatusCompleted})
 
-	result, err := h.registry.Kill(id, nil, "")
+	result, err := h.registry.Kill(h.t.Context(), id, nil, "")
 	if err != nil || result != jobs.KillAlreadyFinished {
 		t.Fatalf("停一件落定的作业得到 %q（%v）", result, err)
 	}
@@ -752,7 +765,7 @@ func TestKillPropagatesAProducerErrorAndChangesNothing(t *testing.T) {
 	producer.cancelErr = refused
 	id := h.start(producer.spec(jobs.KindBash, "sleep 100", nil))
 
-	if _, err := h.registry.Kill(id, nil, "试试"); !errors.Is(err, refused) {
+	if _, err := h.registry.Kill(h.t.Context(), id, nil, "试试"); !errors.Is(err, refused) {
 		t.Fatalf("报的是 %v，该原样带上生产方那条错", err)
 	}
 	snapshot := h.get(id, nil)
@@ -777,7 +790,7 @@ func TestKillDoesNotOverwriteAStatusSettledWhileCancelRan(t *testing.T) {
 		}
 	}
 
-	if _, err := h.registry.Kill(id, nil, "停"); err != nil {
+	if _, err := h.registry.Kill(h.t.Context(), id, nil, "停"); err != nil {
 		t.Fatalf("停失败：%v", err)
 	}
 	if snapshot := h.get(id, nil); snapshot.Status != jobs.StatusKilled {
@@ -799,7 +812,7 @@ func TestWaitRejectsANonPositiveTimeout(t *testing.T) {
 	if _, err := h.registry.Wait(t.Context(), "bash-99", time.Minute, nil); err == nil {
 		t.Fatal("不认得的 id 该报错")
 	}
-	if _, err := h.registry.Kill("bash-99", nil, ""); err == nil {
+	if _, err := h.registry.Kill(h.t.Context(), "bash-99", nil, ""); err == nil {
 		t.Fatal("停一个不认得的 id 该报错")
 	}
 	// 收干净。
@@ -1017,7 +1030,7 @@ func TestDetachingTheLastControllerClosesTheRegistryAgain(t *testing.T) {
 	if err := detach(t.Context()); err != nil {
 		t.Fatalf("摘控制器失败：%v", err)
 	}
-	if _, err := h.registry.Start(newProducer().spec(jobs.KindBash, "ls", owner)); err == nil {
+	if _, err := h.registry.Start(h.t.Context(), newProducer().spec(jobs.KindBash, "ls", owner)); err == nil {
 		t.Fatal("控制器都摘光了就不该再能开工")
 	}
 	// 收干净。
@@ -1067,7 +1080,7 @@ func TestDisposingTheOwnerCancelsAwaitsAndDropsItsJobs(t *testing.T) {
 	if reasons := owned.cancelReasons(); len(reasons) != 1 || reasons[0] != "owner disposed" {
 		t.Fatalf("取消理由是 %v", reasons)
 	}
-	if _, err := h.registry.Get(ownedID, owner); err == nil {
+	if _, err := h.registry.Get(h.t.Context(), ownedID, owner); err == nil {
 		t.Fatal("属主释放之后它的作业该被摘掉")
 	}
 	// 别人的活儿一点都不该被动。
@@ -1132,7 +1145,7 @@ func TestALateOutcomeCannotOverwriteATeardownForceFailure(t *testing.T) {
 
 	// 记录已经被摘掉了，但那份 trackedJob 还活着，姗姗来迟的结局落在它身上。
 	producer.done <- jobs.Outcome{Status: jobs.StatusCompleted, Output: "其实我跑完了"}
-	if _, err := h.registry.Get(id, owner); err == nil {
+	if _, err := h.registry.Get(h.t.Context(), id, owner); err == nil {
 		t.Fatal("被摘掉的作业不该又回来了")
 	}
 	select {
@@ -1167,7 +1180,7 @@ func TestServiceDisposeStopsEverythingAndSilencesCompletionListeners(t *testing.
 	if reasons := owned.cancelReasons(); len(reasons) != 1 || reasons[0] != "jobs service disposed" {
 		t.Fatalf("取消理由是 %v", reasons)
 	}
-	if len(h.registry.List(owner)) != 0 || len(h.registry.List(nil)) != 0 {
+	if len(h.list(owner)) != 0 || len(h.list(nil)) != 0 {
 		t.Fatal("服务释放之后表该是空的")
 	}
 	// 完成监听器从拆除那一刻起就闭嘴了：没有读者，也不该再开模型回合。

@@ -1,4 +1,4 @@
-// 本文件验这条接缝的契约：必答的十个原语，加上可选那道接缝上的两个，
+// 本文件验这条接缝的契约：必答的十四个原语，加上可选那道接缝上的两个，
 // 各自答应了什么。
 //
 // 源: packages/fs/fs/tests/service.spec.ts:85-161
@@ -12,7 +12,11 @@
 // 剩下的用例是契约本身，逐条搬。另外补了 DSH 的 fake 压根没实现、
 // 因而它那组用例也验不到的几条：守卫分支、上限、单处匹配、块间取消。
 
-package fs
+// 新增: 这是一个**外部**测试包。假件从本文件旁边的 fake_test.go 提成了可导入的
+// [github.com/snight1983/ds-harness-go/fs/fstest]（提的理由见那个包的文档），
+// 而它 import 了 fs，所以 fs 自己的内部测试文件再 import 它就成环了。
+// 点导入让这七百行用例正文一个字不用改：它们本来就在读这个包自己的名字。
+package fs_test
 
 import (
 	"bytes"
@@ -20,13 +24,16 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	. "github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs/fstest"
 )
 
-// fakeFS 必须满足这条接缝的全部契约，否则下面每一条用例都无从谈起。
-var _ FileSystem = (*fakeFS)(nil)
+// 被试必须满足这条接缝的全部契约，否则下面每一条用例都无从谈起。
+var _ FileSystem = (*fstest.FS)(nil)
 
 // resolved 是「解析一条路径」这个动作的简写，用例里出现得太多了。
-func resolved(t *testing.T, backend *fakeFS, path string) Target {
+func resolved(t *testing.T, backend *fstest.FS, path string) Target {
 	t.Helper()
 
 	target, err := backend.Resolve(t.Context(), path, "")
@@ -57,8 +64,8 @@ func requireCode(t *testing.T, err error, want ErrorCode) {
 func TestTheSeamServesThePrimitives(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.txt"), "hi")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.txt"), "hi")
 
 	target := resolved(t, backend, "a.txt")
 	info, found, err := backend.Stat(t.Context(), target)
@@ -91,7 +98,7 @@ func TestTheSeamServesThePrimitives(t *testing.T) {
 func TestResolveJoinsRelativePathsOntoTheGivenBase(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 
 	relative, err := backend.Resolve(t.Context(), "a.txt", "/work")
 	if err != nil {
@@ -127,7 +134,7 @@ func TestResolveJoinsRelativePathsOntoTheGivenBase(t *testing.T) {
 func TestProcessPathAndTargetKeyAreDifferentThings(t *testing.T) {
 	t.Parallel()
 
-	concrete := newFakeFS()
+	concrete := fstest.New()
 	target := resolved(t, concrete, "a b.txt")
 
 	var plain FileSystem = concrete
@@ -151,7 +158,7 @@ func TestProcessPathAndTargetKeyAreDifferentThings(t *testing.T) {
 func TestContainsAnswersSelfAndDescendants(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	parent := resolved(t, backend, "skills")
 	child := resolved(t, backend, "skills/alpha.md")
 	outside := resolved(t, backend, "skills-backup/alpha.md")
@@ -176,9 +183,9 @@ func TestContainsAnswersSelfAndDescendants(t *testing.T) {
 func TestStreamTextYieldsExactlyWhatReadTextReturns(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	// 比 fakeChunkSize 长，才走得出多块的路径。
-	backend.seed(TargetKey("a.txt"), "one\ntwo\nthree")
+	backend := fstest.New()
+	// 比假件那个块长，才走得出多块的路径。
+	backend.Seed(TargetKey("a.txt"), "one\ntwo\nthree")
 	target := resolved(t, backend, "a.txt")
 
 	chunks, err := backend.StreamText(t.Context(), target)
@@ -218,8 +225,8 @@ func TestStreamTextYieldsExactlyWhatReadTextReturns(t *testing.T) {
 func TestStreamTextStopsBetweenChunksWhenCancelled(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.txt"), "one\ntwo\nthree")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.txt"), "one\ntwo\nthree")
 	target := resolved(t, backend, "a.txt")
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -247,8 +254,8 @@ func TestStreamTextStopsBetweenChunksWhenCancelled(t *testing.T) {
 func TestStreamTextStopsWhenTheConsumerBreaks(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.txt"), "one\ntwo\nthree")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.txt"), "one\ntwo\nthree")
 	target := resolved(t, backend, "a.txt")
 
 	chunks, err := backend.StreamText(t.Context(), target)
@@ -275,7 +282,7 @@ func TestStreamTextStopsWhenTheConsumerBreaks(t *testing.T) {
 func TestStreamTextRefusesWhatReadTextRefuses(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	target := resolved(t, backend, "missing.txt")
 
 	_, err := backend.StreamText(t.Context(), target)
@@ -291,8 +298,8 @@ func TestStreamTextRefusesWhatReadTextRefuses(t *testing.T) {
 func TestReadTextRefusesBinaryContent(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.bin"), "PK\x00\x03")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.bin"), "PK\x00\x03")
 	target := resolved(t, backend, "a.bin")
 
 	_, err := backend.ReadText(t.Context(), target)
@@ -308,8 +315,8 @@ func TestReadTextRefusesBinaryContent(t *testing.T) {
 func TestReadBytesEnforcesTheByteCap(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.bin"), "hi")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.bin"), "hi")
 	target := resolved(t, backend, "a.bin")
 
 	raw, err := backend.ReadBytes(t.Context(), target, 2)
@@ -331,8 +338,8 @@ func TestReadBytesEnforcesTheByteCap(t *testing.T) {
 func TestReadBytesHonoursCancellation(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.bin"), "hi")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.bin"), "hi")
 	target := resolved(t, backend, "a.bin")
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -351,13 +358,13 @@ func TestReadBytesHonoursCancellation(t *testing.T) {
 func TestListDirGivesChildTargetsInAStableOrderWithoutContent(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	// 故意按乱序种进去（map 的迭代顺序本来也是随机的）。
-	backend.seed(TargetKey("skills/gamma.md"), "ccc")
-	backend.seed(TargetKey("skills/alpha.md"), "a")
-	backend.seed(TargetKey("skills/beta.md"), "bb")
-	// 更深一层的不算直接子项。
-	backend.seed(TargetKey("skills/nested/deep.md"), "d")
+	backend.Seed(TargetKey("skills/gamma.md"), "ccc")
+	backend.Seed(TargetKey("skills/alpha.md"), "a")
+	backend.Seed(TargetKey("skills/beta.md"), "bb")
+	// 更深一层的那份内容不单独露面，露面的是它上面那个目录。
+	backend.Seed(TargetKey("skills/nested/deep.md"), "d")
 
 	entries, err := backend.ListDir(t.Context(), resolved(t, backend, "skills"))
 	if err != nil {
@@ -368,7 +375,11 @@ func TestListDirGivesChildTargetsInAStableOrderWithoutContent(t *testing.T) {
 	for _, entry := range entries {
 		names = append(names, entry.Name)
 	}
-	if strings.Join(names, ",") != "alpha.md,beta.md,gamma.md" {
+	// 新增: 这里原先只列三份文件。假件从 fs/fake_test.go 提成
+	// [github.com/snight1983/ds-harness-go/fs/fstest] 时把子目录也交出来了，
+	// 而那才是这条接缝要的：一个子目录**就是**这一层的一个直接子项，
+	// 生产后端 [github.com/snight1983/ds-harness-go/fs/objectstore.Store] 一直是这么列的。
+	if strings.Join(names, ",") != "alpha.md,beta.md,gamma.md,nested" {
 		t.Errorf("该按名字排好且只含直接子项，实际 %v", names)
 	}
 
@@ -397,7 +408,7 @@ func TestListDirGivesChildTargetsInAStableOrderWithoutContent(t *testing.T) {
 func TestStatReportsAbsenceWithoutAnError(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 
 	_, found, err := backend.Stat(t.Context(), resolved(t, backend, "missing.txt"))
 	if err != nil {
@@ -417,9 +428,9 @@ func TestStatReportsAbsenceWithoutAnError(t *testing.T) {
 func TestStatNeverReportsASymlink(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("real.txt"), "hi")
-	backend.links["link.txt"] = "real.txt"
+	backend := fstest.New()
+	backend.Seed(TargetKey("real.txt"), "hi")
+	backend.SeedLink("link.txt", "real.txt")
 
 	// Resolve 跟过去，于是目标那一侧根本看不见这条链接。
 	info, found, err := backend.Stat(t.Context(), resolved(t, backend, "real.txt"))
@@ -437,8 +448,8 @@ func TestStatNeverReportsASymlink(t *testing.T) {
 func TestStatReportsDirectories(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("skills/alpha.md"), "a")
+	backend := fstest.New()
+	backend.Seed(TargetKey("skills/alpha.md"), "a")
 
 	info, found, err := backend.Stat(t.Context(), resolved(t, backend, "skills"))
 	if err != nil || !found {
@@ -458,9 +469,9 @@ func TestStatReportsDirectories(t *testing.T) {
 func TestLstatSeesTheLinkItselfBeforeAnyResolution(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.txt"), "hi")
-	backend.links["link.txt"] = "a.txt"
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.txt"), "hi")
+	backend.SeedLink("link.txt", "a.txt")
 
 	info, found, err := backend.Lstat(t.Context(), "a.txt", "")
 	if err != nil || !found {
@@ -496,7 +507,7 @@ func TestLstatSeesTheLinkItselfBeforeAnyResolution(t *testing.T) {
 func TestAnUnconditionalWriteCreatesThenReplaces(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	target := resolved(t, backend, "a.txt")
 
 	created, err := backend.WriteText(t.Context(), target, "hi", nil)
@@ -537,7 +548,7 @@ func TestAnUnconditionalWriteCreatesThenReplaces(t *testing.T) {
 func TestAnEmptyFileIsRealContentNotAMissingBaseline(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	target := resolved(t, backend, "a.txt")
 
 	if _, err := backend.WriteText(t.Context(), target, "", nil); err != nil {
@@ -562,7 +573,7 @@ func TestAnEmptyFileIsRealContentNotAMissingBaseline(t *testing.T) {
 func TestCreateIfAbsentRefusesAnExistingTarget(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	target := resolved(t, backend, "a.txt")
 
 	if _, err := backend.WriteText(t.Context(), target, "hi", CreateIfAbsent{}); err != nil {
@@ -591,7 +602,7 @@ func TestCreateIfAbsentRefusesAnExistingTarget(t *testing.T) {
 func TestReplaceIfVersionRefusesAStaleOrAbsentTarget(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	target := resolved(t, backend, "a.txt")
 
 	_, err := backend.WriteText(t.Context(), target, "hi", ReplaceIfVersion{Version: Version("v1")})
@@ -625,8 +636,8 @@ func TestReplaceIfVersionRefusesAStaleOrAbsentTarget(t *testing.T) {
 func TestEditTextReplacesExactlyOneLiteralMatch(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.txt"), "alpha beta gamma")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.txt"), "alpha beta gamma")
 	target := resolved(t, backend, "a.txt")
 
 	outcome, err := backend.EditText(
@@ -651,8 +662,8 @@ func TestEditTextReplacesExactlyOneLiteralMatch(t *testing.T) {
 func TestEditTextRefusesZeroOrAmbiguousMatches(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.txt"), "x y x")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.txt"), "x y x")
 	target := resolved(t, backend, "a.txt")
 
 	_, err := backend.EditText(
@@ -687,8 +698,8 @@ func TestEditTextRefusesZeroOrAmbiguousMatches(t *testing.T) {
 func TestEditTextChecksTheVersionBeforeMatching(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
-	backend.seed(TargetKey("a.txt"), "alpha")
+	backend := fstest.New()
+	backend.Seed(TargetKey("a.txt"), "alpha")
 	target := resolved(t, backend, "a.txt")
 
 	_, err := backend.EditText(
@@ -709,7 +720,7 @@ func TestEditTextChecksTheVersionBeforeMatching(t *testing.T) {
 func TestEditingAnAbsentTargetIsAStaleVersion(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	target := resolved(t, backend, "missing.txt")
 
 	_, err := backend.EditText(
@@ -724,7 +735,7 @@ func TestEditingAnAbsentTargetIsAStaleVersion(t *testing.T) {
 func TestEditTextAcceptsTheCurrentVersion(t *testing.T) {
 	t.Parallel()
 
-	backend := newFakeFS()
+	backend := fstest.New()
 	target := resolved(t, backend, "a.txt")
 
 	written, err := backend.WriteText(t.Context(), target, "alpha", nil)

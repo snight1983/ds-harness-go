@@ -56,7 +56,11 @@ const (
 //
 // 源: packages/sdk/protocol/src/types.ts:16-27
 type InitializeParams struct {
-	// Cwd 记在每一个 SDK 建出来的会话头上。
+	// Cwd 是**客户端那台机器**上的一条工作目录。
+	//
+	// 新增: DSH 把它原样记进每一个 SDK 建出来的会话头。本仓库不：它在服务端只被
+	// 换成一个工作区标识，换完就到此为止，见
+	// [github.com/snight1983/ds-harness-go/sdk/sdkserver.WorkspaceLookup]。
 	Cwd string `json:"cwd"`
 	// Provider 是 SDK 建出来的每个 agent 跑在哪条提供方路线上。
 	Provider string `json:"provider"`

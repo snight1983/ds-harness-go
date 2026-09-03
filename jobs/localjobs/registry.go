@@ -31,6 +31,11 @@ const TaskWaitTimeout = "TASK_WAIT_TIMEOUT"
 // 源: packages/jobs/jobs-local/src/index.ts:28
 const defaultMaxConcurrentJobsPerOwner = 10
 
+// defaultRunner 是 [Config.Runner] 留空时盖上去的那个标识。
+//
+// 新增: 见 [Config.Runner]。
+const defaultRunner jobs.RunnerID = "local"
+
 // Agents 是这台注册表用得到的那一小块 agent 登记簿。
 //
 // 新增: DSH 从 cordis 上取 `ctx.get('agents')`。这里只写出真正被调到的那个方法，
@@ -47,6 +52,13 @@ type Config struct {
 	// MaxConcurrentJobsPerOwner 是同一个属主（或者那个共用的无主桶）里 running
 	// 加 stopping 的上限，0 表示用默认值 10。
 	MaxConcurrentJobsPerOwner int
+	// Runner 是盖在每一份快照上的执行副本标识，空串表示用默认值 "local"。
+	//
+	// 新增: DSH 没有这个概念。这台注册表整个就活在一个进程里，作业也只可能跑在
+	// 「这里」，所以这个字段在本包的语义就是一句自报家门——[jobs.Snapshot.Runner]
+	// 要求非空（见 [jobs.ValidateSnapshot]），而一台单进程注册表也该说得出
+	// 「它们都在我这儿」。
+	Runner jobs.RunnerID
 	// Agents 是 agent 登记簿。只有**有主**作业用得到它：属主清理必须挂在那个
 	// 确切的活实例上，所以开工前要先核对交进来的就是登记着的那一个。
 	//
@@ -133,6 +145,7 @@ type trackedJob struct {
 // 源: packages/jobs/jobs-local/src/index.ts:91
 type Registry struct {
 	maxConcurrentJobsPerOwner int
+	runner                    jobs.RunnerID
 	agents                    Agents
 	now                       func() time.Time
 	logger                    *slog.Logger
@@ -193,6 +206,10 @@ func New(config Config) (*Registry, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	runner := config.Runner
+	if runner == "" {
+		runner = defaultRunner
+	}
 	// onChange 交 nil：没有任何东西从层里派生缓存。
 	layers, err := scope.NewLayers(
 		func(*scope.Key) (*jobLayer, error) { return newJobLayer(), nil },
@@ -205,6 +222,7 @@ func New(config Config) (*Registry, error) {
 	}
 	return &Registry{
 		maxConcurrentJobsPerOwner: limit,
+		runner:                    runner,
 		agents:                    config.Agents,
 		now:                       now,
 		logger:                    logger,
@@ -220,7 +238,10 @@ func New(config Config) (*Registry, error) {
 // Start 起一件活儿并原子地登记它。
 //
 // 源: packages/jobs/jobs-local/src/index.ts:131-190
-func (r *Registry) Start(spec jobs.Start) (jobs.JobID, error) {
+//
+// 新增: 收下 ctx 但用不上——这台注册表的账本就是本进程内存里那张表，没有一步会
+// 往返、会超时。签名上留着它是因为那条缝上有（见 [jobs.Registry]）。
+func (r *Registry) Start(_ context.Context, spec jobs.Start) (jobs.JobID, error) {
 	if err := r.admit(spec); err != nil {
 		return "", err
 	}
@@ -340,7 +361,9 @@ func (r *Registry) collect(job *trackedJob, done <-chan jobs.Outcome) {
 // List 按登记顺序列出调用方自己的和无主的那些作业。
 //
 // 源: packages/jobs/jobs-local/src/index.ts:192-197
-func (r *Registry) List(caller agent.Agent) []jobs.Snapshot {
+//
+// 新增: 收下 ctx 不用、error 恒 nil，理由同 [Registry.Start]。
+func (r *Registry) List(_ context.Context, caller agent.Agent) ([]jobs.Snapshot, error) {
 	var callerSession session.SessionID
 	if caller != nil {
 		callerSession = caller.ID()
@@ -350,29 +373,34 @@ func (r *Registry) List(caller agent.Agent) []jobs.Snapshot {
 	visible := make([]jobs.Snapshot, 0, len(r.order))
 	for _, job := range r.order {
 		if job.owner == nil || job.owner.ID() == callerSession {
-			visible = append(visible, snapshotOf(job))
+			visible = append(visible, r.snapshotOf(job))
 		}
 	}
-	return visible
+	return visible, nil
 }
 
 // Get 交回一份不消费的快照。
 //
 // 源: packages/jobs/jobs-local/src/index.ts:199-203
-func (r *Registry) Get(id jobs.JobID, caller agent.Agent) (jobs.Snapshot, error) {
+//
+// 新增: 收下 ctx 不用，理由同 [Registry.Start]。
+func (r *Registry) Get(_ context.Context, id jobs.JobID, caller agent.Agent) (jobs.Snapshot, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	job, err := r.reachLocked(id, caller)
 	if err != nil {
 		return jobs.Snapshot{}, err
 	}
-	return snapshotOf(job), nil
+	return r.snapshotOf(job), nil
 }
 
 // Read 读下一段流式增量，或者结算之后那份幂等的最终输出。
 //
 // 源: packages/jobs/jobs-local/src/index.ts:205-213
-func (r *Registry) Read(id jobs.JobID, caller agent.Agent) (jobs.Read, error) {
+//
+// 新增: 收下 ctx 不用，理由同 [Registry.Start]。这台注册表握着每一件作业的执行
+// 资源，所以那条「跑在别的副本上就读不到实时输出」的分支在这里不存在。
+func (r *Registry) Read(_ context.Context, id jobs.JobID, caller agent.Agent) (jobs.Read, error) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	job, err := r.reachLocked(id, caller)
@@ -391,7 +419,7 @@ func (r *Registry) Read(id jobs.JobID, caller agent.Agent) (jobs.Read, error) {
 	if job.status.IsTerminal() {
 		job.reported = true
 	}
-	return jobs.Read{Text: text, Snapshot: snapshotOf(job)}, nil
+	return jobs.Read{Text: text, Snapshot: r.snapshotOf(job)}, nil
 }
 
 // ---- 停 ----
@@ -399,7 +427,14 @@ func (r *Registry) Read(id jobs.JobID, caller agent.Agent) (jobs.Read, error) {
 // Kill 请求取消，然后把作业标成 stopping 和已汇报。
 //
 // 源: packages/jobs/jobs-local/src/index.ts:215-228
-func (r *Registry) Kill(id jobs.JobID, caller agent.Agent, reason string) (jobs.KillResult, error) {
+//
+// 新增: 收下 ctx 不用，理由同 [Registry.Read]。
+func (r *Registry) Kill(
+	_ context.Context,
+	id jobs.JobID,
+	caller agent.Agent,
+	reason string,
+) (jobs.KillResult, error) {
 	r.mutex.Lock()
 	job, err := r.reachLocked(id, caller)
 	if err != nil {
@@ -483,7 +518,7 @@ func (r *Registry) Wait(
 	if job.status.IsTerminal() {
 		job.reported = true
 	}
-	return snapshotOf(job), nil
+	return r.snapshotOf(job), nil
 }
 
 // await 等到结算、等到点、或者被调用方取消。等到点不是错——交回当下那份快照。
@@ -644,10 +679,11 @@ func (r *Registry) reachLocked(id jobs.JobID, caller agent.Agent) (*trackedJob, 
 // snapshotOf 从那份可变记录投出一份新的只读快照。调用时必须持有锁。
 //
 // 源: packages/jobs/jobs-local/src/index.ts:363-377
-func snapshotOf(job *trackedJob) jobs.Snapshot {
+func (r *Registry) snapshotOf(job *trackedJob) jobs.Snapshot {
 	snapshot := jobs.Snapshot{
 		ID:               job.id,
 		Kind:             job.kind,
+		Runner:           r.runner,
 		Label:            job.label,
 		OutputLimitBytes: job.outputLimitBytes,
 		Status:           job.status,
@@ -718,7 +754,7 @@ func (r *Registry) settle(job *trackedJob, outcome jobs.Outcome) {
 	if job.waiters > 0 {
 		job.reported = true
 	}
-	snapshot := snapshotOf(job)
+	snapshot := r.snapshotOf(job)
 	owner := job.owner
 	closed := r.listenersClosed
 	// 关掉就是放开所有等待者，同时也是 DSH 那个 markSettled。

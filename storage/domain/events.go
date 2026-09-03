@@ -5,10 +5,25 @@
 // 每一次持久化成功的写发一条，**发在后端确认落盘之后**，带的是新快照。
 // 从不带旧值——要做差分的订阅者自己留着上一份快照，那是它的事；
 // 让事件带上旧值等于逼所有订阅者为一个少数派需求付内存。
+//
+// # 这条事件流只覆盖本副本
+//
+// 新增: [Changed] 只反映**发出它的那个进程自己的写**。别的副本写下的记录，这里
+// 一条事件都不会有——事件是在写链的槽位里同步发的（见 [ChangedListener]），
+// 而那条链只串得起本进程的写。
+//
+// 跨副本的变更通知要一套发布订阅（数据库的通知通道、消息队列，随装配方选），
+// 本轮明确不做。这是一条画出来的边界，不是遗漏：靠事件维护缓存的订阅者在多副本
+// 部署下会漏掉别人的写，所以要么它读的东西是本副本私有的，要么它就得每次读穿到
+// 介质（[Table.Get] 本来就是这么做的）。
 
 package domain
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/snight1983/ds-harness-go/storage"
+)
 
 // Operation 是一次变更的动作，是一个封闭集合。
 //
@@ -44,6 +59,16 @@ type Changed struct {
 	Operation Operation
 	// Value 是新值的 JSON 投影；[OperationDeleted] 时为 nil。
 	Value json.RawMessage
+	// Revision 是这次写在介质上的修订标识，也就是**后端出的那张收据**；
+	// [OperationDeleted] 时为空串（删除不产生新的一版）。
+	//
+	// 新增: 它是「先落盘、再发事件」这条次序在事件上留下的唯一痕迹——修订标识
+	// 只可能来自后端确认落盘之后的那个返回值，凑不出来。不变量检查拿它当证据，
+	// 见 [RegisterInvariants]。
+	//
+	// 订阅者也拿得到用处：手上有这一版的号，就能拿它去 [storage.ReplaceIfRevision]
+	// 守一次后续的写，而不必先重读一遍。
+	Revision storage.Revision
 }
 
 // ChangedListener 是一个变更订阅者。

@@ -25,7 +25,7 @@ type Code string
 // Error 让 [Code] 自己就是一个可以被 errors.Is 认出来的哨兵。
 func (c Code) Error() string { return string(c) }
 
-// 这一套码是封闭的：本包只会报这九个里的一个。
+// 这一套码是封闭的：本包只会报这十个里的一个。
 const (
 	// CodeInvalidConfig 是 [Config] 里少了必需的依赖，或者填了不合法的值。
 	CodeInvalidConfig Code = "WORKSPACE_INVALID_CONFIG"
@@ -68,6 +68,16 @@ const (
 	//
 	// 底层那条错误留在 [Error.Cause] 上，排查看它。
 	CodeStorageFailed Code = "WORKSPACE_STORAGE_FAILED"
+	// CodeWorkspaceGone 是这个句柄指着的那条工作区记录已经不在介质上了。
+	//
+	// 新增: DSH 没有这一支——它的实体自己攥着一份记录，只要句柄还在，读就一定有答案。
+	// 域的权威搬回介质之后（见 storage/domain 的 domain.go 开头），一个句柄完全
+	// 可能比它指着的那条记录活得长：另一个副本把它删掉了。
+	//
+	// 它既不是 [CodeInconsistentState]（介质没有自相矛盾，那条记录是被正当删掉的），
+	// 也不是 [CodeStorageFailed]（后端好好的，重试多少次都是同一个答案）。
+	// 把它塞进那两个里的任何一个，都会让「这个工作区没了」这件事读起来像一场事故。
+	CodeWorkspaceGone Code = "WORKSPACE_GONE"
 )
 
 // Error 是一次带分类的工作区操作失败。

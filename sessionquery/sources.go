@@ -22,8 +22,9 @@ import (
 // 一个命名空间**（见 docs/modules/datastore.md），事故的形状因此是同一个库、
 // 同一个命名空间被两个进程各写各的，不是同一个目录。
 //
-// 工作目录还在这张身份表里，但它在本仓库只是建会话时记下的一个**字符串标签**：
-// 参与这次比对，不参与任何路径解析，也不碰盘。
+// 新增: DSH 那张身份表里这一项是 `cwd`，一条宿主机工作目录。本仓库对应的是
+// [session.SessionHeader.WorkspaceID]，一个不透明的工作区标识——记的东西从位置
+// 换成了归属，但它仍然是身份的一部分：两条归在不同工作区的日志不可能是同一个会话。
 //
 // 新增: DSH 那边写的是 `(a.delegationDepth ?? 0) !== (b.delegationDepth ?? 0)`，
 // 因为它的这个字段可缺失。[session.SessionHeader.DelegationDepth] 是 int，
@@ -33,7 +34,7 @@ func AssertHeadersCompatible(a, b session.SessionHeader) error {
 	if a.Version != b.Version ||
 		a.ID != b.ID ||
 		a.CreatedAt != b.CreatedAt ||
-		a.Cwd != b.Cwd ||
+		a.WorkspaceID != b.WorkspaceID ||
 		a.ParentSession != b.ParentSession ||
 		a.SeedLength != b.SeedLength ||
 		a.DelegationDepth != b.DelegationDepth {

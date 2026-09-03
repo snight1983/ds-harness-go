@@ -354,9 +354,9 @@ func TestTheIdentityAttributesAreTheEnvelopePlusWhatTheHeaderReallyHas(t *testin
 	}
 
 	full := identityOf("s1", session.SessionHeader{
-		Version: 1, Cwd: "/w", ParentSession: "p1", SeedLength: 4,
+		Version: 1, WorkspaceID: "ws-1", ParentSession: "p1", SeedLength: 4,
 	}, userEvent(t, 7, 11))
-	if full["session.cwd"] != "/w" || full["session.parent_id"] != "p1" ||
+	if full["session.workspace_id"] != "ws-1" || full["session.parent_id"] != "p1" ||
 		full["session.seed_length"] != 4 {
 		t.Fatalf("会话头上有的那几样该带上：%v", full)
 	}

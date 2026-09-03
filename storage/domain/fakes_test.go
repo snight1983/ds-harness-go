@@ -88,25 +88,64 @@ func (u *flakyUnit) LoadAll(ctx context.Context) (storage.Snapshot, error) {
 	return u.inner.LoadAll(ctx)
 }
 
-func (u *flakyUnit) PutRecord(ctx context.Context, table, key string, value json.RawMessage) error {
+func (u *flakyUnit) LoadTable(ctx context.Context, table string) (map[string]json.RawMessage, error) {
+	if err := u.backend.enter("loadTable", func(b *flakyBackend) error { return b.loadErr }); err != nil {
+		return nil, err
+	}
+	return u.inner.LoadTable(ctx, table)
+}
+
+// 读这一侧也过一遍 enter：读穿到介质之后，「读失败」和「写失败」是同样要压的路，
+// 而它们共用 loadErr 那一项——用例关心的是「后端这一刻答不上来」，不是哪个动词。
+func (u *flakyUnit) ReadRecord(
+	ctx context.Context,
+	table, key string,
+) (json.RawMessage, storage.Revision, bool, error) {
+	if err := u.backend.enter("read", func(b *flakyBackend) error { return b.loadErr }); err != nil {
+		return nil, "", false, err
+	}
+	return u.inner.ReadRecord(ctx, table, key)
+}
+
+func (u *flakyUnit) ReadGlobal(ctx context.Context) (json.RawMessage, storage.Revision, error) {
+	if err := u.backend.enter("readglobal", func(b *flakyBackend) error { return b.loadErr }); err != nil {
+		return nil, "", err
+	}
+	return u.inner.ReadGlobal(ctx)
+}
+
+func (u *flakyUnit) PutRecord(
+	ctx context.Context,
+	table, key string,
+	value json.RawMessage,
+	expected storage.WriteIntent,
+) (storage.Revision, error) {
 	if err := u.backend.enter("put", func(b *flakyBackend) error { return b.putErr }); err != nil {
-		return err
+		return "", err
 	}
-	return u.inner.PutRecord(ctx, table, key, value)
+	return u.inner.PutRecord(ctx, table, key, value, expected)
 }
 
-func (u *flakyUnit) DeleteRecord(ctx context.Context, table, key string) error {
+func (u *flakyUnit) DeleteRecord(
+	ctx context.Context,
+	table, key string,
+	expected *storage.ReplaceIfRevision,
+) (bool, error) {
 	if err := u.backend.enter("delete", func(b *flakyBackend) error { return b.deleteErr }); err != nil {
-		return err
+		return false, err
 	}
-	return u.inner.DeleteRecord(ctx, table, key)
+	return u.inner.DeleteRecord(ctx, table, key, expected)
 }
 
-func (u *flakyUnit) SetGlobal(ctx context.Context, value json.RawMessage) error {
+func (u *flakyUnit) SetGlobal(
+	ctx context.Context,
+	value json.RawMessage,
+	expected storage.WriteIntent,
+) (storage.Revision, error) {
 	if err := u.backend.enter("global", func(b *flakyBackend) error { return b.globalErr }); err != nil {
-		return err
+		return "", err
 	}
-	return u.inner.SetGlobal(ctx, value)
+	return u.inner.SetGlobal(ctx, value, expected)
 }
 
 func (u *flakyUnit) Close(ctx context.Context) error {

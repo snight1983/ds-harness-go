@@ -115,6 +115,30 @@ type SessionCatalog interface {
 	List(ctx context.Context) ([]sessionlog.SessionHeader, error)
 }
 
+// WorkspaceResolver 是这座桥用得到的那一块工作区登记册：把线上那条 cwd 和一个
+// 工作区标识来回换一次。
+//
+// 新增: DSH 没有这样东西——它把 `cwd` 原样写进会话头，那条路径在服务端一路往下传。
+// 本仓库的会话头记的是一个不透明的工作区标识（见
+// [sessionlog.SessionHeader.WorkspaceID]），而线上那条 cwd 是**客户端那台机器**上的
+// 写法：它和服务端认识的任何东西都不在一个命名空间里。两者之间怎么对应只有装配方
+// 答得出来，所以摆成一个显式的协作者，而这条换算就是 cwd 这个概念在服务端的终点。
+//
+// 它可以为 nil，那时这条线上每一条 cwd 都换到空工作区：新开的会话不属于任何工作区，
+// `session/resume` 和 `session/list` 那两处比较仍然成立（两边都是空串），
+// `session/list` 报出去的 cwd 是空串。
+type WorkspaceResolver interface {
+	// WorkspaceOf 把客户端报上来的一条 cwd 换成一个工作区标识。
+	//
+	// 第二个返回值为假表示这条 cwd 没有对应的工作区登记。
+	WorkspaceOf(ctx context.Context, cwd string) (sessionlog.WorkspaceID, bool, error)
+
+	// WorkspaceDisplay 给出一个工作区标识拿给客户端看的那条路径。
+	//
+	// 第二个返回值为假表示这个标识在登记册里已经没有了。
+	WorkspaceDisplay(ctx context.Context, id sessionlog.WorkspaceID) (string, bool, error)
+}
+
 // Config 是这座桥的装配面。
 //
 // 源: packages/acp/acp/src/index.ts:74-84（AcpConfig / Config）
@@ -164,6 +188,9 @@ type Config struct {
 
 	// Persistence 是那一小块持久化服务，可以为 nil，见 [SessionCatalog]。
 	Persistence SessionCatalog
+
+	// Workspaces 是那一小块工作区登记册，可以为 nil，见 [WorkspaceResolver]。
+	Workspaces WorkspaceResolver
 
 	// Meter 是那一小块 token 计量，可以为 nil，见 [TokenMeasurer]。
 	//

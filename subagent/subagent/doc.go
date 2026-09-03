@@ -94,8 +94,7 @@
 //     （[github.com/snight1983/ds-harness-go/core/agent.FoldConsumedWork] 先解过同一段），以及
 //     childagent.go 与 continuationactivation.go 里另外两句同样性质的。
 //
-//  5. **进程自己坏掉才走得到的两句**（2 句）。[ValidateConfiguredCwd] 里那次
-//     filepath.Abs 只在 os.Getwd 失败时失败；[NewRuntime] 那次 newLifecycleEmitter
+//  5. **进程自己坏掉才走得到的一句**（1 句）。[NewRuntime] 那次 newLifecycleEmitter
 //     失败，而后者自己那条路也走不到。
 //
 //  6. **一个 sync.Once 里再进不来的共享标记**（2 句）。

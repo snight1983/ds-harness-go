@@ -27,31 +27,47 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
-	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs/fstest"
 	"github.com/snight1983/ds-harness-go/preset/agentpresets"
-	"github.com/snight1983/ds-harness-go/preset/presetstore/localdir"
 	"github.com/snight1983/ds-harness-go/session"
 )
 
-// store 是这些用例走的那份预设存储：一棵真的本地目录树。
+// store 是这些用例走的那棵预设树。
 //
-// 不摆一份内存假货，是因为这些用例守的正好是「一份预设是它那个目录」这件事——
-// 子目录跟不跟过去、断链跳不跳、一次失败的复制留不留东西——而一份照着我对这道缝
-// 的理解写出来的假货，只会守住那份理解本身。
-var store = localdir.New()
+// 新增: 原先是 preset/presetstore/localdir 那棵真的本地目录树，理由写的是
+// 「这些用例守的正好是『一份预设是它那个目录』这件事，一份照着我对这道缝的理解
+// 写出来的假货只会守住那份理解本身」。那条理由随着第二道缝一起没了：本包现在
+// 消费的是 [fs.FileSystem]，而 [github.com/snight1983/ds-harness-go/fs/fstest] 是
+// **那条缝自己的**假件——fs 包的整套契约用例跑在它身上（见 fs/fs_test.go），
+// 所以它守的不是我对这道缝的理解，是接缝自己写下的那份契约。
+//
+// 换掉之后这些用例还额外正确了一点：服务端没有可用硬盘，一棵本地目录树是这套
+// 部署里根本不存在的介质，照着它写出来的期望本来就随时可能是本地特有的。
+var store = fstest.New()
+
+// rootSerial 给每一次 [presetRoot] 发一个互不相同的号。
+//
+// 每**一次调用**都得是一条新的根，而不是每个用例一条：好几条用例要立两个根，
+// 好看清靠前的那个赢下重名的 id。原先那份 [testing.T.TempDir] 也是这么答应的。
+var rootSerial atomic.Int64
 
 // presetRoot 造一个空的预设根，交出这道缝上那种**斜杠分隔**的路径。
 //
-// [testing.T.TempDir] 在 Windows 上给的是反斜杠，而 [agentpresets.Store] 那条约定
-// 是斜杠（见 store.go），所以进包之前先翻一次。
+// 名字里带上用例名只是为了失败信息读得懂；保证唯一的是那个流水号。
 func presetRoot(t *testing.T) string {
 	t.Helper()
-	return filepath.ToSlash(t.TempDir())
+	root := "/roots/" + strings.ReplaceAll(t.Name(), "/", "_") +
+		"-" + strconv.FormatInt(rootSerial.Add(1), 10)
+	store.SeedDir(fs.TargetKey(root))
+	return root
 }
 
 // writePreset 在 root 底下摆出一份预设目录，composition 是它那份组合文件的内容。
@@ -61,18 +77,14 @@ func writePreset(t *testing.T, root, id, composition, metadata string) string {
 	t.Helper()
 	ctx := context.Background()
 	dir := path.Join(root, id)
-	if err := store.MakeDir(ctx, dir); err != nil {
+	if _, err := store.MakeDir(ctx, dir, ""); err != nil {
 		t.Fatalf("建不出预设目录：%v", err)
 	}
 	if composition != "" {
-		if err := store.WriteFile(ctx, path.Join(dir, agentpresets.CompositionFile), []byte(composition), false); err != nil {
-			t.Fatalf("写不了组合文件：%v", err)
-		}
+		store.Seed(fs.TargetKey(path.Join(dir, agentpresets.CompositionFile)), composition)
 	}
 	if metadata != "" {
-		if err := store.WriteFile(ctx, path.Join(dir, agentpresets.MetadataFile), []byte(metadata), false); err != nil {
-			t.Fatalf("写不了元数据：%v", err)
-		}
+		store.Seed(fs.TargetKey(path.Join(dir, agentpresets.MetadataFile)), metadata)
 	}
 	return dir
 }
@@ -80,16 +92,23 @@ func writePreset(t *testing.T, root, id, composition, metadata string) string {
 // rewriteComposition 改掉一份已经摆好的预设那份组合文件的内容。
 func rewriteComposition(t *testing.T, dir, composition string) {
 	t.Helper()
-	file := path.Join(dir, agentpresets.CompositionFile)
-	if err := store.WriteFile(context.Background(), file, []byte(composition), false); err != nil {
-		t.Fatalf("改不了组合文件：%v", err)
+	store.Seed(fs.TargetKey(path.Join(dir, agentpresets.CompositionFile)), composition)
+}
+
+// resolve 是「把一条路径解析成目标」这个动作的简写。
+func resolve(t *testing.T, at string) fs.Target {
+	t.Helper()
+	target, err := store.Resolve(context.Background(), at, "")
+	if err != nil {
+		t.Fatalf("解析不了 %s：%v", at, err)
 	}
+	return target
 }
 
 // present 判存储上那条路径此刻有没有东西。
 func present(t *testing.T, at string) bool {
 	t.Helper()
-	_, found, err := store.Stat(context.Background(), at)
+	_, found, err := store.Stat(context.Background(), resolve(t, at))
 	if err != nil {
 		t.Fatalf("看不了 %s：%v", at, err)
 	}
@@ -260,10 +279,10 @@ func TestRenderMetadataWritesNothingWhenThereIsNothingToStore(t *testing.T) {
 func newRoster(t *testing.T, root string, composers agentpresets.ComposerSet, defaultID string) *agentpresets.Roster {
 	t.Helper()
 	roster, err := agentpresets.New(agentpresets.Config{
-		Default:   defaultID,
-		Roots:     []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
-		Composers: composers,
-		Store:     store,
+		Default:    defaultID,
+		Roots:      []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
+		Composers:  composers,
+		FileSystem: store,
 	}, nil)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
@@ -642,10 +661,10 @@ func TestTheUserDefaultLayersOverTheDeploymentDefault(t *testing.T) {
 	writePreset(t, root, "chosen", "- name: alpha\n", "")
 	layer := &fixedDefault{value: "chosen"}
 	roster, err := agentpresets.New(agentpresets.Config{
-		Default:   "shipped",
-		Roots:     []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
-		Composers: agentpresets.ComposerSet{},
-		Store:     store,
+		Default:    "shipped",
+		Roots:      []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
+		Composers:  agentpresets.ComposerSet{},
+		FileSystem: store,
 	}, layer)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
@@ -666,10 +685,10 @@ func TestCopyingCarriesTheWholeDirectoryAndRewritesTheDisplayText(t *testing.T) 
 	dir := writePreset(t, shipped, "source", "- name: alpha\n", "name: Source\ndescription: why\norder: 2\n")
 	// 一份预设是它那个目录，不是那一个文件：子目录和素材也要跟过去。
 	ctx := context.Background()
-	if err := store.MakeDir(ctx, path.Join(dir, "skills", "nested")); err != nil {
+	if _, err := store.MakeDir(ctx, path.Join(dir, "skills", "nested"), ""); err != nil {
 		t.Fatalf("建不出子目录：%v", err)
 	}
-	if err := store.WriteFile(ctx, path.Join(dir, "skills", "nested", "asset.txt"), []byte("payload"), false); err != nil {
+	if _, err := store.WriteText(ctx, resolve(t, path.Join(dir, "skills", "nested", "asset.txt")), "payload", nil); err != nil {
 		t.Fatalf("写不了素材：%v", err)
 	}
 
@@ -679,8 +698,8 @@ func TestCopyingCarriesTheWholeDirectoryAndRewritesTheDisplayText(t *testing.T) 
 			{Path: shipped, Trust: agentpresets.TrustSystem},
 			{Path: authored, Trust: agentpresets.TrustUser},
 		},
-		Composers: agentpresets.ComposerSet{},
-		Store:     store,
+		Composers:  agentpresets.ComposerSet{},
+		FileSystem: store,
 	}, nil)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
@@ -691,8 +710,8 @@ func TestCopyingCarriesTheWholeDirectoryAndRewritesTheDisplayText(t *testing.T) 
 		t.Fatalf("复制失败：%v", err)
 	}
 	copied := path.Join(authored, "mine")
-	asset, err := store.ReadFile(ctx, path.Join(copied, "skills", "nested", "asset.txt"))
-	if err != nil || string(asset) != "payload" {
+	asset, err := store.ReadText(ctx, resolve(t, path.Join(copied, "skills", "nested", "asset.txt")))
+	if err != nil || asset != "payload" {
 		t.Fatalf("素材该跟过去：%v / %q", err, asset)
 	}
 	metadata := agentpresets.ReadMetadata(ctx, store, copied)
@@ -713,8 +732,8 @@ func TestACopyWithNothingToPublishWritesNoMetadataFileAtAll(t *testing.T) {
 			{Path: shipped, Trust: agentpresets.TrustSystem},
 			{Path: authored, Trust: agentpresets.TrustUser},
 		},
-		Composers: agentpresets.ComposerSet{},
-		Store:     store,
+		Composers:  agentpresets.ComposerSet{},
+		FileSystem: store,
 	}, nil)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
@@ -739,8 +758,8 @@ func TestACopyNeverOverwritesAndTheIdIsAFence(t *testing.T) {
 			{Path: shipped, Trust: agentpresets.TrustSystem},
 			{Path: authored, Trust: agentpresets.TrustUser},
 		},
-		Composers: agentpresets.ComposerSet{},
-		Store:     store,
+		Composers:  agentpresets.ComposerSet{},
+		FileSystem: store,
 	}, nil)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)
@@ -791,8 +810,8 @@ func TestRemovingTheUserDefaultClearsItSoTheDeploymentDefaultShowsThrough(t *tes
 			{Path: shipped, Trust: agentpresets.TrustSystem},
 			{Path: authored, Trust: agentpresets.TrustUser},
 		},
-		Composers: agentpresets.ComposerSet{},
-		Store:     store,
+		Composers:  agentpresets.ComposerSet{},
+		FileSystem: store,
 	}, layer)
 	if err != nil {
 		t.Fatalf("立不起名册：%v", err)

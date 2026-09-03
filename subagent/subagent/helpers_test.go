@@ -6,8 +6,6 @@ package subagent
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,11 +17,11 @@ import (
 	"github.com/snight1983/ds-harness-go/session"
 )
 
-// testAbsolutePath 是一条在本机上确实绝对的路径。
+// testWorkspaceID 是这些用例里会话头上那个归属工作区。
 //
-// 理由和 core/agent 那一处逐字相同：写死哪一边的字面量都会让另一个平台上的
-// 测试变成假通过。
-var testAbsolutePath = filepath.Join(os.TempDir(), "ds-harness-go-subagent-test")
+// 新增: 它是一个不透明标识，不是路径，也和文件系统里有什么东西没有关系，
+// 见 [session.SessionHeader.WorkspaceID]。
+var testWorkspaceID = session.WorkspaceID("ws-subagent")
 
 // fixedClock 是一个走得可预测的时钟：每读一次加一毫秒。
 func fixedClock() func() int64 {
@@ -126,7 +124,7 @@ func newFreeSession(t *testing.T, id session.SessionID, parent session.SessionID
 	}
 	header := session.SessionHeader{
 		ID:            id,
-		Cwd:           testAbsolutePath,
+		WorkspaceID:   testWorkspaceID,
 		ParentSession: parent,
 		SeedLength:    len(seed),
 	}

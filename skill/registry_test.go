@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // quietLogger 是一个不往测试输出里灌警告的日志器；本包的警告是**行为**，
@@ -551,7 +552,7 @@ func TestCatalogIsCachedUntilARegistrationChanges(t *testing.T) {
 	}
 
 	// 换一个 cwd 就是另一个键。
-	if _, err := h.registry.List(ctx, ViewOptions{LookupOptions: LookupOptions{Cwd: "/other"}}); err != nil {
+	if _, err := h.registry.List(ctx, ViewOptions{LookupOptions: LookupOptions{WorkspaceID: "ws-other"}}); err != nil {
 		t.Fatal(err)
 	}
 	if provider.calls.Load() != 2 {
@@ -577,12 +578,12 @@ func TestCacheEvictsTheOldestEntry(t *testing.T) {
 	provider := staticProvider("files", candidateOf("files", "alpha", 100))
 	mustRegisterProvider(t, h.registry, owner, provider)
 
-	for _, cwd := range []string{"/a", "/b", "/a"} {
-		if _, err := h.registry.List(ctx, ViewOptions{LookupOptions: LookupOptions{Cwd: cwd}}); err != nil {
+	for _, workspace := range []session.WorkspaceID{"ws-a", "ws-b", "ws-a"} {
+		if _, err := h.registry.List(ctx, ViewOptions{LookupOptions: LookupOptions{WorkspaceID: workspace}}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// 上限是 1，所以 /b 把 /a 挤掉了，第三次读 /a 又得重新发现一遍。
+	// 上限是 1，所以 ws-b 把 ws-a 挤掉了，第三次读 ws-a 又得重新发现一遍。
 	if provider.calls.Load() != 3 {
 		t.Fatalf("提供方被问了 %d 次", provider.calls.Load())
 	}

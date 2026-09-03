@@ -88,7 +88,7 @@ func (w *wiredRuntime) parent(t *testing.T, id session.SessionID) *childAgent {
 	t.Helper()
 	agentScope := keyedScope(t, string(id), w.owner.Key())
 	live, err := w.sessions.Create(t.Context(), agentScope, id, coresession.CreateOptions{
-		Cwd: testAbsolutePath,
+		WorkspaceID: testWorkspaceID,
 	})
 	if err != nil {
 		t.Fatalf("建父会话失败：%v", err)

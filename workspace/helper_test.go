@@ -216,6 +216,22 @@ func (f *fakeFS) EditText(context.Context, fs.Target, fs.EditRequest, *fs.EditIn
 	panic("workspace 的用例不该用到 EditText")
 }
 
+func (f *fakeFS) WriteBytes(context.Context, fs.Target, []byte, fs.WriteIntent) (fs.Version, error) {
+	panic("workspace 的用例不该用到 WriteBytes")
+}
+
+func (f *fakeFS) MakeDir(context.Context, string, string) (fs.Target, error) {
+	panic("workspace 的用例不该用到 MakeDir")
+}
+
+func (f *fakeFS) Remove(context.Context, fs.Target) error {
+	panic("workspace 的用例不该用到 Remove")
+}
+
+func (f *fakeFS) RemoveTree(context.Context, fs.Target) error {
+	panic("workspace 的用例不该用到 RemoveTree")
+}
+
 // fakePersistence 是一份可注入失败的已落地会话列举面。
 type fakePersistence struct {
 	mutex   sync.Mutex
@@ -350,37 +366,67 @@ func (u *flakyUnit) LoadAll(ctx context.Context) (storage.Snapshot, error) {
 	return u.inner.LoadAll(ctx)
 }
 
-func (u *flakyUnit) PutRecord(ctx context.Context, table, key string, value json.RawMessage) error {
+func (u *flakyUnit) LoadTable(ctx context.Context, table string) (map[string]json.RawMessage, error) {
+	return u.inner.LoadTable(ctx, table)
+}
+
+// 读这一侧不注入失败：本包的用例要压的是**写**失败之后登记册怎么办，
+// 而读穿到介质之后每一次读都可能失败这件事，是 storage/domain 那边压的。
+func (u *flakyUnit) ReadRecord(
+	ctx context.Context,
+	table, key string,
+) (json.RawMessage, storage.Revision, bool, error) {
+	return u.inner.ReadRecord(ctx, table, key)
+}
+
+func (u *flakyUnit) ReadGlobal(ctx context.Context) (json.RawMessage, storage.Revision, error) {
+	return u.inner.ReadGlobal(ctx)
+}
+
+func (u *flakyUnit) PutRecord(
+	ctx context.Context,
+	table, key string,
+	value json.RawMessage,
+	expected storage.WriteIntent,
+) (storage.Revision, error) {
 	u.backend.mutex.Lock()
 	err := u.backend.putErr
 	u.backend.putErr = nil
 	u.backend.mutex.Unlock()
 	if err != nil {
-		return err
+		return "", err
 	}
-	return u.inner.PutRecord(ctx, table, key, value)
+	return u.inner.PutRecord(ctx, table, key, value, expected)
 }
 
-func (u *flakyUnit) DeleteRecord(ctx context.Context, table, key string) error {
+func (u *flakyUnit) DeleteRecord(
+	ctx context.Context,
+	table, key string,
+	expected *storage.ReplaceIfRevision,
+) (bool, error) {
 	u.backend.mutex.Lock()
 	err := u.backend.deleteErr
 	u.backend.deleteErr = nil
 	u.backend.mutex.Unlock()
 	if err != nil {
-		return err
+		return false, err
 	}
-	return u.inner.DeleteRecord(ctx, table, key)
+	return u.inner.DeleteRecord(ctx, table, key, expected)
 }
 
-func (u *flakyUnit) SetGlobal(ctx context.Context, value json.RawMessage) error {
+func (u *flakyUnit) SetGlobal(
+	ctx context.Context,
+	value json.RawMessage,
+	expected storage.WriteIntent,
+) (storage.Revision, error) {
 	u.backend.mutex.Lock()
 	u.backend.globalCalls++
 	err := u.backend.globalFailOn[u.backend.globalCalls]
 	u.backend.mutex.Unlock()
 	if err != nil {
-		return err
+		return "", err
 	}
-	return u.inner.SetGlobal(ctx, value)
+	return u.inner.SetGlobal(ctx, value, expected)
 }
 
 func (u *flakyUnit) Close(ctx context.Context) error {
@@ -515,9 +561,165 @@ func (h *harness) reopen(ctx context.Context) *Registry {
 	return h.open(ctx)
 }
 
-// header 造一条会话头。
-func header(id string, cwd string, createdAt int64) session.SessionHeader {
-	return session.SessionHeader{ID: session.SessionID(id), Cwd: cwd, CreatedAt: createdAt}
+// header 造一条会话头，workspace 为空串表示它不属于任何工作区。
+//
+// 新增: 这个参数原来是一条工作目录，和 [fakeFS] 里那些路径**共用同一批字面量**——
+// 于是整套用例只跑在一个宇宙里，而生产上会话头记的是宿主机路径、文件系统认的是
+// 对象键空间，归属判据永远不成立这件事一条用例都查不出来。现在它是一个工作区标识
+// （见 [session.SessionHeader.WorkspaceID]），和假文件系统里有什么东西不再有
+// 任何关系：本包的用例从此拿 [harness.seedWorkspaces] 交回来的 id 填这一格，
+// 那些 id 由发号器给，和路径字面量对不上，也不该对得上。
+func header(id string, workspace WorkspaceID, createdAt int64) session.SessionHeader {
+	return session.SessionHeader{ID: session.SessionID(id), WorkspaceID: workspace, CreatedAt: createdAt}
+}
+
+// mustGet 按 id 取一个工作区，不在即用例失败。
+//
+// 新增: 展示次序不再由会话头决定（工作区是先建出来的），所以拿「列表第一个」
+// 指代「那个装着会话的工作区」已经不成立，要按 id 取。
+func mustGet(t *testing.T, ctx context.Context, registry *Registry, id WorkspaceID) Workspace {
+	t.Helper()
+	found, ok, err := registry.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("取工作区 %q 不该失败：%v", id, err)
+	}
+	if !ok {
+		t.Fatalf("工作区 %q 该在登记册里", id)
+	}
+	return found
+}
+
+// mustState 读一份落盘的全局状态，失败即用例失败。
+func mustState(t *testing.T, ctx context.Context, registry *Registry) DomainState {
+	t.Helper()
+	state, err := registry.readState(ctx)
+	if err != nil {
+		t.Fatalf("读全局状态不该失败：%v", err)
+	}
+	return state
+}
+
+// present 说明这个 id 此刻在不在登记册里，读失败即用例失败。
+func present(t *testing.T, ctx context.Context, registry *Registry, id WorkspaceID) bool {
+	t.Helper()
+	_, ok, err := registry.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("取工作区 %q 不该失败：%v", id, err)
+	}
+	return ok
+}
+
+// mustArchived 读一份归档集合，失败即用例失败。
+func mustArchived(t *testing.T, ctx context.Context, registry *Registry) []session.SessionID {
+	t.Helper()
+	ids, err := registry.ArchivedSessionIDs(ctx)
+	if err != nil {
+		t.Fatalf("读归档集合不该失败：%v", err)
+	}
+	return ids
+}
+
+// 下面这一小组读取器把 [Workspace] 那些读方法的 (值, 错误) 收成一个值，
+// 读不出来就当场判用例失败。
+//
+// 新增: 这些方法原来都不收 ctx 也不会失败——它们读的是实体自己攥着的那份记录。
+// 权威搬回介质之后每一次读都是一趟往返（见 storage/domain 的 domain.go 开头），
+// 于是断言一个标题要写三行。这一组读取器把那三行收回一行，让用例继续只讲它要讲的事；
+// 「读会失败」这件事本身由 [TestSetTitle落盘失败时报存储失败且不改介质] 那一路专门压。
+func mustTitle(t *testing.T, ctx context.Context, workspace Workspace) string {
+	t.Helper()
+	title, err := workspace.Title(ctx)
+	if err != nil {
+		t.Fatalf("读标题不该失败：%v", err)
+	}
+	return title
+}
+
+func mustPath(t *testing.T, ctx context.Context, workspace Workspace) string {
+	t.Helper()
+	path, err := workspace.Path(ctx)
+	if err != nil {
+		t.Fatalf("读展示路径不该失败：%v", err)
+	}
+	return path
+}
+
+func mustUpdatedAt(t *testing.T, ctx context.Context, workspace Workspace) time.Time {
+	t.Helper()
+	at, err := workspace.UpdatedAt(ctx)
+	if err != nil {
+		t.Fatalf("读 UpdatedAt 不该失败：%v", err)
+	}
+	return at
+}
+
+func mustCreatedAt(t *testing.T, ctx context.Context, workspace Workspace) time.Time {
+	t.Helper()
+	at, err := workspace.CreatedAt(ctx)
+	if err != nil {
+		t.Fatalf("读 CreatedAt 不该失败：%v", err)
+	}
+	return at
+}
+
+func mustSessionIDs(t *testing.T, ctx context.Context, workspace Workspace) []session.SessionID {
+	t.Helper()
+	ids, err := workspace.SessionIDs(ctx)
+	if err != nil {
+		t.Fatalf("读账目不该失败：%v", err)
+	}
+	return ids
+}
+
+func mustStatus(t *testing.T, ctx context.Context, workspace Workspace) Status {
+	t.Helper()
+	status, err := workspace.Status(ctx)
+	if err != nil {
+		t.Fatalf("读状态不该失败：%v", err)
+	}
+	return status
+}
+
+func mustTargetKey(t *testing.T, ctx context.Context, workspace Workspace) fs.TargetKey {
+	t.Helper()
+	key, err := workspace.TargetKey(ctx)
+	if err != nil {
+		t.Fatalf("读目标身份不该失败：%v", err)
+	}
+	return key
+}
+
+// seedWorkspaces 摆出「工作区已经登记好、历史会话还没并回去」这个局面：
+// 先开一次登记册把这些目录的工作区建出来，再把 initialized 标记按回假，然后关掉。
+// 交回来的 id 按 paths 的先后排。
+//
+// 新增: DSH 的 bootstrap 拿会话头上那条工作目录**现造**工作区，所以那边的用例
+// 摆好会话头再打开就够了。本包的 bootstrap 只往已有的工作区里并（理由见
+// [Registry.bootstrap]），一个工作区只能由 [Registry.Create] 建，于是这个局面
+// 在用例里得分两步摆。
+//
+// 按回 initialized 用的是 [seedState] 那条绕过登记册的路，理由也一样：一次成功的
+// [Open] 总是以 initialized=true 收尾，「记录已经在、标记还没盖」在生产上只能由
+// 一次崩溃留下，公开面写不出来。
+func (h *harness) seedWorkspaces(ctx context.Context, paths ...string) []WorkspaceID {
+	h.t.Helper()
+	registry := h.open(ctx)
+	ids := make([]WorkspaceID, 0, len(paths))
+	for _, path := range paths {
+		created, err := registry.Create(ctx, path, "")
+		if err != nil {
+			h.t.Fatalf("建工作区 %q 不该失败：%v", path, err)
+		}
+		ids = append(ids, created.ID())
+	}
+	state, err := registry.readState(ctx)
+	if err != nil {
+		h.t.Fatalf("读全局状态不该失败：%v", err)
+	}
+	state.Initialized = false
+	seedState(h.t, ctx, registry, state)
+	h.close(ctx)
+	return ids
 }
 
 // itoa 是给 id 发号器用的十进制转换，不引 strconv 是为了让这个文件的依赖一目了然。

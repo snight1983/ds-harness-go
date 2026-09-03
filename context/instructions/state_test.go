@@ -305,8 +305,8 @@ func newReconcileFixture(t *testing.T) *reconcileFixture {
 // run 跑一次对账，基线作用域默认参加。
 func (f *reconcileFixture) run(request ReconcileRequest) (Reconciled, bool) {
 	f.t.Helper()
-	if request.Cwd == "" {
-		request.Cwd = "/repo"
+	if request.WorkspaceRoot == "" {
+		request.WorkspaceRoot = "/repo"
 	}
 	if request.ProjectRoot == "" {
 		request.ProjectRoot = "/repo"
@@ -739,7 +739,7 @@ func TestReconcile项目根留空时自己去找(t *testing.T) {
 
 	result, ok, err := Reconcile(t.Context(), fixture.fsys, fixture.config, ReconcileRequest{
 		Versions:              fixture.versions,
-		Cwd:                   "/repo/sub",
+		WorkspaceRoot:         "/repo/sub",
 		IncludeBaselineScopes: true,
 	})
 
@@ -765,7 +765,7 @@ func TestReconcile取消不降级(t *testing.T) {
 
 			_, _, err := Reconcile(ctx, fixture.fsys, fixture.config, ReconcileRequest{
 				Versions:              fixture.versions,
-				Cwd:                   "/repo",
+				WorkspaceRoot:         "/repo",
 				ProjectRoot:           projectRoot,
 				IncludeBaselineScopes: true,
 			})
@@ -787,7 +787,7 @@ func TestReconcile读的过程中被取消也报错(t *testing.T) {
 
 	_, _, err := Reconcile(ctx, fixture.fsys, fixture.config, ReconcileRequest{
 		Versions:              fixture.versions,
-		Cwd:                   "/repo",
+		WorkspaceRoot:         "/repo",
 		ProjectRoot:           "/repo",
 		IncludeBaselineScopes: true,
 	})
@@ -816,7 +816,7 @@ func TestReconcile接在基线后面只发差额(t *testing.T) {
 	result, ok, err := Reconcile(t.Context(), fsys, config, ReconcileRequest{
 		Effective:             effective,
 		Versions:              versions,
-		Cwd:                   "/repo/sub",
+		WorkspaceRoot:         "/repo/sub",
 		ProjectRoot:           "/repo",
 		IncludeBaselineScopes: true,
 	})

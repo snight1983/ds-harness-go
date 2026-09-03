@@ -42,8 +42,8 @@ type ReferencedSessionData struct {
 	SessionID string
 	// Label 是主机给的显示名。
 	Label string
-	// Cwd 是那个会话的工作目录；空串表示日志里没记，排出去是 null。
-	Cwd string
+	// WorkspaceID 是那个会话的归属工作区；空串表示不属于任何工作区，排出去是 null。
+	WorkspaceID session.WorkspaceID
 	// CapturedThroughSeq 是这次观察吃进的最大原始日志 seq。
 	CapturedThroughSeq int
 	// CapturedAny 为假表示观察到的是一份空日志，排出去是 null。
@@ -55,13 +55,19 @@ type ReferencedSessionData struct {
 }
 
 // referencedSessionDataJSON 是 [ReferencedSessionData] 落到线上的形状，
-// 字段名与顺序都和 DSH 逐字相同。
+// 顺序和 DSH 逐字相同。
 //
 // 顺序要紧：它决定排出来的字节，而本包的预算就是按那份字节数算的。
+//
+// 新增: 只有一个键名和 DSH 不一样——那边叫 `cwd`，值是宿主机工作目录。本仓库这里
+// 是一个不透明的归属标识（见
+// [github.com/snight1983/ds-harness-go/session.SessionHeader.WorkspaceID]），
+// 键名跟着改成 `workspaceId`。这段 JSON 是排给模型看的，留着 `cwd` 只会让它
+// 以为那是一条能在本机上打开的路径。
 type referencedSessionDataJSON struct {
 	SessionID          string             `json:"sessionId"`
 	Label              string             `json:"label"`
-	Cwd                *string            `json:"cwd"`
+	WorkspaceID        *string            `json:"workspaceId"`
 	CapturedThroughSeq *int               `json:"capturedThroughSeq"`
 	Conversation       []ConversationItem `json:"conversation"`
 }
@@ -75,9 +81,9 @@ func (d ReferencedSessionData) MarshalJSON() ([]byte, error) {
 		Label:        d.Label,
 		Conversation: d.Conversation,
 	}
-	if d.Cwd != "" {
-		cwd := d.Cwd
-		wire.Cwd = &cwd
+	if d.WorkspaceID != "" {
+		workspaceID := string(d.WorkspaceID)
+		wire.WorkspaceID = &workspaceID
 	}
 	if d.CapturedAny {
 		seq := d.CapturedThroughSeq
@@ -199,7 +205,7 @@ func RetainReferencedSession(snapshot sessionquery.SurfaceSnapshot, label string
 		return ReferencedSessionData{
 			SessionID:          string(snapshot.Session.ID),
 			Label:              label,
-			Cwd:                snapshot.Session.Cwd,
+			WorkspaceID:        snapshot.Session.WorkspaceID,
 			CapturedThroughSeq: snapshot.CapturedThroughSeq,
 			CapturedAny:        snapshot.CapturedAny,
 			Conversation:       conversation,

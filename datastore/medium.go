@@ -23,7 +23,7 @@ import (
 // 那一个由使用方定，本包只负责存下来、对不上就拒。
 //
 // 盖着别的号一律拒绝，没有迁移这一说：这套布局还没发布过。
-const LayoutVersion = 1
+const LayoutVersion = 2
 
 // 本包建的三张公共表。单元自己的表由 [Medium.OpenRecords] / [Medium.OpenLog] 按需建。
 const (
@@ -362,8 +362,9 @@ func (m *Medium) ensureLayout(ctx context.Context) (string, error) {
 		}
 		if _, err := m.exec(ctx, tx, `
 			CREATE TABLE IF NOT EXISTS `+m.qualify(singletonsTable)+` (
-				unit  TEXT PRIMARY KEY REFERENCES `+m.qualify(unitsTable)+`(name),
-				value TEXT NOT NULL
+				unit     TEXT   PRIMARY KEY REFERENCES `+m.qualify(unitsTable)+`(name),
+				value    TEXT   NOT NULL,
+				revision BIGINT NOT NULL
 			)`); err != nil {
 			return fmt.Errorf("datastore: 建 %s 失败：%w", singletonsTable, err)
 		}

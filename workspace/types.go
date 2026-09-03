@@ -22,7 +22,13 @@ import (
 //
 // DSH 那边是 `Branded<'WorkspaceId'>` 加一个恒等构造函数。Go 的具名 string 类型
 // 天生是标称类型，构造就是 workspace.WorkspaceID(s) 这个语言自带的转换。
-type WorkspaceID string
+//
+// 新增: 类型本体住在 session 包，这里是别名。会话头要带着它
+// （[session.SessionHeader.WorkspaceID] 就是归属判据的那一侧），而 workspace
+// 认识 session、session 不认识 workspace。别名而不是另开一个具名类型，
+// 是因为两处说的必须是同一个东西——两个类型之间来回转换的地方，
+// 迟早会有一处转反了而编译器不吭声。
+type WorkspaceID = session.WorkspaceID
 
 // Status 是一个工作区目录此刻可不可用。
 //
@@ -51,15 +57,28 @@ const (
 // 导出一个结构体，为的是同一件事：这条记录**只能**通过下面那几个写方法改，
 // 而那几个方法每一次都要落盘。一个导出的结构体挡不住调用方直接改字段——
 // 改完内存里变了、介质上没变，而且没有任何一步会报错。
+//
+// 新增: 除 [Workspace.ID] 外的每一个取值方法都收 ctx、也都会失败。域的权威
+// 搬回介质之后（见 storage/domain 的 domain.go 开头），一次取值就是一次真的
+// 往返：它会超时、会撞上后端故障、也会发现这条记录已经被别的副本删掉了
+// （[CodeWorkspaceGone]）。签名上不写出来，这三件事就只能被塞进零值里蒙混过去。
+//
+// 因此**这几个取值方法之间没有原子性**：连着读 [Workspace.Title] 和
+// [Workspace.SessionIDs]，中间可以夹着另一个副本的一次写，读到的是两个时刻的值。
+// 要一份自洽的多字段快照，眼下没有这条路——真需要的时候再加，而不是现在
+// 先摆一个没人调的方法在这儿。
 type Workspace interface {
 	// ID 是这条记录稳定的 id。
+	//
+	// 新增: 只有它不收 ctx。它交出来的是这个句柄自己那把表键——建句柄的那一刻
+	// 就定死了，不是记录上的字段，所以读它一个字节的介质都不碰。
 	ID() WorkspaceID
 
 	// TargetKey 是这个工作区目录的**身份**，也就是本包的唯一性范式。
 	//
 	// 新增: DSH 那边身份和展示是同一个字段（realpath 出来的那条路径）。
 	// 本包把两者分开了，理由见包文档。这个值是不透明的，**不许解析、不许拼接**。
-	TargetKey() fs.TargetKey
+	TargetKey(ctx context.Context) (fs.TargetKey, error)
 
 	// Path 是这个工作区目录给人看的那条路径。
 	//
@@ -67,32 +86,32 @@ type Workspace interface {
 	//
 	// 它是建工作区那一刻 [fs.Target.DisplayPath] 的原样，之后**再也不重写**，
 	// 哪怕目录已经不见了（见 [Workspace.Status]）。
-	Path() string
+	Path(ctx context.Context) (string, error)
 
 	// Title 是展示标题。建的时候默认取 [Workspace.Path] 的最后一段；允许重名。
 	//
 	// 源: packages/workspace/workspace/src/types.ts:35
-	Title() string
+	Title(ctx context.Context) (string, error)
 
 	// CreatedAt 是建这条记录的时刻，盖上之后永不重写。
 	//
 	// 源: packages/workspace/workspace/src/types.ts:38
-	CreatedAt() time.Time
+	CreatedAt(ctx context.Context) (time.Time, error)
 
 	// UpdatedAt 是最后一次落盘写入的时刻（建也算一次）。
 	//
 	// 源: packages/workspace/workspace/src/types.ts:41
-	UpdatedAt() time.Time
+	UpdatedAt(ctx context.Context) (time.Time, error)
 
 	// SessionIDs 是过了会话头验证的会话，按人手排定的次序。
 	//
 	// 源: packages/workspace/workspace/src/types.ts:51
 	//
 	// 新挂上的会话排在最前，显式挪位走 [Workspace.InsertSessionBefore]，
-	// **活动量永远不重排它**。落盘的候选账目在这里被同步地筛一遍：会话头找不到、
-	// 工作目录不合法、解析出来的目标和本工作区对不上的，一律不交出去。
+	// **活动量永远不重排它**。落盘的候选账目在这里被筛一遍：会话头找不到、
+	// 解析出来的目标和本工作区对不上的，一律不交出去。
 	// 被筛掉的那些会在这个工作区下一次真实写入时被顺手裁掉。
-	SessionIDs() []session.SessionID
+	SessionIDs(ctx context.Context) ([]session.SessionID, error)
 
 	// SetTitle 落盘地换一个展示标题。
 	//
@@ -132,11 +151,15 @@ type Workspace interface {
 	//
 	// 目录不见了**绝不改动这条记录**——它可能只是被临时移走了。
 	//
-	// 新增: 这个方法不返回 error，任何一种查不到（不存在、不是目录、后端自己出错）
-	// 都归到 [StatusMissingDir]。这条照抄 DSH（entity.ts:183-187 写明了理由）：
-	// 调用方问的是「此刻这个目录能不能用」，而上面三种情况的答案都是「不能」。
-	// 给它一个 error 分支，只会让每一个调用点都写一遍同样的 err != nil → missing-dir。
-	Status(ctx context.Context) Status
+	// 查目录的三种失败（不存在、不是目录、文件系统后端自己出错）仍旧一律归到
+	// [StatusMissingDir]，不走 error。这条照抄 DSH（entity.ts:183-187 写明了理由）：
+	// 调用方问的是「此刻这个目录能不能用」，而这三种情况的答案都是「不能」。
+	// 给它们一个 error 分支，只会让每一个调用点都写一遍同样的 err != nil → missing-dir。
+	//
+	// 新增: error 这一支是为**另一件事**留的——读不到这条工作区记录本身
+	// （记录被别的副本删了、域后端出故障）。那不是「目录不见了」，把它折进
+	// [StatusMissingDir] 会让一次数据库掉线在界面上显示成「你的目录没了」。
+	Status(ctx context.Context) (Status, error)
 }
 
 // LiveSessions 是此刻在内存里被推进的那些会话。

@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
@@ -55,9 +54,9 @@ type Server struct {
 	// initialized 挡不住它们——它要到最后才置起来，于是两边都会去挂一次兜底适配器，
 	// 后挂上的那个把前一个的撤销函数覆盖掉，从此拆不掉。
 	initializing bool
-	// cwd / provider / model / reasoningEffort / maxTokens 是握手记下来的那份路由，
-	// 这条线上每一个会话都照它建。
-	cwd             string
+	// workspaceID / provider / model / reasoningEffort / maxTokens 是握手记下来的
+	// 那份路由，这条线上每一个会话都照它建。
+	workspaceID     sessionlog.WorkspaceID
 	provider        string
 	model           string
 	reasoningEffort llm.ReasoningEffortID
@@ -159,9 +158,14 @@ func (s *Server) Initialize(ctx context.Context, params sdkprotocol.InitializePa
 	if params.MaxTokens != nil && *params.MaxTokens <= 0 {
 		return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: initialize 的 maxTokens 必须是正整数，给的是 %d", *params.MaxTokens)
 	}
-	cwd, err := filepath.Abs(params.Cwd)
+	// 握手那条 cwd 到这里就换成一个工作区标识，一个字都不往下传，见 [WorkspaceLookup]。
+	//
+	// 新增: 原来这里还先验一遍它绝不绝对（更早还是一次 [path/filepath.Abs]，那会把
+	// 相对路径锚到服务进程自己的启动目录上）。两道都没有了：cwd 长什么样是**客户端**
+	// 那台机器上的事，服务端连它指着什么都不知道，更没有立场规定它的形状。
+	workspaceID, err := s.workspaceOf(ctx, params.Cwd)
 	if err != nil {
-		return sdkprotocol.InitializeResult{}, fmt.Errorf("sdkserver: 解不出 cwd 的绝对路径：%w", err)
+		return sdkprotocol.InitializeResult{}, err
 	}
 	var effort llm.ReasoningEffortID
 	if params.ReasoningEffort != nil {
@@ -207,7 +211,7 @@ func (s *Server) Initialize(ctx context.Context, params sdkprotocol.InitializePa
 			"sdkserver: 解不开提供方 %q 模型 %q 的调用配置：%w", params.Provider, params.Model, err)
 	}
 
-	s.publishRoute(cwd, params.Provider, params.Model, effort, maxTokens)
+	s.publishRoute(workspaceID, params.Provider, params.Model, effort, maxTokens)
 	settled = true
 	return sdkprotocol.InitializeResult{
 		ServerInfo: sdkprotocol.ServerInfo{Name: sdkprotocol.ServerName, Version: ServerVersion},
@@ -235,11 +239,34 @@ func (s *Server) beginInitialize() error {
 	return nil
 }
 
+// workspaceOf 把握手报上来的那条 cwd 换成一个工作区标识。
+//
+// 新增: 见 [WorkspaceLookup]。没挂登记册、或者这条 cwd 没人认领，都给空工作区——
+// 两者对这条线是同一件事：它建出来的会话不属于任何工作区。
+func (s *Server) workspaceOf(ctx context.Context, cwd string) (sessionlog.WorkspaceID, error) {
+	if s.config.Workspaces == nil {
+		return "", nil
+	}
+	id, found, err := s.config.Workspaces.WorkspaceOf(ctx, cwd)
+	if err != nil {
+		return "", fmt.Errorf("sdkserver: 这条 cwd 换不出工作区：%w", err)
+	}
+	if !found {
+		return "", nil
+	}
+	return id, nil
+}
+
 // publishRoute 把那份路由公布出去，这台服务器从这一刻起才算办好了。
-func (s *Server) publishRoute(cwd, provider, model string, effort llm.ReasoningEffortID, maxTokens int) {
+func (s *Server) publishRoute(
+	workspaceID sessionlog.WorkspaceID,
+	provider, model string,
+	effort llm.ReasoningEffortID,
+	maxTokens int,
+) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	s.cwd = cwd
+	s.workspaceID = workspaceID
 	s.provider = provider
 	s.model = model
 	s.reasoningEffort = effort
@@ -447,12 +474,12 @@ func (s *Server) createSession(ctx context.Context, sessionID string) (agent.Han
 		ReasoningEffort: s.reasoningEffort,
 		MaxTokens:       s.maxTokens,
 	}
-	cwd := s.cwd
+	workspaceID := s.workspaceID
 	s.mutex.Unlock()
 
 	handle, err := s.config.Agents.Create(ctx, owner, agent.CreateOptions{
 		SessionID:    sessionlog.SessionID(sessionID),
-		Cwd:          cwd,
+		WorkspaceID:  workspaceID,
 		AgentOptions: options,
 	})
 	if err != nil {

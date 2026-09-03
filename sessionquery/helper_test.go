@@ -132,7 +132,7 @@ func (f *fakeStore) Inspect(ctx context.Context, id session.SessionID) (persiste
 
 // testHeader 排一个会话头出来。
 func testHeader(id session.SessionID, createdAt int64) session.SessionHeader {
-	return session.SessionHeader{Version: 1, ID: id, CreatedAt: createdAt, Cwd: "/work"}
+	return session.SessionHeader{Version: 1, ID: id, CreatedAt: createdAt, WorkspaceID: "ws-1"}
 }
 
 // marshalPayload 把一个负载排成事件字节。

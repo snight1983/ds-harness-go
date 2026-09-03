@@ -18,7 +18,6 @@ package skilltool_test
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,25 +31,21 @@ import (
 	"github.com/snight1983/ds-harness-go/skill/skilltool"
 )
 
-// callerCwd 是这些用例里调用方那个工作目录。
+// callerWorkspaceID 是这些用例里调用方那个会话归属的工作区登记。
 //
-// 会话头要求工作目录是绝对路径，而「绝对」在 Windows 上要带盘符，所以这个值
-// 现算，不写字面量。它不需要真的存在：本包只把它原样递给注册表。
-var callerCwd = absDir("skilltool-workspace")
+// 新增: 它是一个不透明标识，不是路径，也和文件系统里有什么东西没有关系，
+// 见 [session.SessionHeader.WorkspaceID]。本包只把它原样递给注册表。
+var callerWorkspaceID = session.WorkspaceID("ws-skilltool")
 
-// absDir 把一个名字变成当前平台上的绝对路径。
-func absDir(name string) string {
-	path, err := filepath.Abs(name)
-	if err != nil {
-		panic(err)
-	}
-	return path
-}
+// skillResourceBase 是这些用例里一份技能自带资源的那个基准目录，一条
+// [github.com/snight1983/ds-harness-go/fs] 命名空间里的路径。它和上面那个
+// 工作区标识是**两件不相干的东西**，所以不共用一个字面量。
+var skillResourceBase = "/skilltool-resources"
 
 // stubAgent 是一个只把会话和作用域摆在那儿的假 agent。
 //
-// 本包除了「这个 agent 的作用域是哪个、它的会话日志和表面长什么样、工作目录
-// 在哪」之外不碰 agent 的任何东西，别的方法在这里全是哑的。
+// 本包除了「这个 agent 的作用域是哪个、它的会话日志和表面长什么样、归属哪个
+// 工作区」之外不碰 agent 的任何东西，别的方法在这里全是哑的。
 type stubAgent struct {
 	id   session.SessionID
 	own  *scope.Scope
@@ -93,13 +88,13 @@ type stubCatalog struct {
 	downgraded map[string]bool
 	// gets 按调用顺序记下 Get 被问过哪些名字。
 	gets []string
-	// seenCwd 记下最后一次读注册表时那个工作目录。
-	seenCwd string
+	// seenWorkspace 记下最后一次读注册表时那个工作区标识。
+	seenWorkspace session.WorkspaceID
 }
 
 // List 交出当前这份清单。
 func (c *stubCatalog) List(_ context.Context, options skill.ViewOptions) ([]skill.Summary, error) {
-	c.seenCwd = options.Cwd
+	c.seenWorkspace = options.WorkspaceID
 	summaries := make([]skill.Summary, 0, len(c.skills))
 	for _, definition := range c.skills {
 		summaries = append(summaries, definition.Summary)
@@ -118,7 +113,7 @@ func (c *stubCatalog) Snapshot(ctx context.Context, options skill.ViewOptions) (
 
 // Get 把一份技能读成完整正文。
 func (c *stubCatalog) Get(_ context.Context, name string, options skill.ViewOptions) (*skill.Definition, error) {
-	c.seenCwd = options.Cwd
+	c.seenWorkspace = options.WorkspaceID
 	c.gets = append(c.gets, name)
 	if c.missing[name] {
 		return nil, nil
@@ -167,7 +162,7 @@ type world struct {
 	agents     *agent.Registry
 }
 
-// newWorld 造一个调用方在 [callerCwd] 里的世界。
+// newWorld 造一个调用方归在 [callerWorkspaceID] 名下的世界。
 func newWorld(t *testing.T, catalog *stubCatalog, config skilltool.Config) *world {
 	t.Helper()
 	catalog.t = t
@@ -187,7 +182,7 @@ func newWorld(t *testing.T, catalog *stubCatalog, config skilltool.Config) *worl
 
 	const id session.SessionID = "caller"
 	sess, err := coresession.NewSession(id, coresession.Options{
-		Header: &session.SessionHeader{ID: id, Cwd: callerCwd},
+		Header: &session.SessionHeader{ID: id, WorkspaceID: callerWorkspaceID},
 	})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)
@@ -513,8 +508,8 @@ func TestTheFirstCatalogCarriesOnlyNamesAndDescriptions(t *testing.T) {
 			t.Fatalf("目录里漏了 %q：\n%s", leaked, text)
 		}
 	}
-	if w.catalog.seenCwd != callerCwd {
-		t.Fatalf("读注册表用的工作目录不对：%q", w.catalog.seenCwd)
+	if w.catalog.seenWorkspace != callerWorkspaceID {
+		t.Fatalf("读注册表用的工作区不对：%q", w.catalog.seenWorkspace)
 	}
 }
 
@@ -995,7 +990,7 @@ func TestTheToolLoadsTheLatestBody(t *testing.T) {
 			Invocation:   bothWays(),
 			Source:       "filesystem",
 			Provider:     "filesystem",
-			ResourceBase: skill.DirectoryBase{Path: callerCwd},
+			ResourceBase: skill.DirectoryBase{Path: skillResourceBase},
 		},
 		Content: "Project instructions.",
 	}}}
@@ -1016,14 +1011,14 @@ func TestTheToolLoadsTheLatestBody(t *testing.T) {
 		t.Fatalf("结果值不对：%v", value)
 	}
 	base, ok := value["resourceBase"].(map[string]any)
-	if !ok || base["kind"] != "directory" || base["path"] != callerCwd {
+	if !ok || base["kind"] != "directory" || base["path"] != skillResourceBase {
 		t.Fatalf("资源基址不对：%v", value["resourceBase"])
 	}
 	text := textOf(llm.Message{Content: result.Content})
 	want := strings.Join([]string{
 		`<skill_content name="project-skill">`,
 		"<skill_resources>",
-		"Base directory for this skill: " + callerCwd,
+		"Base directory for this skill: " + skillResourceBase,
 		"Resolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.",
 		"</skill_resources>",
 		"",

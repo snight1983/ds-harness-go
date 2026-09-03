@@ -240,15 +240,17 @@ type IDFilter struct {
 
 func (IDFilter) sealedSessionFilter() {}
 
-// CwdFilter 只留工作目录在 Values 里的那些会话。
+// WorkspaceFilter 只留归属工作区在 Values 里的那些会话。
 //
 // 新增: DSH 那一列是 `(string | null)[]`，null 配的是 `header.cwd ?? null`。
-// Go 的 [session.SessionHeader.Cwd] 用空串表示没有，所以这里空串就是那个 null。
-type CwdFilter struct {
-	Values []string
+// Go 的 [session.SessionHeader.WorkspaceID] 用空串表示没有，所以这里空串就是
+// 那个 null。名字跟着字段从 `cwd` 改过来：这一列装的是工作区标识，不是路径，
+// 理由见 [session.SessionHeader.WorkspaceID]。
+type WorkspaceFilter struct {
+	Values []session.WorkspaceID
 }
 
-func (CwdFilter) sealedSessionFilter() {}
+func (WorkspaceFilter) sealedSessionFilter() {}
 
 // CreatedAtFilter 只留建会话时间落在区间里的那些会话。
 type CreatedAtFilter struct {

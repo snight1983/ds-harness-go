@@ -80,6 +80,9 @@ jobs:
       - name: dbcheck
         run: go run ./tools/dbcheck
 
+      - name: oscheck
+        run: go run ./tools/oscheck
+
       # CI 上没有 DSH 上游快照，溯源注释的出处校验做不了，所以显式传
       # -no-provenance。这不是静默降级：工具自己会打一行横幅说这轮没对过源码。
       # 裁决表本身（七千多行的 PENDING/PORTED/SKIP 账本）照常全量校验。

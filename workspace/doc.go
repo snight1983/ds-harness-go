@@ -12,12 +12,27 @@
 // 一个会话算不算这个工作区的，要**同时**满足：
 //
 //   - 它的 id 在这条记录的候选账目 [Record.SessionIDs] 里；
-//   - 它的会话头 [session.SessionHeader.Cwd] 解析出来的目标标识，等于这条记录的
-//     [Record.TargetKey]。
+//   - 它的会话头 [session.SessionHeader.WorkspaceID] 就是这条记录的 id。
 //
-// 第二条每次读 [Workspace.SessionIDs] 时同步地过一遍，不重新读盘（索引在打开时和
-// 挂载活会话时建好）。过不了的候选**不会**被立刻抹掉：目录可能只是临时被移走了。
+// 第二条是一次标识相等，**一次文件系统调用都不发**。它每次读
+// [Workspace.SessionIDs] 时同步地过一遍（会话头索引在打开时和挂载活会话时建好）。
+// 过不了的候选**不会**被立刻抹掉：那条会话头可能只是这一刻还没被列举到。
 // 它们在下一次这个工作区发生真实写入时被顺手裁掉（见 [Workspace] 的写路径）。
+//
+// 新增: DSH 的第二条判据不是这样——它那边会话头上的字段叫 `cwd`，是一条**宿主机**
+// 绝对工作目录，判据要先把它 realpath 一次、stat 一次确认是个存在的目录、
+// 再拿解析出来的目标标识和 [Record.TargetKey] 比。本仓库的会话头记的不是位置而是
+// 归属（理由见 [session.SessionHeader.WorkspaceID]：服务端没有可用硬盘，
+// 存储全在数据库和对象存储里，一条宿主机路径把会话钉死在一台机器上），
+// 那三步于是塌成一次相等。
+//
+// 这不只是省了几次 I/O。照搬 DSH 的写法在本仓库里是**恒为假**的：工作区那条路径
+// 来自 [Registry.Create] 的入参，走 [fs.FileSystem]；会话那条来自宿主机。
+// 同一个 [fs.FileSystem.Resolve] 收下两个宇宙的路径，在唯一的生产后端
+// （[github.com/snight1983/ds-harness-go/fs/objectstore.Store]）上，宿主那一条
+// 换算出的键底下永远没有对象——不只是读时全被筛掉，[Workspace.AttachSession]
+// 那道守卫会让每一次挂载都报 [CodeAttachRejected]。换成标识相等之后，
+// 这条判据才第一次真正成立。
 //
 // # 路径的规范形由 fs 接缝拥有，不由本包拥有
 //

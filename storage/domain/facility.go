@@ -5,14 +5,16 @@
 // 源: packages/storage/storage-domain/src/index.ts:1-44
 //
 // 一个域是一份**有声明的**持久化状态：若干张表加一个可选的全局单例槽，
-// 打开时整份读进内存，之后读同步、写过一条链。下层的 storage 包只认
+// 每一次读都穿到介质上去，写按顺序过同一条链。下层的 storage 包只认
 // 「不透明 JSON」，语义全部落在这一层：类型、校验、变更事件、生命周期。
 //
 // # 三条不变量
 //
 // 见 domain.go 顶部那段。整个包建在它们上面，本文件负责的是**打开**那一头：
-// 从介质上读回来的每一条记录都要过一遍声明的校验，过不了就整个域打不开——
+// 打开时介质上已有的每一条记录都要过一遍声明的校验，过不了就整个域打不开——
 // 一个域要么完整可信，要么根本不给出来，不存在「大部分能用」的中间态。
+// 这一趟是**提前一步**，不是一条保证：打开之后别的副本仍然写得进一条坏记录，
+// 兜住它的是读路径上的解码，见 [Facility.load]。
 //
 // # 和 DSH 的主要差异：没有 cordis
 //
@@ -149,11 +151,11 @@ func New(config Config) (*Facility, error) {
 	}, nil
 }
 
-// Open 按一份声明打开一个域：解析后端 → 打开单元 → 整份读进内存 → 逐条校验。
+// Open 按一份声明打开一个域：解析后端 → 打开单元 → 把介质上已有的内容逐条校验。
 //
 // 源: packages/storage/storage-domain/src/index.ts:84-156
 //
-// 返回时这个域的内存态已经和介质一致，读可以立刻开始。
+// 返回时读写都可以立刻开始，两者都直接落到介质上。
 //
 // 失败的种类：声明本身不合法（见 [Spec.Validate]）；域名已经开着
 // （[CodeAlreadyOpen]）；路由到的后端不提供键值形态（[CodeFacetUnsupported]）；
@@ -239,9 +241,20 @@ func (f *Facility) reserve(name string) error {
 	return nil
 }
 
-// load 把单元的整份快照读进一个新建的 [Domain]，逐条过声明的校验。
+// load 建出 [Domain]，并在交出去之前把介质上现有的内容逐条过一遍声明的校验。
 //
 // 源: packages/storage/storage-domain/src/index.ts:107-140
+//
+// 新增: DSH 这一步既校验又**把整份快照读进内存当权威态**。内存态没了之后
+// （理由见 domain.go 开头第 1 条），这一趟只剩校验：读一次整份快照，逐条解码，
+// 有一条过不了就带着它的位置失败，介质上一个字都不改。
+//
+// 留着这一趟是因为它换来「坏介质在打开的那一刻就响」。不留的话，一条解不开的记录
+// 要等到某次 [Table.Get] 才现形，而那时候调用方在做的是别的事，报的位置也不是
+// 「这个域打不开」。
+//
+// 它**不再是一条保证**：这一趟走完之后，别的副本随时可以写进一条过不了校验的记录。
+// 真正兜住那种情况的是读路径上的解码（见 [Table.read]），这里只是提前一步。
 func (f *Facility) load(ctx context.Context, spec Spec, unit storage.KVUnit) (*Domain, error) {
 	snapshot, err := unit.LoadAll(ctx)
 	if err != nil {
@@ -252,34 +265,26 @@ func (f *Facility) load(ctx context.Context, spec Spec, unit storage.KVUnit) (*D
 		facility: f,
 		spec:     spec,
 		unit:     unit,
-		tables:   make(map[string]*tableState, len(spec.Tables)),
+		tables:   make(map[string]TableSpec, len(spec.Tables)),
 	}
 
 	for _, table := range spec.Tables {
-		state := &tableState{spec: table, records: map[string]record{}}
 		// 声明过但介质上一条都没有的表，快照里是一张空表而不是缺席
 		// （见 storage.Snapshot.Tables）；这里对两种情况都走同一条路。
 		for key, raw := range snapshot.Tables[table.name] {
-			typed, decodeErr := table.decode(raw)
-			if decodeErr != nil {
+			if _, decodeErr := table.decode(raw); decodeErr != nil {
 				return nil, invalidRecord(spec.Name, table.name, key, decodeErr)
 			}
-			state.records[key] = record{typed: typed, raw: raw}
 		}
-		domain.tables[table.name] = state
+		domain.tables[table.name] = table
 	}
 
-	if spec.Global != nil {
-		// 介质上的 null 就是「从来没写过」，此时供出声明里的初值。
-		// 这条哨兵约定正是 [DefineGlobal] 要挡住「能编码成 null 的全局值」的原因。
-		if isJSONNull(snapshot.Global) {
-			domain.global = record{typed: spec.Global.initial, raw: spec.Global.initialRaw}
-		} else {
-			typed, decodeErr := spec.Global.decode(snapshot.Global)
-			if decodeErr != nil {
-				return nil, invalidRecord(spec.Name, "", "", decodeErr)
-			}
-			domain.global = record{typed: typed, raw: snapshot.Global}
+	// 介质上的 null 就是「从来没写过」，此时读到的是声明里的初值（见 [Global.read]），
+	// 而初值在 [DefineGlobal] 里已经校验过了，这里没有第二次可校验的东西。
+	// 这条哨兵约定正是 [DefineGlobal] 要挡住「能编码成 null 的全局值」的原因。
+	if spec.Global != nil && !isJSONNull(snapshot.Global) {
+		if _, decodeErr := spec.Global.decode(snapshot.Global); decodeErr != nil {
+			return nil, invalidRecord(spec.Name, "", "", decodeErr)
 		}
 	}
 	return domain, nil
@@ -292,8 +297,8 @@ func (f *Facility) load(ctx context.Context, spec Spec, unit storage.KVUnit) (*D
 // 这是诊断面，配合 [Domain.RawRecord] / [Domain.RawGlobal] 使用；
 // 拿类型化句柄走 [TableOf] / [GlobalOf]。
 //
-// 正在被打开（还没读完）的域**当作不存在**：它的内存态还没建完，
-// 交出去等于让人读一个半截的域。
+// 正在被打开（还没校验完）的域**当作不存在**：它的单元句柄和表声明都还没装上，
+// 交出去等于让人拿一个半截的域。
 func (f *Facility) Get(name string) (*Domain, bool) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -404,7 +409,7 @@ func (f *Facility) Subscribe(listener ChangedListener) func() {
 //
 //  1. **每一个订阅者都跑到。** 一个订阅者炸掉不许掐断后面的——变更已经提交了，
 //     没跑到的那几个从此和介质不一致，而它们永远不会知道。
-//  2. **普通失败只记日志。** 提交点已经过了，介质和内存都拿着新值，
+//  2. **普通失败只记日志。** 提交点已经过了，介质上拿着的就是新值，
 //     一次已经成功的写不该因为旁边有人看崩了就变成失败。
 //  3. **不变量违例例外：等所有订阅者都跑完之后重新抛出**，且只抛第一条。
 //     不变量违例意味着程序写错了（见 invariants 包），它必须传到发起方手里。

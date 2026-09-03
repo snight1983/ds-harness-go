@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/fs"
 
 	yaml "go.yaml.in/yaml/v3"
 )
@@ -124,12 +125,12 @@ func rowConfig(node *yaml.Node) (json.RawMessage, error) {
 // 剩下的那一道：第二道在这个设计里违反不了，理由见包文档。
 func mountComposition(
 	ctx context.Context,
-	store Store,
+	fsys fs.FileSystem,
 	standing *scope.Scope,
 	preset Preset,
 	composers ComposerSet,
 ) (func(context.Context) error, error) {
-	content, err := store.ReadFile(ctx, preset.Path)
+	content, err := readFile(ctx, fsys, preset.Path)
 	if err != nil {
 		return nil, &PresetMountError{
 			PresetID: preset.ID,
@@ -219,16 +220,16 @@ type Mount struct {
 // 源: packages/preset/agent-presets/src/index.ts:546-555（readCompositionStamp）
 //
 // 新增: DSH 那边这个戳是 `statSync` 出来的「修改时间 + 大小」，一个只有本地文件系统
-// 答得出的二元组。这里换成 [Entry.Stamp] 那个不透明的串——本地适配层照旧拿那两个数
-// 拼，一个对象存储拿 ETag——因为这里唯一拿它做的事是「和上一次比一比」（见
+// 答得出的二元组。这里换成 [fs.Info.Version] 那个不透明的令牌——一个对象存储拿 ETag，
+// 一份本地介质拿 stat 身份——因为这里唯一拿它做的事是「和上一次比一比」（见
 // [Roster.ensureStanding]），压根不需要它可解释。
 //
 // 被删了、被换成了一个读不出内容的项、或者别的看不成的情形，对调用方是同一件事：
 // 这个文件给不出可以拿来比的身份。
-func readCompositionStamp(ctx context.Context, store Store, file string) (string, bool) {
-	entry, found, err := store.Stat(ctx, file)
+func readCompositionStamp(ctx context.Context, fsys fs.FileSystem, file string) (string, bool) {
+	info, found, err := statPath(ctx, fsys, file)
 	if err != nil || !found {
 		return "", false
 	}
-	return entry.Stamp, true
+	return string(info.Version), true
 }

@@ -69,8 +69,8 @@ type TitleReader interface {
 type Target struct {
 	// SessionID 是当前会话；引用它自己会被拒，列候选时它自己不出现。
 	SessionID session.SessionID
-	// Cwd 是当前会话的工作目录，候选排序按它算亲疏；空串表示没有。
-	Cwd string
+	// WorkspaceID 是当前会话的归属工作区，候选排序按它算亲疏；空串表示没有。
+	WorkspaceID session.WorkspaceID
 }
 
 // Resolver 是这一层的服务：读来源会话的精确表面，做成不可变的跨会话上下文。
@@ -139,10 +139,10 @@ func (r *Resolver) ListCandidates(ctx context.Context, target Target, query stri
 	candidates := make([]Candidate, 0, len(inspected))
 	for index, record := range inspected {
 		candidate := Candidate{
-			SessionID: record.Header.ID,
-			Label:     labels[index],
-			Cwd:       record.Header.Cwd,
-			CreatedAt: record.Header.CreatedAt,
+			SessionID:   record.Header.ID,
+			Label:       labels[index],
+			WorkspaceID: record.Header.WorkspaceID,
+			CreatedAt:   record.Header.CreatedAt,
 		}
 		if needle != "" && !candidate.matches(needle) {
 			continue
@@ -150,7 +150,7 @@ func (r *Resolver) ListCandidates(ctx context.Context, target Target, query stri
 		candidates = append(candidates, candidate)
 	}
 	slices.SortStableFunc(candidates, func(a, b Candidate) int {
-		return candidateRank(a.Cwd, target.Cwd) - candidateRank(b.Cwd, target.Cwd)
+		return candidateRank(a.WorkspaceID, target.WorkspaceID) - candidateRank(b.WorkspaceID, target.WorkspaceID)
 	})
 	return candidates[:min(limit, len(candidates))], nil
 }
@@ -259,7 +259,7 @@ func (r *Resolver) Prepare(
 	}, nil
 }
 
-// rankRecords 按工作目录的亲疏就地重排，同一档里保持列出来的先后。
+// rankRecords 按归属工作区的亲疏就地重排，同一档里保持列出来的先后。
 //
 // 源: packages/context/session-reference/src/index.ts:174-177
 //
@@ -268,7 +268,7 @@ func (r *Resolver) Prepare(
 // 候选列表，而主机的自动补全就长在这个列表上。
 func (r *Resolver) rankRecords(records []sessionquery.Record, target Target) {
 	slices.SortStableFunc(records, func(a, b sessionquery.Record) int {
-		return candidateRank(a.Header.Cwd, target.Cwd) - candidateRank(b.Header.Cwd, target.Cwd)
+		return candidateRank(a.Header.WorkspaceID, target.WorkspaceID) - candidateRank(b.Header.WorkspaceID, target.WorkspaceID)
 	})
 }
 
@@ -306,7 +306,7 @@ func (r *Resolver) readLabels(ctx context.Context, records []sessionquery.Record
 // 源: packages/context/session-reference/src/index.ts:192-196
 func (c Candidate) matches(needle string) bool {
 	return strings.Contains(strings.ToLower(string(c.SessionID)), needle) ||
-		(c.Cwd != "" && strings.Contains(strings.ToLower(c.Cwd), needle)) ||
+		(c.WorkspaceID != "" && strings.Contains(strings.ToLower(string(c.WorkspaceID)), needle)) ||
 		strings.Contains(strings.ToLower(c.Label), needle)
 }
 
@@ -355,17 +355,20 @@ func renderPrompt(data []ReferencedSessionData) (string, error) {
 	return promptPrefix + body + promptSuffix, nil
 }
 
-// candidateRank 给一条候选打亲疏档：同目录 0，没有目录 1，别的目录 2。
+// candidateRank 给一条候选打亲疏档：同一个工作区 0，不属于任何工作区 1，别的工作区 2。
 //
 // 源: packages/context/session-reference/src/index.ts:339-343
 //
-// 「没有目录」排在「别的目录」前面看着奇怪，但那是对的：一个没记工作目录的会话
-// 有可能就是这个目录里的，而一个明确记着别的目录的会话确定不是。
-func candidateRank(candidateCwd string, targetCwd string) int {
-	if candidateCwd != "" && targetCwd != "" && candidateCwd == targetCwd {
+// 「不属于任何工作区」排在「别的工作区」前面看着奇怪，但那是对的：一个没归属的会话
+// 有可能就是这个工作区里的，而一个明确归在别处的会话确定不是。
+//
+// 新增: DSH 比的是两条工作目录字符串。这里比的是不透明的工作区标识——三档判据
+// 一个字没变，因为它本来就只做相等，不做任何路径语义。
+func candidateRank(candidate session.WorkspaceID, target session.WorkspaceID) int {
+	if candidate != "" && target != "" && candidate == target {
 		return 0
 	}
-	if candidateCwd == "" {
+	if candidate == "" {
 		return 1
 	}
 	return 2

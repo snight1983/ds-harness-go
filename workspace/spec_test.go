@@ -202,7 +202,7 @@ func TestSpec装到域上之后校验函数确实在守着(t *testing.T) {
 	}
 
 	// 全局槽的初值就是 initialDomainState。
-	state, err := global.Get()
+	state, err := global.Get(ctx)
 	if err != nil {
 		t.Fatalf("读全局槽不该失败：%v", err)
 	}

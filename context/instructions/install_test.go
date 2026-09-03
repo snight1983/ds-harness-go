@@ -10,9 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -41,20 +39,32 @@ import (
 //   - 一个空的第一步被塞进上下文，于是一个本来不发请求的回合变成一次模型调用。
 //   - 摘下来之后还有在飞的投影往一个已经不归本包管的收件箱里写。
 
-// ---- 路径 ----
+// ---- 工作区 ----
 //
-// 会话头要求 cwd 在**本机**上绝对（见 core/session/validate.go 那条），
-// 而假文件系统按 POSIX 形状的键取。所以先取一条本机绝对路径，
-// 再用本包自己的 [absPath] 折成假件认得的那一条——写死哪一边的字面量
-// 都会让另一个平台上的用例变成假通过。
+// 新增: 这里原先只有一条路径：它既落进会话头，又当假文件系统里的键。会话头现在记的
+// 是一个不透明的工作区标识（见 [session.SessionHeader.WorkspaceID]），从标识换到根路径
+// 那一步归 [Deps.WorkspaceRoot] 做，本包只认它交回来的那条路径。于是这里是两样东西，
+// 而且刻意不共用任何字面量——共用的话，「换算这一步接错了」这类故障在夹具里永远
+// 现不出形，用例只会一路自证。
 var (
-	// workspaceCwd 是这个 agent 报出来的工作目录，本机绝对。
-	workspaceCwd = filepath.Join(os.TempDir(), "ds-harness-go-instructions", "repo", "app")
-	// fakeCwd 是同一条路径在假文件系统里的键。
-	fakeCwd = absPath(workspaceCwd)
+	// testWorkspaceID 是这些用例里会话头上那个归属工作区：一个标识，不是路径。
+	testWorkspaceID = session.WorkspaceID("ws-instructions")
+	// workspaceRoot 是那个工作区在假文件系统里的根，由 [Deps.WorkspaceRoot] 交出来。
+	workspaceRoot = "/ds-harness-go-instructions/repo/app"
 	// fakeRoot 是项目根，`.git` 就放在它下面。
-	fakeRoot = path.Dir(fakeCwd)
+	fakeRoot = path.Dir(workspaceRoot)
 )
+
+// rootedAt 造一条只认 [testWorkspaceID] 的「标识 → 根路径」换算，
+// 别的标识一律答「不属于任何工作区」。
+func rootedAt(root string) func(context.Context, session.WorkspaceID) (string, bool, error) {
+	return func(_ context.Context, id session.WorkspaceID) (string, bool, error) {
+		if id != testWorkspaceID {
+			return "", false, nil
+		}
+		return root, true, nil
+	}
+}
 
 // ---- 假注册表 ----
 
@@ -224,9 +234,20 @@ type world struct {
 // [Install] 自己那几行由 Test装配这一层能整个装上去 压着。
 func newWorld(t *testing.T, config Config) *world {
 	t.Helper()
+	return newWorldRooted(t, config, rootedAt(workspaceRoot))
+}
+
+// newWorldRooted 同 [newWorld]，但那条「标识 → 根路径」的换算由调用方给：
+// 「这段会话没有工作区」和「换算本身坏了」这两格只有换掉它才摆得出来。
+func newWorldRooted(
+	t *testing.T,
+	config Config,
+	rootOf func(context.Context, session.WorkspaceID) (string, bool, error),
+) *world {
+	t.Helper()
 
 	fsys := newFakeFS()
-	fsys.addDir(fakeRoot).addDir(fakeCwd).addFile(fakeRoot+"/.git", "gitdir")
+	fsys.addDir(fakeRoot).addDir(workspaceRoot).addFile(fakeRoot+"/.git", "gitdir")
 	fsys.addFile(fakeRoot+"/AGENTS.md", "根上的规矩")
 
 	agents := &captureAgents{}
@@ -248,11 +269,12 @@ func newWorld(t *testing.T, config Config) *world {
 	}
 
 	deps := Deps{
-		Agents:   agents,
-		Sessions: sessions,
-		Tools:    runtime,
-		FS:       fsys,
-		Logger:   slog.New(slog.NewTextHandler(logs, nil)),
+		Agents:        agents,
+		Sessions:      sessions,
+		Tools:         runtime,
+		FS:            fsys,
+		WorkspaceRoot: rootOf,
+		Logger:        slog.New(slog.NewTextHandler(logs, nil)),
 		AgentOf: func(key *scope.Key) (agent.Agent, error) {
 			if key == made.live.key {
 				return made.live, nil
@@ -302,7 +324,7 @@ func newStubAgent(t *testing.T, id session.SessionID) *stubAgent {
 	t.Helper()
 
 	live, err := coresession.NewSession(id, coresession.Options{
-		Header: &session.SessionHeader{ID: id, Cwd: workspaceCwd},
+		Header: &session.SessionHeader{ID: id, WorkspaceID: testWorkspaceID},
 	})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)
@@ -555,11 +577,12 @@ func Test装配缺了任何一个协作者都装不上(t *testing.T) {
 	t.Parallel()
 	full := func() Deps {
 		return Deps{
-			Agents:   &captureAgents{},
-			Sessions: &captureSessions{agents: &captureAgents{}},
-			Tools:    mustRuntime(t),
-			FS:       newFakeFS(),
-			AgentOf:  func(*scope.Key) (agent.Agent, error) { return nil, nil },
+			Agents:        &captureAgents{},
+			Sessions:      &captureSessions{agents: &captureAgents{}},
+			Tools:         mustRuntime(t),
+			FS:            newFakeFS(),
+			WorkspaceRoot: rootedAt(workspaceRoot),
+			AgentOf:       func(*scope.Key) (agent.Agent, error) { return nil, nil },
 		}
 	}
 	cases := map[string]func(*Deps){
@@ -567,6 +590,7 @@ func Test装配缺了任何一个协作者都装不上(t *testing.T) {
 		"没有会话广播":        func(d *Deps) { d.Sessions = nil },
 		"没有工具广播":        func(d *Deps) { d.Tools = nil },
 		"没有文件系统":        func(d *Deps) { d.FS = nil },
+		"没有找到工作区根的路":    func(d *Deps) { d.WorkspaceRoot = nil },
 		"没有查回 agent 的路": func(d *Deps) { d.AgentOf = nil },
 	}
 	for name, breakIt := range cases {
@@ -592,7 +616,8 @@ func Test装到一半失败要把已经挂上的撤干净(t *testing.T) {
 	sessions := &captureSessions{agents: agents}
 	_, err := Install(t.Context(), scope.NewRoot(), Config{}, Deps{
 		Agents: agents, Sessions: sessions, Tools: mustRuntime(t), FS: newFakeFS(),
-		AgentOf: func(*scope.Key) (agent.Agent, error) { return nil, nil },
+		WorkspaceRoot: rootedAt(workspaceRoot),
+		AgentOf:       func(*scope.Key) (agent.Agent, error) { return nil, nil },
 	})
 	if !errors.Is(err, planted) {
 		t.Fatalf("底层原因该留在链上：%v", err)
@@ -675,6 +700,41 @@ func Test预算关掉时一个字都不发(t *testing.T) {
 	}
 	if len(w.live.pending()) != 0 {
 		t.Fatal("关掉之后收件箱里也不该有东西")
+	}
+}
+
+func Test会话不属于任何工作区时一个字都不发(t *testing.T) {
+	t.Parallel()
+	// 新增: 会话头上那个标识换不出根路径，就是「这段会话没有工作区」。没有根可走时
+	// 这一层这一步什么都不说，而不是拿一条猜出来的路径去读文件——服务端没有工作目录
+	// 这个概念，一条猜出来的路径在这套部署里指不到任何东西。
+	w := newWorldRooted(t, Config{MaxBytes: 1 << 20},
+		func(context.Context, session.WorkspaceID) (string, bool, error) { return "", false, nil })
+	decision := w.run(2, userSaid("u", "喂"))
+	if len(decision.Messages) != 1 {
+		t.Fatalf("没有工作区不该补东西，实际 %d 条", len(decision.Messages))
+	}
+	if len(w.live.pending()) != 0 {
+		t.Fatal("没有工作区时收件箱里也不该有东西")
+	}
+}
+
+func Test换不出工作区根路径时把错交出去(t *testing.T) {
+	t.Parallel()
+	// 新增: 「查不到」和「查坏了」是两件事。后者压成前者的话，工作区登记册出故障
+	// 期间这一层会静默地不说话，而那正是最需要有人知道出事了的时候。
+	planted := errors.New("登记册出故障")
+	w := newWorldRooted(t, Config{MaxBytes: 1 << 20},
+		func(context.Context, session.WorkspaceID) (string, bool, error) { return "", false, planted })
+	given := []llm.Message{userSaid("u", "喂")}
+	decision, err := w.agents.preStep(t.Context(),
+		agent.PreStep{Agent: w.live, Messages: given, Turn: 1, Step: 2},
+		func(context.Context) (agent.PreStepDecision, error) { return agent.EnterStep(given), nil })
+	if !errors.Is(err, planted) {
+		t.Fatalf("底层原因该留在链上：%v", err)
+	}
+	if decision.Enter {
+		t.Fatal("算不出上下文的步骤不该放进去")
 	}
 }
 
@@ -897,12 +957,12 @@ func Test基线口径变了要明说旧的那些没了(t *testing.T) {
 	// 换掉一份口径不同的旧基线时，旧基线上那些新基线不再覆盖的作用域要明确告诉
 	// 模型「没了」——不说的话它会一直以为那些指令还算数。
 	w := newWorld(t, Config{MaxBytes: 1 << 20})
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
 	// 工作目录自己变成了项目根：祖先链缩到只剩它自己，上一份基线里那条根上的
 	// 规矩不再被覆盖，而作用域是相对根算的，所以它连名字都换了。
-	w.fsys.addFile(fakeCwd+"/.git", "gitdir")
+	w.fsys.addFile(workspaceRoot+"/.git", "gitdir")
 
 	decision := w.run(3, userSaid("u2", "再说一句"))
 	if len(decision.Messages) != 2 {
@@ -925,7 +985,7 @@ func Test基线口径变了要明说旧的那些没了(t *testing.T) {
 	// 再换回去一次。这一次被换掉的那份基线自己就带着上面那条 remove，而一条
 	// remove 说的是「这个作用域已经没了」——把它再翻译成一条 remove 是句废话。
 	w.commit(decision.Messages[1:])
-	w.fsys.remove(fakeCwd + "/.git")
+	w.fsys.remove(workspaceRoot + "/.git")
 
 	third := w.run(4, userSaid("u3", "第三句"))
 	if len(third.Messages) != 2 {
@@ -1057,7 +1117,7 @@ func Test一次读文件走完之后收件箱里就有指令变更(t *testing.T)
 	// 先把基线发出去并落进对话，这样这次触碰算出来的才是一条纯增量。
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.call("read", touchArgs())
 	pending := ours(w.waitForInbox(1))
 	requireContains(t, textOf(pending[0]), "这个目录自己的规矩")
@@ -1070,7 +1130,7 @@ func Test步骤开着的时候先攒着不投影(t *testing.T) {
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
 	w.openStep(1, 3)
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.call("read", touchArgs())
 
 	// 攒着的东西没有一个「什么时候一定不出现」的时刻，只能给它一段时间。
@@ -1090,7 +1150,7 @@ func Test一批触碰放出来时一个接一个投影(t *testing.T) {
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
 	w.openStep(1, 3)
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.call("read", touchArgs())
 	w.call("read", touchArgs())
 	w.endStep(1, 3)
@@ -1107,8 +1167,8 @@ func Test前置步骤等不到投影落地就把这一步否掉(t *testing.T) {
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
 	gate := make(chan struct{})
-	w.fsys.gateStream(fakeCwd+"/AGENTS.md", gate)
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.gateStream(workspaceRoot+"/AGENTS.md", gate)
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.call("read", touchArgs())
 	w.waitForTail()
 
@@ -1134,8 +1194,8 @@ func Test摘下来时还排在后面的投影当场散掉(t *testing.T) {
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
 	gate := make(chan struct{})
-	w.fsys.gateStream(fakeCwd+"/AGENTS.md", gate)
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.gateStream(workspaceRoot+"/AGENTS.md", gate)
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 
 	// 步骤开着的时候攒两次触碰，关掉时它们一起放出来，于是后一个排在前一个后面。
 	w.openStep(1, 3)
@@ -1164,8 +1224,8 @@ func Test整层摘下来时在飞的投影不当故障报(t *testing.T) {
 
 	// 让这次投影读到一半的时候整层被摘掉。
 	w.fsys.chunkSize = 4
-	w.fsys.cancelAfterFirstChunk(fakeCwd+"/AGENTS.md", w.install.stop)
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.cancelAfterFirstChunk(workspaceRoot+"/AGENTS.md", w.install.stop)
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.call("read", touchArgs())
 
 	time.Sleep(50 * time.Millisecond)
@@ -1187,7 +1247,7 @@ func Test头一次看见一段跑到一半的会话时靠重放算出步骤开�
 	w.appendQuiet(session.EventStepEnd, session.StepEndData{Turn: 1, Step: 3})
 	w.appendQuiet(session.EventStepStart, session.StepStartData{Turn: 1, Step: 4})
 
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.call("read", touchArgs())
 	time.Sleep(50 * time.Millisecond)
 	if len(ours(w.live.pending())) != 0 {
@@ -1203,7 +1263,7 @@ func Test嵌套调用的触碰要等根上那次收摊(t *testing.T) {
 	w := newWorld(t, Config{MaxBytes: 1 << 20})
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	if result := w.call("compound", touchArgs()); result.IsError {
 		t.Fatalf("这次复合调用不该失败：%+v", result.Error)
 	}
@@ -1219,7 +1279,7 @@ func Test失败的调用不算一次触碰(t *testing.T) {
 	w := newWorld(t, Config{MaxBytes: 1 << 20})
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	encoded, _ := json.Marshal(struct {
 		FilePath string `json:"file_path"`
 		Fail     bool   `json:"fail"`
@@ -1238,7 +1298,7 @@ func Test不碰文件的工具不算一次触碰(t *testing.T) {
 	w := newWorld(t, Config{MaxBytes: 1 << 20})
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.call("grep", touchArgs())
 	time.Sleep(50 * time.Millisecond)
 	if len(ours(w.live.pending())) != 0 {
@@ -1251,7 +1311,7 @@ func Test没有file_path的调用不算一次触碰(t *testing.T) {
 	w := newWorld(t, Config{MaxBytes: 1 << 20})
 	w.commit(w.run(2, userSaid("u", "喂")).Messages[1:])
 
-	w.fsys.addFile(fakeCwd+"/AGENTS.md", "这个目录自己的规矩")
+	w.fsys.addFile(workspaceRoot+"/AGENTS.md", "这个目录自己的规矩")
 	w.call("read", `{"file_path":"   "}`)
 	w.call("read", `{"file_path":42}`)
 	w.call("read", `{}`)
@@ -1330,12 +1390,13 @@ func Test装配这一层能整个装上去(t *testing.T) {
 	sessions := &captureSessions{agents: agents}
 	live := newStubAgent(t, "s")
 	fsys := newFakeFS()
-	fsys.addDir(fakeRoot).addDir(fakeCwd).addFile(fakeRoot+"/.git", "gitdir")
+	fsys.addDir(fakeRoot).addDir(workspaceRoot).addFile(fakeRoot+"/.git", "gitdir")
 	fsys.addFile(fakeRoot+"/AGENTS.md", "根上的规矩")
 
 	remove, err := Install(t.Context(), scope.NewRoot(), Config{MaxBytes: 1 << 20}, Deps{
 		Agents: agents, Sessions: sessions, Tools: mustRuntime(t), FS: fsys,
-		AgentOf: func(*scope.Key) (agent.Agent, error) { return live, nil },
+		WorkspaceRoot: rootedAt(workspaceRoot),
+		AgentOf:       func(*scope.Key) (agent.Agent, error) { return live, nil },
 	})
 	if err != nil {
 		t.Fatalf("装不上：%v", err)

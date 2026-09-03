@@ -97,8 +97,8 @@ func MaterializeSessionFilters(filters []SessionFilter) ([]SessionFilter, error)
 		switch typed := filter.(type) {
 		case IDFilter:
 			owned = append(owned, IDFilter{Values: slices.Clone(typed.Values)})
-		case CwdFilter:
-			owned = append(owned, CwdFilter{Values: slices.Clone(typed.Values)})
+		case WorkspaceFilter:
+			owned = append(owned, WorkspaceFilter{Values: slices.Clone(typed.Values)})
 		case CreatedAtFilter:
 			copied, err := copyRange("created-at", typed.Range)
 			if err != nil {
@@ -187,8 +187,10 @@ func sessionPredicate(filter SessionFilter) (func(Record) bool, error) {
 	switch typed := filter.(type) {
 	case IDFilter:
 		return func(record Record) bool { return slices.Contains(typed.Values, record.Header.ID) }, nil
-	case CwdFilter:
-		return func(record Record) bool { return slices.Contains(typed.Values, record.Header.Cwd) }, nil
+	case WorkspaceFilter:
+		return func(record Record) bool {
+			return slices.Contains(typed.Values, record.Header.WorkspaceID)
+		}, nil
 	case CreatedAtFilter:
 		if err := validateRange("created-at", typed.Range); err != nil {
 			return nil, err

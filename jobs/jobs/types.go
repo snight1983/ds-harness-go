@@ -22,6 +22,17 @@ import (
 // 那个打标函数因此就是一次显式转换 `JobID(raw)`，不必单独写一个。
 type JobID string
 
+// RunnerID 认一个**执行副本**：起了这件作业、并且握着它那份执行资源的那个进程。
+//
+// 新增: DSH 没有这个概念——它整台注册表就是一个进程里的一张 map，作业只可能跑在
+// 「这里」。本仓库要多副本部署，账本是共享的而执行资源不是：一件作业的记录每个
+// 副本都读得到，但 [Hooks.Cancel] 和 [Hooks.ReadOutput] 只在起它的那个副本手里。
+// 这个字段就是那句「它在谁那儿」，[Registry.Read] 和 [Registry.Kill] 靠它把
+// 「我这儿办不了」和「没有这件作业」分开说。
+//
+// 值由装配方给（部署里那个副本标识），本包不解释它，只要求非空。
+type RunnerID string
+
 // JobStatus 是一件作业的生命周期状态：running、可能经过 stopping，然后**恰好**
 // 落到一个终态。生产方自己那些事实归 [Snapshot.Detail]。
 //
@@ -142,6 +153,12 @@ type Snapshot struct {
 	ID JobID
 	// Kind 是登记时那个生产方种类。
 	Kind JobKind
+	// Runner 是起这件作业的那个执行副本，见 [RunnerID]。
+	//
+	// 新增: 单进程那台实现（github.com/snight1983/ds-harness-go/jobs/localjobs）
+	// 也要填一个非空值——它只有一个副本，但「这件作业在谁那儿」这个问题在那里
+	// 一样成立，留空会让消费方以为这个字段可有可无。
+	Runner RunnerID
 	// Label 是生产方给的那行标签。
 	Label string
 	// OutputLimitBytes 是生产方定的那个上限，0 表示不设。

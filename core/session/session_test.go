@@ -118,9 +118,6 @@ func TestSessionHeaderValidation(t *testing.T) {
 		"版本号不对":  {func(h *sessionlog.SessionHeader) { h.Version = 99 }, "version must be"},
 		"标识对不上":  {func(h *sessionlog.SessionHeader) { h.ID = "other" }, "does not match"},
 		"创建时刻为负": {func(h *sessionlog.SessionHeader) { h.CreatedAt = -1 }, "createdAt"},
-		"工作目录不是绝对路径": {
-			func(h *sessionlog.SessionHeader) { h.Cwd = "relative/path" }, "absolute path",
-		},
 		"血统边界为负": {func(h *sessionlog.SessionHeader) { h.SeedLength = -1 }, "seedLength"},
 		"来路不认识":  {func(h *sessionlog.SessionHeader) { h.Origin = "nope" }, "origin must be"},
 		"委派层数为负": {
@@ -138,10 +135,10 @@ func TestSessionHeaderValidation(t *testing.T) {
 		})
 	}
 
-	// 一份合法的头（带上一条本机的绝对路径和一个认识的来路）过得去。
+	// 一份合法的头（带上一个工作区登记和一个认识的来路）过得去。
 	header := good
 	header.Origin = sessionlog.OriginSubagent
-	header.Cwd = absoluteTestPath()
+	header.WorkspaceID = testWorkspaceID
 	if err := validateSessionHeader("s", header); err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +382,7 @@ func TestASeedRejectsTheLegacyRequestHeaderReason(t *testing.T) {
 }
 
 func TestASynthesizedHeaderIsValidatedToo(t *testing.T) {
-	bad := sessionlog.SessionHeader{Version: sessionlog.FormatVersion, ID: "s", Cwd: "relative"}
+	bad := sessionlog.SessionHeader{Version: sessionlog.FormatVersion, ID: "s", SeedLength: -1}
 	if _, err := NewSession("s", Options{Header: &bad}); !errors.Is(err, ErrInvalidHeader) {
 		t.Fatalf("诊断是 %v", err)
 	}
@@ -742,12 +739,4 @@ func TestASurfaceRewriteRebuildsTheDerivedHistory(t *testing.T) {
 	if len(messages) != 1 || messages[0].Role != llm.RoleAssistant {
 		t.Fatalf("被盖住的节点该从派生里消失：%#v", messages)
 	}
-}
-
-// absoluteTestPath 给出一条本机上成立的绝对路径。
-//
-// 「绝对」在 Windows 和 POSIX 上不是一回事，所以不能写死一个字面量——这正是
-// [validateSessionHeader] 用 filepath.IsAbs 而不是 path.IsAbs 的理由。
-func absoluteTestPath() string {
-	return testAbsolutePath
 }

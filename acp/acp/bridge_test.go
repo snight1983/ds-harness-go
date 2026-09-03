@@ -230,10 +230,12 @@ func TestAuthenticateDoesNothing(t *testing.T) {
 func TestNewSessionRejectsFeaturesOutsideTheAutomationContract(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, nil)
+	// 新增: 这张表原先还有一格「相对路径」。那条 cwd 是**客户端那台机器**上的写法，
+	// 它绝对不绝对是客户端自己的事，服务端连它在哪个命名空间里都不知道，
+	// 更验不出「这条路径是不是绝对的」——见 [validateWorkspaceParams]。
 	cases := map[string]wire.NewSessionRequest{
-		"相对路径":   {Cwd: "relative/path"},
-		"额外目录":   {Cwd: absolutePath, AdditionalDirectories: []string{absolutePath}},
-		"mcp 服务": {Cwd: absolutePath, McpServers: []wire.McpServer{{}}},
+		"额外目录":   {Cwd: clientCwd, AdditionalDirectories: []string{clientCwd}},
+		"mcp 服务": {Cwd: clientCwd, McpServers: []wire.McpServer{{}}},
 	}
 	for name, params := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -266,7 +268,7 @@ func TestNewSessionReportsAFailedCreation(t *testing.T) {
 	f.factory.mutex.Lock()
 	f.factory.createFail = errors.New("建不出来")
 	f.factory.mutex.Unlock()
-	_, err := f.bridge.NewSession(t.Context(), wire.NewSessionRequest{Cwd: absolutePath})
+	_, err := f.bridge.NewSession(t.Context(), wire.NewSessionRequest{Cwd: clientCwd})
 	assertRequestError(t, err, -32603)
 }
 
@@ -276,7 +278,7 @@ func TestNewSessionRefusesOnceTheBridgeIsDisposed(t *testing.T) {
 	if err := f.bridge.Quiesce(t.Context()); err != nil {
 		t.Fatalf("收摊不该失败：%v", err)
 	}
-	_, err := f.bridge.NewSession(t.Context(), wire.NewSessionRequest{Cwd: absolutePath})
+	_, err := f.bridge.NewSession(t.Context(), wire.NewSessionRequest{Cwd: clientCwd})
 	assertRequestError(t, err, -32603)
 }
 
@@ -287,7 +289,7 @@ func TestNewSessionRefusesBeforeItIsInstalled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("造桥失败：%v", err)
 	}
-	_, err = bridge.NewSession(t.Context(), wire.NewSessionRequest{Cwd: absolutePath})
+	_, err = bridge.NewSession(t.Context(), wire.NewSessionRequest{Cwd: clientCwd})
 	assertRequestError(t, err, -32603)
 }
 
@@ -305,7 +307,7 @@ func TestNewSessionDisposesAnAgentThatRacedTheConnectionClosing(t *testing.T) {
 
 	failed := make(chan error, 1)
 	go func() {
-		_, err := f.bridge.NewSession(context.Background(), wire.NewSessionRequest{Cwd: absolutePath})
+		_, err := f.bridge.NewSession(context.Background(), wire.NewSessionRequest{Cwd: clientCwd})
 		failed <- err
 	}()
 	<-enter
@@ -741,7 +743,8 @@ func TestSessionEventsFromOtherSessionsAreIgnored(t *testing.T) {
 	made := f.factory.only(t)
 
 	// 一个这座桥根本没建过的会话：它归别人管，一个字都不该往这条线上发。
-	stranger, err := f.sessions.Create(t.Context(), f.owner, "外人", coresession.CreateOptions{Cwd: absolutePath})
+	stranger, err := f.sessions.Create(
+		t.Context(), f.owner, "外人", coresession.CreateOptions{WorkspaceID: testWorkspaceID})
 	if err != nil {
 		t.Fatalf("建外人会话失败：%v", err)
 	}
@@ -834,7 +837,7 @@ func TestAgentErrorsOutsideAPromptAreIgnored(t *testing.T) {
 
 	// 一个在同一台注册表里、却不归这座桥管的 agent：它的失败与这条线无关。
 	outsider, err := f.agents.Create(t.Context(), f.owner, agent.CreateOptions{
-		SessionID: "局外人", Cwd: absolutePath,
+		SessionID: "局外人", WorkspaceID: testWorkspaceID,
 	})
 	if err != nil {
 		t.Fatalf("建局外人失败：%v", err)
@@ -1031,13 +1034,13 @@ func TestPersistenceBackedMethodsAnswerMethodNotFoundWithoutAnArchive(t *testing
 	f := newFixture(t, nil)
 	calls := map[string]func() error{
 		"session/list": func() error {
-			cwd := absolutePath
+			cwd := clientCwd
 			_, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{Cwd: &cwd})
 			return err
 		},
 		"session/resume": func() error {
 			_, err := f.bridge.ResumeSession(t.Context(), wire.ResumeSessionRequest{
-				SessionId: "随便", Cwd: absolutePath,
+				SessionId: "随便", Cwd: clientCwd,
 			})
 			return err
 		},

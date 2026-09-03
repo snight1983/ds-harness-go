@@ -227,14 +227,14 @@ func existsAsMarker(ctx context.Context, fsys fs.FileSystem, p string) (bool, er
 	return ok, nil
 }
 
-// FindProjectRoot 从 cwd 往上走，找到第一个带根标记的目录。
+// FindProjectRoot 从 workspaceRoot 往上走，找到第一个带根标记的目录。
 //
 // 源: packages/context/agent-instructions/src/files.ts:168-191
 //
-// 一路走到世界根都没找到就退回 cwd 本身：那说明这不是一个有标记的项目，
-// 而「以 cwd 为根」是唯一不需要猜的解释。
-func FindProjectRoot(ctx context.Context, fsys fs.FileSystem, cwd string, markers []string) (string, error) {
-	current := absPath(cwd)
+// 一路走到世界根都没找到就退回 workspaceRoot 本身：那说明这不是一个有标记的项目，
+// 而「以 workspaceRoot 为根」是唯一不需要猜的解释。
+func FindProjectRoot(ctx context.Context, fsys fs.FileSystem, workspaceRoot string, markers []string) (string, error) {
+	current := absPath(workspaceRoot)
 	for {
 		for _, marker := range markers {
 			found, err := existsAsMarker(ctx, fsys, path.Join(current, marker))
@@ -247,24 +247,24 @@ func FindProjectRoot(ctx context.Context, fsys fs.FileSystem, cwd string, marker
 		}
 		parent := path.Dir(current)
 		if parent == current {
-			return absPath(cwd), nil
+			return absPath(workspaceRoot), nil
 		}
 		current = parent
 	}
 }
 
-// AncestorChain 给出从 root 到 cwd 的那条闭区间目录链，从宽到窄。
+// AncestorChain 给出从 root 到 workspaceRoot 的那条闭区间目录链，从宽到窄。
 //
 // 源: packages/context/agent-instructions/src/files.ts:193-212
-func AncestorChain(root string, cwd string) []string {
+func AncestorChain(root string, workspaceRoot string) []string {
 	resolvedRoot := absPath(root)
-	current := absPath(cwd)
+	current := absPath(workspaceRoot)
 	chain := make([]string, 0, 8)
 	for current != resolvedRoot {
 		chain = append(chain, current)
 		parent := path.Dir(current)
 		if parent == current {
-			// 发现阶段给的永远是 cwd 或者它的某个祖先，所以到不了这里。
+			// 发现阶段给的永远是 workspaceRoot 或者它的某个祖先，所以到不了这里。
 			break
 		}
 		current = parent
@@ -326,7 +326,7 @@ func allExistingInstructionFiles(
 	return found, nil
 }
 
-// discoverInstructionFiles 按模型优先级顺序找出全部候选：先用户全局，再根到 cwd。
+// discoverInstructionFiles 按模型优先级顺序找出全部候选：先用户全局，再根到 workspaceRoot。
 //
 // 源: packages/context/agent-instructions/src/files.ts:267-309
 //
@@ -335,7 +335,7 @@ func discoverInstructionFiles(
 	ctx context.Context,
 	fsys fs.FileSystem,
 	config ResolvedConfig,
-	cwd string,
+	workspaceRoot string,
 	projectRoot string,
 ) ([]discoveredFile, error) {
 	var files []discoveredFile
@@ -367,17 +367,17 @@ func discoverInstructionFiles(
 		}
 	}
 
-	resolvedCwd := absPath(cwd)
+	resolvedWorkspaceRoot := absPath(workspaceRoot)
 	root := projectRoot
 	if root == "" {
-		found, err := FindProjectRoot(ctx, fsys, resolvedCwd, config.ProjectRootMarkers)
+		found, err := FindProjectRoot(ctx, fsys, resolvedWorkspaceRoot, config.ProjectRootMarkers)
 		if err != nil {
 			return nil, err
 		}
 		root = found
 	}
 	root = absPath(root)
-	for _, dir := range AncestorChain(root, resolvedCwd) {
+	for _, dir := range AncestorChain(root, resolvedWorkspaceRoot) {
 		for _, candidates := range [][]string{config.InstructionFileCandidates, config.LocalInstructionFileCandidates} {
 			found, err := allExistingInstructionFiles(ctx, fsys, dir, root, candidates)
 			if err != nil {
@@ -401,10 +401,10 @@ func DiscoverBaselineFiles(
 	ctx context.Context,
 	fsys fs.FileSystem,
 	config ResolvedConfig,
-	cwd string,
+	workspaceRoot string,
 	projectRoot string,
 ) ([]File, error) {
-	discovered, err := discoverInstructionFiles(ctx, fsys, config, cwd, projectRoot)
+	discovered, err := discoverInstructionFiles(ctx, fsys, config, workspaceRoot, projectRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +565,7 @@ func LoadBaselineSet(
 	ctx context.Context,
 	fsys fs.FileSystem,
 	config ResolvedConfig,
-	cwd string,
+	workspaceRoot string,
 	projectRoot string,
 	replacePreviousBaseline bool,
 ) (RenderedInstructionSet, bool, error) {
@@ -573,7 +573,7 @@ func LoadBaselineSet(
 	if config.MaxBytes <= 0 || config.MaxSourceBytes <= 0 {
 		return RenderedInstructionSet{}, false, nil
 	}
-	discovered, err := discoverInstructionFiles(ctx, fsys, config, cwd, projectRoot)
+	discovered, err := discoverInstructionFiles(ctx, fsys, config, workspaceRoot, projectRoot)
 	if err != nil {
 		return RenderedInstructionSet{}, false, err
 	}
@@ -617,11 +617,11 @@ func LoadBaseline(
 	ctx context.Context,
 	fsys fs.FileSystem,
 	config ResolvedConfig,
-	cwd string,
+	workspaceRoot string,
 	projectRoot string,
 	replacePreviousBaseline bool,
 ) (RenderedWorkspaceContext, bool, error) {
-	set, ok, err := LoadBaselineSet(ctx, fsys, config, cwd, projectRoot, replacePreviousBaseline)
+	set, ok, err := LoadBaselineSet(ctx, fsys, config, workspaceRoot, projectRoot, replacePreviousBaseline)
 	if err != nil || !ok {
 		return RenderedWorkspaceContext{}, false, err
 	}

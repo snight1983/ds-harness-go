@@ -1204,7 +1204,7 @@ func TestCompactSurfaceRegion在一次事件通告里开不了工(t *testing.T) 
 	if err != nil {
 		t.Fatalf("造会话存储失败：%v", err)
 	}
-	live, err := store.Prepare("s-observed", coresession.CreateOptions{Cwd: summarizeCwd})
+	live, err := store.Prepare("s-observed", coresession.CreateOptions{WorkspaceID: summarizeWorkspaceID})
 	if err != nil {
 		t.Fatalf("备会话失败：%v", err)
 	}

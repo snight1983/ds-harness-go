@@ -547,8 +547,11 @@ func identityOf(id session.SessionID, header session.SessionHeader, event sessio
 		"event.type": string(event.Type),
 		"event.seq":  event.Seq,
 	}
-	if header.Cwd != "" {
-		attributes["session.cwd"] = header.Cwd
+	if header.WorkspaceID != "" {
+		// 新增: DSH 这条属性叫 `session.cwd`，值是宿主机工作目录。本仓库这个字段记的
+		// 是归属而不是位置（见 [session.SessionHeader.WorkspaceID]），属性名跟着改，
+		// 免得接收端把它当成一条能在本机上打开的路径。
+		attributes["session.workspace_id"] = string(header.WorkspaceID)
 	}
 	if header.ParentSession != "" {
 		attributes["session.parent_id"] = string(header.ParentSession)

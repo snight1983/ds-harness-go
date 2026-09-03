@@ -13,6 +13,16 @@ import (
 	"github.com/snight1983/ds-harness-go/llm"
 )
 
+// WorkspaceID 标识一条工作区登记。
+//
+// 新增: 它是一个**不透明标识**，也就是工作区登记册里那一行的 id，不是一条路径。
+// 消费方只许比相等，不许解析、不许拼接、不许从中推断任何位置。
+//
+// 类型住在本包而不是 workspace 包，是因为 [SessionHeader] 要带着它，而 workspace
+// 认识 session、session 不认识 workspace。workspace 那边留的是一个类型别名，
+// 两处说的是同一个东西。
+type WorkspaceID string
+
 // Origin 是一个会话的粗粒度出身分类。
 type Origin string
 
@@ -38,8 +48,6 @@ type SessionHeader struct {
 	//
 	// 新增: 和 [Event.Time] 一样是 int64，DSH 那一套安全整数检查随之消失。
 	CreatedAt int64 `json:"createdAt"`
-	// Cwd 是建会话时的绝对工作目录；空串表示没有。
-	Cwd string `json:"cwd,omitempty"`
 	// ParentSession 是这个会话分叉自哪个会话（seed 血统）；空串表示不是分叉来的。
 	ParentSession SessionID `json:"parentSession,omitempty"`
 	// SeedLength 是开头有多少条事件是通过 seed 继承来的。
@@ -63,6 +71,19 @@ type SessionHeader struct {
 	// 预设决定这个会话的工具和提示词，所以它必须持久：一次恢复要是换了另一份组装，
 	// 重放出来的历史模型已经没法照着做了。
 	AgentPreset string `json:"agentPreset,omitempty"`
+	// WorkspaceID 是这个会话属于哪一条工作区登记；空串表示不属于任何工作区。
+	//
+	// 新增: DSH 这一项叫 `cwd`，装的是一条**宿主机**绝对工作目录。本仓库的服务端
+	// 没有可用硬盘，也就不存在「目录」这个概念——存储全在数据库和对象存储里，
+	// 为的是这个服务能分布式部署。一条路径隐含「有那么一台机器、有那么一个文件系统
+	// 命名空间」，把它钉在会话头上就等于把这条会话钉死在一台机器上：换一台读不出来，
+	// 没法迁移，没法多租户。
+	//
+	// 所以记的不是位置而是**归属**：一个不透明的工作区标识。判一条会话属不属于某个
+	// 工作区，是这个 id 和那条登记的 id 比一次相等，不碰文件系统。工作区自己那条
+	// 给人看的路径由 workspace 包保管，且只在 [github.com/snight1983/ds-harness-go/fs.FileSystem]
+	// 那条接缝的命名空间里有意义。
+	WorkspaceID WorkspaceID `json:"workspaceId,omitempty"`
 }
 
 // TodoStatus 是一条待办的生命周期状态。

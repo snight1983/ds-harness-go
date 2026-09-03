@@ -297,6 +297,22 @@ func (f *fakeFS) EditText(context.Context, fs.Target, fs.EditRequest, *fs.EditIn
 	panic("instructions 的用例不该用到 EditText")
 }
 
+func (f *fakeFS) WriteBytes(context.Context, fs.Target, []byte, fs.WriteIntent) (fs.Version, error) {
+	panic("instructions 的用例不该用到 WriteBytes")
+}
+
+func (f *fakeFS) MakeDir(context.Context, string, string) (fs.Target, error) {
+	panic("instructions 的用例不该用到 MakeDir")
+}
+
+func (f *fakeFS) Remove(context.Context, fs.Target) error {
+	panic("instructions 的用例不该用到 Remove")
+}
+
+func (f *fakeFS) RemoveTree(context.Context, fs.Target) error {
+	panic("instructions 的用例不该用到 RemoveTree")
+}
+
 // errFake 是用例注入故障时用的那条哨兵。
 var errFake = &fakeError{}
 

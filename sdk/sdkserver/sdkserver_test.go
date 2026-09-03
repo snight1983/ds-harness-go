@@ -28,8 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"sync"
@@ -47,9 +45,40 @@ import (
 	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
-// absolutePath 是一条在本机上确实绝对的路径；写死哪一边的字面量都会让另一个平台上的
-// 用例变成假通过。
-var absolutePath = filepath.Join(os.TempDir(), "ds-harness-go-sdkserver")
+// ---- 工作区 ----
+//
+// 新增: 这里原先是一条路径和它折进执行世界之后的样子，两者由本仓库的一个纯函数相互
+// 换算，于是整套用例只跑在同一个宇宙里。会话头现在记的是一个不透明的工作区标识
+// （见 [sessionlog.SessionHeader.WorkspaceID]），`initialize` 收的那条 cwd 则是
+// **客户端那台机器**上的写法，两者之间隔着一册装配方给的 [WorkspaceLookup]。
+// 所以下面这两样刻意不共用任何字面量：共用的话，「那次换算接错了」这类故障在夹具里
+// 永远现不出形。
+var (
+	// clientCwd 是客户端握手时报的那条工作目录。
+	clientCwd = "/客户端那台机器/项目"
+	// testWorkspaceID 是 clientCwd 换出来的那个工作区标识：一个标识，不是路径。
+	testWorkspaceID = sessionlog.WorkspaceID("ws-sdkserver")
+)
+
+// fakeWorkspaces 是一小册假的工作区登记。
+type fakeWorkspaces struct {
+	byCwd map[string]sessionlog.WorkspaceID
+	// fail 非 nil 时 WorkspaceOf 报这个错。
+	fail error
+}
+
+// newFakeWorkspaces 造一册只认 [clientCwd] 的登记。
+func newFakeWorkspaces() *fakeWorkspaces {
+	return &fakeWorkspaces{byCwd: map[string]sessionlog.WorkspaceID{clientCwd: testWorkspaceID}}
+}
+
+func (w *fakeWorkspaces) WorkspaceOf(_ context.Context, cwd string) (sessionlog.WorkspaceID, bool, error) {
+	if w.fail != nil {
+		return "", false, w.fail
+	}
+	found, ok := w.byCwd[cwd]
+	return found, ok, nil
+}
 
 // tickingClock 是一个走得可预测的时钟：每读一次加一毫秒。
 func tickingClock() func() int64 {
@@ -311,7 +340,7 @@ func (f *scriptedFactory) CreateAgent(
 		return agent.Handle{}, err
 	}
 	live, err := f.sessions.Create(ctx, agentScope, options.SessionID, coresession.CreateOptions{
-		Cwd:           options.Cwd,
+		WorkspaceID:   options.WorkspaceID,
 		ParentSession: options.ParentSession,
 		SeedLength:    options.SeedLength,
 	})
@@ -386,13 +415,15 @@ func newLive(t *testing.T, mutate func(*Config)) *live {
 	}
 
 	peer := &recordingPeer{}
+	workspaces := newFakeWorkspaces()
 	config := Config{
-		Peer:      peer,
-		Agents:    agents,
-		Sessions:  sessions,
-		Subagents: subs,
-		LLM:       &stubLLM{entries: []llm.ProviderInfo{{ID: "known", Name: "known"}}},
-		Logger:    quiet,
+		Peer:       peer,
+		Agents:     agents,
+		Sessions:   sessions,
+		Subagents:  subs,
+		LLM:        &stubLLM{entries: []llm.ProviderInfo{{ID: "known", Name: "known"}}},
+		Workspaces: workspaces,
+		Logger:     quiet,
 	}
 	if mutate != nil {
 		mutate(&config)
@@ -425,7 +456,7 @@ func newLive(t *testing.T, mutate func(*Config)) *live {
 func (l *live) handshake(t *testing.T) {
 	t.Helper()
 	if _, err := l.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd:      absolutePath,
+		Cwd:      clientCwd,
 		Provider: "known",
 		Model:    "m",
 	}); err != nil {
@@ -581,7 +612,7 @@ func TestInitializeRecordsTheSharedRoute(t *testing.T) {
 	fixture := newLive(t, nil)
 	limit := 4096
 	result, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd:       absolutePath,
+		Cwd:       clientCwd,
 		Provider:  "known",
 		Model:     "m",
 		MaxTokens: &limit,
@@ -602,8 +633,51 @@ func TestInitializeRecordsTheSharedRoute(t *testing.T) {
 	if created[0].AgentOptions != want {
 		t.Fatalf("这条线上的路由该照握手记下的那份，实际 %+v", created[0].AgentOptions)
 	}
-	if created[0].Cwd != absolutePath {
-		t.Fatalf("工作目录该是握手给的那条，实际 %q", created[0].Cwd)
+	if created[0].WorkspaceID != testWorkspaceID {
+		t.Fatalf("归属该是握手那条 cwd 换出来的那个工作区，实际 %q", created[0].WorkspaceID)
+	}
+}
+
+func TestInitializeLeavesTheWorkspaceEmptyWhenNoRegistryClaimsTheCwd(t *testing.T) {
+	t.Parallel()
+	// 没挂登记册、和挂了却没人认领这条 cwd，对这条线是同一件事：它建出来的会话
+	// 不属于任何工作区。要紧的是这两种都**不是**失败——一条认不出来的 cwd 不该让
+	// 整条线握不上手。
+	for name, mutate := range map[string]func(*Config){
+		"没挂登记册": func(config *Config) { config.Workspaces = nil },
+		"没人认领这条 cwd": func(config *Config) {
+			config.Workspaces = &fakeWorkspaces{byCwd: map[string]sessionlog.WorkspaceID{}}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newLive(t, mutate)
+			fixture.handshake(t)
+			fixture.prompt(t, "s1")
+
+			created := fixture.factory.created()
+			if len(created) != 1 || created[0].WorkspaceID != "" {
+				t.Fatalf("该不属于任何工作区，实际 %+v", created)
+			}
+		})
+	}
+}
+
+func TestInitializeReportsAWorkspaceRegistryItCannotRead(t *testing.T) {
+	t.Parallel()
+	// 「这条 cwd 没人认领」和「登记册读不动」是两件事。后者压成前者的话，登记册
+	// 出故障期间这条线会安静地把所有会话都建成「不属于任何工作区」，而那批会话
+	// 事后一条也认不回它本来的工作区。
+	planted := errors.New("登记册读不动")
+	fixture := newLive(t, func(config *Config) {
+		config.Workspaces = &fakeWorkspaces{fail: planted}
+	})
+
+	_, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
+		Cwd: clientCwd, Provider: "known", Model: "m",
+	})
+	if !errors.Is(err, planted) {
+		t.Fatalf("底层原因该留在链上：%v", err)
 	}
 }
 
@@ -612,7 +686,7 @@ func TestInitializeRejectsANonPositiveMaxTokens(t *testing.T) {
 	fixture := newLive(t, nil)
 	zero := 0
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "known", Model: "m", MaxTokens: &zero,
+		Cwd: clientCwd, Provider: "known", Model: "m", MaxTokens: &zero,
 	}); err == nil {
 		t.Fatal("输出上限为 0 该被拒")
 	}
@@ -625,7 +699,7 @@ func TestInitializeRejectsAnEmptyReasoningEffort(t *testing.T) {
 	fixture := newLive(t, nil)
 	empty := llm.ReasoningEffortID("")
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "known", Model: "m", ReasoningEffort: &empty,
+		Cwd: clientCwd, Provider: "known", Model: "m", ReasoningEffort: &empty,
 	}); err == nil {
 		t.Fatal("推理档位给了空串该被拒")
 	}
@@ -638,7 +712,7 @@ func TestInitializeCarriesTheReasoningEffortEverywhere(t *testing.T) {
 	fixture := newLive(t, func(c *Config) { c.LLM = service })
 	effort := llm.ReasoningEffortID("high")
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "known", Model: "m", ReasoningEffort: &effort,
+		Cwd: clientCwd, Provider: "known", Model: "m", ReasoningEffort: &effort,
 	}); err != nil {
 		t.Fatalf("握手不该失败：%v", err)
 	}
@@ -670,7 +744,7 @@ func TestInitializeRefusesARouteThatCannotBeResolved(t *testing.T) {
 	}
 	fixture := newLive(t, func(c *Config) { c.LLM = service })
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "known", Model: "m",
+		Cwd: clientCwd, Provider: "known", Model: "m",
 	}); err == nil {
 		t.Fatal("解不开的路由该在握手这一步被拒")
 	}
@@ -701,7 +775,7 @@ func TestInitializeNeedsAnLLMServiceToResolveTheRoute(t *testing.T) {
 		}
 	})
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "known", Model: "m",
+		Cwd: clientCwd, Provider: "known", Model: "m",
 	}); err == nil {
 		t.Fatal("没挂 LLM 服务该握不了手")
 	}
@@ -734,7 +808,7 @@ func TestConcurrentInitializeMountsTheFallbackAdapterOnce(t *testing.T) {
 		go func() {
 			defer group.Done()
 			_, err := fixture.server.Initialize(context.Background(), sdkprotocol.InitializeParams{
-				Cwd: absolutePath, Provider: "nobody", Model: "m",
+				Cwd: clientCwd, Provider: "nobody", Model: "m",
 			})
 			results <- err
 		}()
@@ -779,7 +853,7 @@ func TestInitializeNeedsAnInstalledServer(t *testing.T) {
 		t.Fatalf("造服务器失败：%v", err)
 	}
 	if _, err := server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "known", Model: "m",
+		Cwd: clientCwd, Provider: "known", Model: "m",
 	}); err == nil {
 		t.Fatal("还没装上该握不了手")
 	}
@@ -791,7 +865,7 @@ func TestInitializeRefusesASecondHandshake(t *testing.T) {
 	fixture := newLive(t, nil)
 	fixture.handshake(t)
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "known", Model: "m",
+		Cwd: clientCwd, Provider: "known", Model: "m",
 	}); err == nil {
 		t.Fatal("握第二次手该被拒")
 	}
@@ -801,7 +875,7 @@ func TestInitializeRefusesAnUnclaimedProviderWithoutAFallback(t *testing.T) {
 	t.Parallel()
 	fixture := newLive(t, nil)
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "nobody", Model: "m",
+		Cwd: clientCwd, Provider: "nobody", Model: "m",
 	}); err == nil {
 		t.Fatal("没有适配器认领、又没有兜底钩子，该被拒")
 	}
@@ -838,7 +912,7 @@ func TestInitializeReportsAFailedFallbackMount(t *testing.T) {
 		}
 	})
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "nobody", Model: "m",
+		Cwd: clientCwd, Provider: "nobody", Model: "m",
 	}); err == nil {
 		t.Fatal("兜底挂载失败该把握手带失败")
 	}
@@ -1100,7 +1174,7 @@ func TestShutdownDisposesEverythingItBuilt(t *testing.T) {
 	// 订阅也摘了：这之后运行时里的动静一条都不该再转出去。
 	before := len(fixture.peer.taken())
 	if _, err := fixture.sessions.Create(t.Context(), scopeOf(t, "after"), "s3", coresession.CreateOptions{
-		Cwd: absolutePath, ParentSession: "s1",
+		WorkspaceID: testWorkspaceID, ParentSession: "s1",
 	}); err != nil {
 		t.Fatalf("建会话失败：%v", err)
 	}
@@ -1135,7 +1209,7 @@ func TestShutdownReportsAFailedUnmount(t *testing.T) {
 		}
 	})
 	if _, err := fixture.server.Initialize(t.Context(), sdkprotocol.InitializeParams{
-		Cwd: absolutePath, Provider: "nobody", Model: "m",
+		Cwd: clientCwd, Provider: "nobody", Model: "m",
 	}); err != nil {
 		t.Fatalf("握手失败：%v", err)
 	}
@@ -1232,7 +1306,7 @@ func TestHandleRequestDispatchesTheThreeMethods(t *testing.T) {
 	}
 
 	if _, err := fixture.server.HandleRequest(t.Context(), sdkprotocol.MethodInitialize, raw(
-		sdkprotocol.InitializeParams{Cwd: absolutePath, Provider: "known", Model: "m"},
+		sdkprotocol.InitializeParams{Cwd: clientCwd, Provider: "known", Model: "m"},
 	)); err != nil {
 		t.Fatalf("initialize 该派得出去：%v", err)
 	}
@@ -1349,7 +1423,7 @@ func TestOnlyChildSessionsAreAnnouncedAsSubagentStarts(t *testing.T) {
 	fixture.prompt(t, "top")
 
 	if _, err := fixture.sessions.Create(t.Context(), scopeOf(t, "child"), "child", coresession.CreateOptions{
-		Cwd: absolutePath, ParentSession: "top",
+		WorkspaceID: testWorkspaceID, ParentSession: "top",
 	}); err != nil {
 		t.Fatalf("建子会话失败：%v", err)
 	}

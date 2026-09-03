@@ -17,21 +17,33 @@ import (
 // 源: packages/workspace/workspace/src/invariant.ts:11
 const PackageName = "@deepseek-ai/dsh-workspace"
 
-// RegisterInvariants 装上「实体缓存就是落盘表的镜像」这条检查，返回注销函数。
+// RegisterInvariants 装上「workspaces 表只由登记册来写」这条检查，返回注销函数。
 //
 // 源: packages/workspace/workspace/src/invariant.ts:27-57
 //
 // # 这条检查在查什么
 //
-// 登记册的实体缓存和 workspaces 表是互为镜像的，而这个镜像由**写入次序**维持：
+// 本包对 workspaces 表的每一次写，都被 [Registry.beginWrite] 记了一笔，而域的
+// 变更通知是**在写链的槽位里同步发的**（见 [domain.ChangedListener]），所以一条
+// 事件到达时那笔记账必然还举着。反过来说：一条针对这张表、而记账上查无此人的事件，
+// 只可能来自一次绕过 [Registry] 的写。
 //
-//   - 建的时候实体先进缓存、再落盘（见 [Registry.createCanonical]），所以一次
-//     put 事件发出时缓存里必须已经有它。没有，说明有人绕过登记册往这张表里写了。
-//   - 删的时候实体先离开缓存、再删记录（见 [Registry.deleteKnown]），所以一次
-//     deleted 事件发出时缓存里必须已经没有它。还在，说明同上。
+// 绕过之后落盘的记录会和登记册次序、和归属账目各说各话，而且没有任何一步会报错
+// ——这正是它值得一条不变量的原因。
 //
-// 两条都是「有人绕过了 [Registry]」的证据。绕过之后内存和介质会各说各话，
-// 而且没有任何一步会报错——这正是它值得一条不变量的原因。
+// # 为什么不去读一遍介质核对
+//
+// 新增: DSH 那条检查是拿实体缓存和落盘表比镜像。缓存删掉之后（见 [Registry]）
+// 那个比法没了对象，而换成「事件到了就回头读一次表核对」是**错的**两次：
+//
+//   - 它会误报。别的副本完全可以合法地插在这次提交和这次核对之间，把同一条记录
+//     再改一遍甚至删掉；那时读回来的东西和事件对不上，但没有任何人做错事。
+//     一条会误报的检查比没有检查更糟——它教会所有人忽略它。
+//   - 它会把一次数据库往返串到**每一次写**上，因为通知就发在写链里。
+//
+// 记账这条判据两样都不占：它不碰介质，也只认本副本自己的写。代价是它**只抓得住
+// 本进程内**的绕过——别的副本绕过登记册写这张表，这里一条事件都收不到。
+// 漏报可以接受，误报不行。
 //
 // # 必须在 [Open] 成功之后再注册
 //
@@ -76,20 +88,12 @@ func RegisterInvariants(
 			if !live() {
 				return
 			}
-			_, cached := workspaces.Get(WorkspaceID(change.Key))
-			if change.Operation == domain.OperationDeleted {
-				if cached {
-					failCheck(fmt.Sprintf(
-						"工作区记录 %q 被删了，但登记册缓存还在发布它——有写入路径绕过了登记册",
-						change.Key))
-				}
+			if workspaces.writingRecord(WorkspaceID(change.Key)) {
 				return
 			}
-			if !cached {
-				failCheck(fmt.Sprintf(
-					"工作区记录 %q 已经落盘，但登记册缓存里没有对应的实体——缓存和域表分叉了",
-					change.Key))
-			}
+			failCheck(fmt.Sprintf(
+				"工作区记录 %q 被 %s 了，但这次写不是登记册发起的——有写入路径绕过了登记册",
+				change.Key, change.Operation))
 		}))
 		return nil
 	}

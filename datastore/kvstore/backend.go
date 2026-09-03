@@ -163,28 +163,118 @@ func (u *kvUnit) LoadAll(ctx context.Context) (storage.Snapshot, error) {
 	return storage.Snapshot{Tables: snapshot.Tables, Global: snapshot.Singleton}, nil
 }
 
-// PutRecord 写一条记录，同键覆盖。
-func (u *kvUnit) PutRecord(ctx context.Context, table, key string, value json.RawMessage) error {
+// LoadTable 只读出其中一张表的全部记录。
+func (u *kvUnit) LoadTable(ctx context.Context, table string) (map[string]json.RawMessage, error) {
 	if err := u.live(); err != nil {
-		return err
+		return nil, err
 	}
-	return translate(u.records.Put(ctx, table, key, value))
+	records, err := u.records.SnapshotTable(ctx, table)
+	if err != nil {
+		return nil, translate(err)
+	}
+	return records, nil
 }
 
-// DeleteRecord 删一条记录。**幂等**。
-func (u *kvUnit) DeleteRecord(ctx context.Context, table, key string) error {
+// ReadRecord 读出单独一条记录，连同它此刻的修订标识。
+func (u *kvUnit) ReadRecord(
+	ctx context.Context, table, key string,
+) (json.RawMessage, storage.Revision, bool, error) {
 	if err := u.live(); err != nil {
-		return err
+		return nil, "", false, err
 	}
-	return translate(u.records.Delete(ctx, table, key))
+	value, revision, found, err := u.records.Read(ctx, table, key)
+	if err != nil {
+		return nil, "", false, translate(err)
+	}
+	return value, storage.Revision(revision), found, nil
 }
 
-// SetGlobal 盖上全局单例槽。
-func (u *kvUnit) SetGlobal(ctx context.Context, value json.RawMessage) error {
+// ReadGlobal 读出全局单例槽，连同它此刻的修订标识。
+func (u *kvUnit) ReadGlobal(ctx context.Context) (json.RawMessage, storage.Revision, error) {
 	if err := u.live(); err != nil {
-		return err
+		return nil, "", err
 	}
-	return translate(u.records.SetSingleton(ctx, value))
+	value, revision, err := u.records.ReadSingleton(ctx)
+	if err != nil {
+		return nil, "", translate(err)
+	}
+	return value, storage.Revision(revision), nil
+}
+
+// PutRecord 写一条记录，交回写完之后的修订标识。
+func (u *kvUnit) PutRecord(
+	ctx context.Context, table, key string, value json.RawMessage, expected storage.WriteIntent,
+) (storage.Revision, error) {
+	if err := u.live(); err != nil {
+		return "", err
+	}
+	guard, err := guardOf(expected)
+	if err != nil {
+		return "", err
+	}
+	revision, err := u.records.Put(ctx, table, key, value, guard)
+	if err != nil {
+		return "", translate(err)
+	}
+	return storage.Revision(revision), nil
+}
+
+// DeleteRecord 删一条记录，交回它删之前在不在。
+func (u *kvUnit) DeleteRecord(
+	ctx context.Context, table, key string, expected *storage.ReplaceIfRevision,
+) (bool, error) {
+	if err := u.live(); err != nil {
+		return false, err
+	}
+	var guard *datastore.MustMatch
+	if expected != nil {
+		guard = &datastore.MustMatch{Revision: datastore.Revision(expected.Revision)}
+	}
+	existed, err := u.records.Delete(ctx, table, key, guard)
+	if err != nil {
+		return false, translate(err)
+	}
+	return existed, nil
+}
+
+// SetGlobal 盖上全局单例槽，交回写完之后的修订标识。
+func (u *kvUnit) SetGlobal(
+	ctx context.Context, value json.RawMessage, expected storage.WriteIntent,
+) (storage.Revision, error) {
+	if err := u.live(); err != nil {
+		return "", err
+	}
+	guard, err := guardOf(expected)
+	if err != nil {
+		return "", err
+	}
+	revision, err := u.records.SetSingleton(ctx, value, guard)
+	if err != nil {
+		return "", translate(err)
+	}
+	return storage.Revision(revision), nil
+}
+
+// guardOf 把 storage 那套前置条件翻成 datastore 那套。
+//
+// 新增: 两套词汇形状一样、名字不一样，因为它们是两层各自的公共契约——datastore
+// 不认识 storage，storage 也不该被迫用下面那一层的名字。翻译只有这一处。
+func guardOf(intent storage.WriteIntent) (datastore.RecordGuard, error) {
+	switch typed := intent.(type) {
+	case nil:
+		return nil, nil
+	case storage.CreateIfAbsent:
+		return datastore.MustBeAbsent{}, nil
+	case storage.ReplaceIfRevision:
+		return datastore.MustMatch{Revision: datastore.Revision(typed.Revision)}, nil
+	default:
+		// WriteIntent 是封闭的：sealedWriteIntent 那个未导出方法让包外造不出第三个
+		// 成员。这一支只可能是 storage 自己将来加了成员却忘了在这里翻。
+		return nil, &storage.Error{
+			Code:    storage.CodeMalformedMedium,
+			Message: "认不出的写前置条件",
+		}
+	}
 }
 
 // Close 释放这个单元。**幂等**。
@@ -220,6 +310,8 @@ func translate(err error) error {
 		code = storage.CodeVersionMismatch
 	case errors.Is(err, datastore.ErrClosed):
 		code = storage.CodeClosed
+	case errors.Is(err, datastore.ErrStaleRevision):
+		code = storage.CodeStaleRevision
 	case errors.Is(err, datastore.ErrMalformedName),
 		errors.Is(err, datastore.ErrMalformedMedium),
 		errors.Is(err, datastore.ErrAlreadyOpen):

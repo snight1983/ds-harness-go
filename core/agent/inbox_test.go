@@ -157,7 +157,7 @@ func TestNewInboxRejectsUnusableSplice(t *testing.T) {
 // 末尾，而不是让重建下标越界。这种头来自续跑：那边的边界说的是当初分叉的位置，
 // 和这个进程里这份日志的长度没有关系。
 func TestNewInboxClampsASeedBoundaryPastTheLog(t *testing.T) {
-	header := sessionlog.SessionHeader{ID: "short", Cwd: testAbsolutePath, SeedLength: 99}
+	header := sessionlog.SessionHeader{ID: "short", WorkspaceID: testWorkspaceID, SeedLength: 99}
 	live, err := session.NewSession("short", session.Options{Header: &header, Now: fixedClock()})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)

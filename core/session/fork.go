@@ -137,7 +137,7 @@ func (s *Store) forkFrom(
 		// 子会话继承的是来源那些事件**连同它们的 seq**，所以它的起点就是来源的
 		// 起点——来源的头部被弹过一截时那个数不是 0，见 [CreateOptions.BaseSeq]。
 		BaseSeq:       source.BaseSeq(),
-		Cwd:           header.Cwd,
+		WorkspaceID:   header.WorkspaceID,
 		ParentSession: source.ID(),
 		// 这里 len(seed) 就是血统边界：这一次分叉继承的前缀恰好是它。续跑一个存下来
 		// 的会话不走这条路（那条路上 seed 是完整的存储日志，血统边界另有其值），

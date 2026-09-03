@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -34,8 +32,12 @@ import (
 //     数决定还要不要重试。
 //   - 在预算之内的工具结果被平白追加了一对事件：一次什么都没省下来的替换。
 
-// pruneCwd 是这些用例里那个会话的工作目录，必须是绝对路径。
-var pruneCwd = filepath.Join(os.TempDir(), "ds-harness-go-toolresultpruner")
+// pruneWorkspaceID 是这些用例里那个会话归属的工作区登记。
+//
+// 新增: 原来这里是 filepath.Join(os.TempDir(), …)，为的是「在本机上确实绝对」。
+// 会话头改用世界路径之后那条理由没有了：绝对性由纯 POSIX 的 [path.IsAbs] 判，
+// 不跟着本机平台走，所以一个字面量在哪台机器上读都一样。
+var pruneWorkspaceID = session.WorkspaceID("ws-toolresultpruner")
 
 // flatEstimator 是一台每条消息都报同一个价的假计量器。
 type flatEstimator int
@@ -53,7 +55,7 @@ func newLive(t *testing.T) *coresession.Session {
 
 	sid := session.SessionID("s-prune")
 	live, err := coresession.NewSession(sid, coresession.Options{
-		Header: &session.SessionHeader{ID: sid, Cwd: pruneCwd},
+		Header: &session.SessionHeader{ID: sid, WorkspaceID: pruneWorkspaceID},
 	})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)
@@ -427,7 +429,7 @@ func TestPruneSession在一次事件通告里写不进去(t *testing.T) {
 	if err != nil {
 		t.Fatalf("造 store 失败：%v", err)
 	}
-	live, err := store.Prepare("s-observed", coresession.CreateOptions{Cwd: pruneCwd})
+	live, err := store.Prepare("s-observed", coresession.CreateOptions{WorkspaceID: pruneWorkspaceID})
 	if err != nil {
 		t.Fatalf("备不出会话：%v", err)
 	}

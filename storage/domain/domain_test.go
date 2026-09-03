@@ -171,7 +171,7 @@ func TestAWriteIsDurableBeforeItIsVisible(t *testing.T) {
 		t.Fatalf("写入不该失败：%v", err)
 	}
 
-	value, exists, err := table.Get("a")
+	value, exists, err := table.Get(t.Context(), "a")
 	if err != nil || !exists {
 		t.Fatalf("写完就该读得到，实际 exists=%v err=%v", exists, err)
 	}
@@ -184,7 +184,7 @@ func TestAWriteIsDurableBeforeItIsVisible(t *testing.T) {
 		t.Fatalf("关闭不该失败：%v", err)
 	}
 	reopened := open(t, facility, notesSpec())
-	again, exists, err := entries(t, reopened).Get("a")
+	again, exists, err := entries(t, reopened).Get(t.Context(), "a")
 	if err != nil || !exists || again.Title != "第一条" {
 		t.Fatalf("重新打开该读到已落盘的值，实际 %+v exists=%v err=%v", again, exists, err)
 	}
@@ -241,7 +241,7 @@ func TestARejectedWriteChangesNothing(t *testing.T) {
 
 	backend.set(func(b *flakyBackend) { b.putErr = nil })
 
-	value, exists, err := table.Get("a")
+	value, exists, err := table.Get(t.Context(), "a")
 	if err != nil || !exists || value.Title != "好的" {
 		t.Fatalf("内存该保持写失败之前的样子，实际 %+v exists=%v err=%v", value, exists, err)
 	}
@@ -276,7 +276,7 @@ func TestARejectedDeleteChangesNothing(t *testing.T) {
 	if deleted {
 		t.Fatal("失败的删除不该报告删掉了")
 	}
-	if _, exists, _ := table.Get("a"); !exists {
+	if _, exists, _ := table.Get(t.Context(), "a"); !exists {
 		t.Fatal("删除失败之后记录该还在内存里")
 	}
 	if len(events()) != 1 {
@@ -323,7 +323,7 @@ func TestDeleteRemovesTheRecordAndAnnouncesIt(t *testing.T) {
 	if err != nil || !deleted {
 		t.Fatalf("该删掉，实际 deleted=%v err=%v", deleted, err)
 	}
-	if _, exists, _ := table.Get("a"); exists {
+	if _, exists, _ := table.Get(t.Context(), "a"); exists {
 		t.Fatal("删完不该还读得到")
 	}
 
@@ -369,7 +369,7 @@ func TestUpdateIsAtomicAcrossConcurrentCallers(t *testing.T) {
 	}
 	wg.Wait()
 
-	value, _, err := table.Get("a")
+	value, _, err := table.Get(t.Context(), "a")
 	if err != nil {
 		t.Fatalf("读不该失败：%v", err)
 	}
@@ -408,7 +408,7 @@ func TestUpdateWritesNothingWhenTheFunctionFails(t *testing.T) {
 	if !errors.Is(err, boom) {
 		t.Fatalf("fn 的错误该原样上抛，实际 %v", err)
 	}
-	if value, _, _ := table.Get("a"); value.Title != "原样" {
+	if value, _, _ := table.Get(t.Context(), "a"); value.Title != "原样" {
 		t.Fatalf("值该没被动过，实际 %+v", value)
 	}
 	if len(events()) != 1 {
@@ -446,7 +446,7 @@ func TestUpdateChangesNothingWhenTheMediumRefuses(t *testing.T) {
 	if !errors.Is(err, refused) {
 		t.Fatalf("该把后端的失败带出来，实际 %v", err)
 	}
-	if value, _, _ := table.Get("a"); value.Title != "原样" {
+	if value, _, _ := table.Get(t.Context(), "a"); value.Title != "原样" {
 		t.Fatalf("落盘失败时内存该没被动过，实际 %+v", value)
 	}
 	if len(events()) != 1 {
@@ -524,7 +524,7 @@ func TestKeysAndEntriesAreSortedSnapshots(t *testing.T) {
 		}
 	}
 
-	keys, err := table.Keys()
+	keys, err := table.Keys(t.Context())
 	if err != nil {
 		t.Fatalf("读键不该失败：%v", err)
 	}
@@ -532,14 +532,14 @@ func TestKeysAndEntriesAreSortedSnapshots(t *testing.T) {
 		t.Fatalf("键该按字典序，实际 %v", keys)
 	}
 
-	rows, err := table.Entries()
+	rows, err := table.Entries(t.Context())
 	if err != nil {
 		t.Fatalf("读条目不该失败：%v", err)
 	}
 	if len(rows) != 3 || rows[0].Key != "a" || rows[0].Value.Title != "a" {
 		t.Fatalf("条目不对：%+v", rows)
 	}
-	if size, _ := table.Size(); size != 3 {
+	if size, _ := table.Size(t.Context()); size != 3 {
 		t.Fatalf("条数该是 3，实际 %d", size)
 	}
 
@@ -566,10 +566,10 @@ func TestTablesDoNotBleedIntoEachOther(t *testing.T) {
 	if err := entries(t, domain).Put(t.Context(), "a", note{Title: "正式"}); err != nil {
 		t.Fatalf("写入不该失败：%v", err)
 	}
-	if _, exists, _ := drafts.Get("a"); exists {
+	if _, exists, _ := drafts.Get(t.Context(), "a"); exists {
 		t.Fatal("另一张表不该看得到这条")
 	}
-	if size, _ := drafts.Size(); size != 0 {
+	if size, _ := drafts.Size(t.Context()); size != 0 {
 		t.Fatalf("另一张表该是空的，实际 %d 条", size)
 	}
 }
@@ -609,7 +609,7 @@ func TestADomainWithoutAGlobalRefusesGlobalAccess(t *testing.T) {
 	if _, err := GlobalOf[preference](domain); err == nil {
 		t.Fatal("没声明全局槽该失败")
 	}
-	if _, err := domain.RawGlobal(); err == nil {
+	if _, _, err := domain.RawGlobal(t.Context()); err == nil {
 		t.Fatal("没声明全局槽时读原始全局值该失败")
 	}
 }
@@ -628,7 +628,7 @@ func TestTheGlobalStartsAtItsDeclaredInitialAndPersistsAfterSet(t *testing.T) {
 	domain := open(t, facility, notesSpec())
 	global := prefs(t, domain)
 
-	current, err := global.Get()
+	current, err := global.Get(t.Context())
 	if err != nil || current.Theme != "light" {
 		t.Fatalf("第一次 Set 之前该读到初值，实际 %+v err=%v", current, err)
 	}
@@ -636,7 +636,7 @@ func TestTheGlobalStartsAtItsDeclaredInitialAndPersistsAfterSet(t *testing.T) {
 	if err := global.Set(t.Context(), preference{Theme: "dark"}); err != nil {
 		t.Fatalf("写全局值不该失败：%v", err)
 	}
-	if current, _ := global.Get(); current.Theme != "dark" {
+	if current, _ := global.Get(t.Context()); current.Theme != "dark" {
 		t.Fatalf("该读到新值，实际 %+v", current)
 	}
 
@@ -653,7 +653,7 @@ func TestTheGlobalStartsAtItsDeclaredInitialAndPersistsAfterSet(t *testing.T) {
 		t.Fatalf("关闭不该失败：%v", err)
 	}
 	reopened := open(t, facility, notesSpec())
-	if current, _ := prefs(t, reopened).Get(); current.Theme != "dark" {
+	if current, _ := prefs(t, reopened).Get(t.Context()); current.Theme != "dark" {
 		t.Fatalf("重新打开该读到已落盘的全局值，实际 %+v", current)
 	}
 }
@@ -678,7 +678,7 @@ func TestAGlobalThatEncodesToNullIsRefused(t *testing.T) {
 	if err := global.Set(t.Context(), nil); err == nil {
 		t.Fatal("能编码成 null 的全局值该被拒")
 	}
-	if current, _ := global.Get(); current == nil || current.Theme != "light" {
+	if current, _ := global.Get(t.Context()); current == nil || current.Theme != "light" {
 		t.Fatalf("被拒之后该保持原值，实际 %+v", current)
 	}
 }
@@ -699,7 +699,7 @@ func TestARejectedGlobalWriteChangesNothing(t *testing.T) {
 	if err := global.Set(t.Context(), preference{Theme: "dark"}); !errors.Is(err, boom) {
 		t.Fatalf("落盘失败该原样上抛，实际 %v", err)
 	}
-	if current, _ := global.Get(); current.Theme != "light" {
+	if current, _ := global.Get(t.Context()); current.Theme != "light" {
 		t.Fatalf("内存该保持原样，实际 %+v", current)
 	}
 	if len(events()) != 0 {
@@ -832,7 +832,7 @@ func TestAFailingUnitCloseStillFreesTheDomain(t *testing.T) {
 	if _, stillOpen := facility.Get("notes"); stillOpen {
 		t.Fatal("名字该让出来")
 	}
-	if _, _, err := entries(t, domain).Get("a"); err == nil {
+	if _, _, err := entries(t, domain).Get(t.Context(), "a"); err == nil {
 		t.Fatal("域该已经标成关闭")
 	}
 }
@@ -856,27 +856,27 @@ func TestEveryReadRefusesAfterClose(t *testing.T) {
 		t.Fatalf("关闭不该失败：%v", err)
 	}
 
-	if _, _, err := table.Get("a"); err == nil {
+	if _, _, err := table.Get(t.Context(), "a"); err == nil {
 		t.Error("Get 该拒")
 	} else {
 		expectCode(t, err, CodeClosed)
 	}
-	if _, err := table.Keys(); err == nil {
+	if _, err := table.Keys(t.Context()); err == nil {
 		t.Error("Keys 该拒")
 	}
-	if _, err := table.Entries(); err == nil {
+	if _, err := table.Entries(t.Context()); err == nil {
 		t.Error("Entries 该拒")
 	}
-	if _, err := table.Size(); err == nil {
+	if _, err := table.Size(t.Context()); err == nil {
 		t.Error("Size 该拒")
 	}
-	if _, err := global.Get(); err == nil {
+	if _, err := global.Get(t.Context()); err == nil {
 		t.Error("全局值的 Get 该拒")
 	}
-	if _, _, err := domain.RawRecord("entries", "a"); err == nil {
+	if _, _, _, err := domain.RawRecord(t.Context(), "entries", "a"); err == nil {
 		t.Error("RawRecord 该拒")
 	}
-	if _, err := domain.RawGlobal(); err == nil {
+	if _, _, err := domain.RawGlobal(t.Context()); err == nil {
 		t.Error("RawGlobal 该拒")
 	}
 	if err := global.Set(t.Context(), preference{Theme: "dark"}); err == nil {
@@ -905,7 +905,7 @@ func TestRawReadsAreTheUntypedDiagnosticSurface(t *testing.T) {
 		t.Fatalf("写入不该失败：%v", err)
 	}
 
-	raw, exists, err := domain.RawRecord("entries", "a")
+	raw, _, exists, err := domain.RawRecord(t.Context(), "entries", "a")
 	if err != nil || !exists {
 		t.Fatalf("该读得到，实际 exists=%v err=%v", exists, err)
 	}
@@ -914,14 +914,14 @@ func TestRawReadsAreTheUntypedDiagnosticSurface(t *testing.T) {
 		t.Fatalf("原始投影该解得开且是那条记录，实际 %s err=%v", raw, err)
 	}
 
-	if _, exists, err := domain.RawRecord("entries", "没有"); err != nil || exists {
+	if _, _, exists, err := domain.RawRecord(t.Context(), "entries", "没有"); err != nil || exists {
 		t.Fatalf("不存在的键该报不存在，实际 exists=%v err=%v", exists, err)
 	}
-	if _, _, err := domain.RawRecord("没这张表", "a"); err == nil {
+	if _, _, _, err := domain.RawRecord(t.Context(), "没这张表", "a"); err == nil {
 		t.Fatal("没声明过的表该失败")
 	}
 
-	global, err := domain.RawGlobal()
+	global, _, err := domain.RawGlobal(t.Context())
 	if err != nil {
 		t.Fatalf("读原始全局值不该失败：%v", err)
 	}
@@ -964,7 +964,7 @@ func TestRecordsSurviveAcrossManyKeys(t *testing.T) {
 		t.Fatalf("关闭不该失败：%v", err)
 	}
 
-	rows, err := entries(t, open(t, facility, notesSpec())).Entries()
+	rows, err := entries(t, open(t, facility, notesSpec())).Entries(t.Context())
 	if err != nil {
 		t.Fatalf("读条目不该失败：%v", err)
 	}

@@ -22,13 +22,13 @@ func TestIdentityOfTakesOnlyTheTwoFieldsThatBindALifetime(t *testing.T) {
 	// 会话 id 故意**不在**身份里：身份要回答的正是「同一个 id 是不是同一段生命」，
 	// 把 id 放进去这个问题就自问自答了。
 	header := session.SessionHeader{
-		Version:   1,
-		ID:        "s1",
-		CreatedAt: 1700000000000,
-		Cwd:       "/work",
-		Origin:    session.OriginSubagent,
+		Version:     1,
+		ID:          "s1",
+		CreatedAt:   1700000000000,
+		WorkspaceID: "ws-1",
+		Origin:      session.OriginSubagent,
 	}
-	if got := IdentityOf(header); got != (Identity{CreatedAt: 1700000000000, Cwd: "/work"}) {
+	if got := IdentityOf(header); got != (Identity{CreatedAt: 1700000000000, WorkspaceID: "ws-1"}) {
 		t.Fatalf("身份该只取建会话时刻和工作目录：%#v", got)
 	}
 }
@@ -36,16 +36,16 @@ func TestIdentityOfTakesOnlyTheTwoFieldsThatBindALifetime(t *testing.T) {
 func TestIdentityIsComparableSoMatchingIsOneEquals(t *testing.T) {
 	t.Parallel()
 
-	base := session.SessionHeader{ID: "s1", CreatedAt: 7, Cwd: "/work"}
+	base := session.SessionHeader{ID: "s1", CreatedAt: 7, WorkspaceID: "ws-1"}
 
 	cases := map[string]struct {
 		other session.SessionHeader
 		same  bool
 	}{
-		"同一段生命":      {other: session.SessionHeader{ID: "s1", CreatedAt: 7, Cwd: "/work"}, same: true},
-		"换了个 id 不影响": {other: session.SessionHeader{ID: "s2", CreatedAt: 7, Cwd: "/work"}, same: true},
-		"重建过（时刻变了）":  {other: session.SessionHeader{ID: "s1", CreatedAt: 8, Cwd: "/work"}, same: false},
-		"换了工作目录":     {other: session.SessionHeader{ID: "s1", CreatedAt: 7, Cwd: "/other"}, same: false},
+		"同一段生命":      {other: session.SessionHeader{ID: "s1", CreatedAt: 7, WorkspaceID: "ws-1"}, same: true},
+		"换了个 id 不影响": {other: session.SessionHeader{ID: "s2", CreatedAt: 7, WorkspaceID: "ws-1"}, same: true},
+		"重建过（时刻变了）":  {other: session.SessionHeader{ID: "s1", CreatedAt: 8, WorkspaceID: "ws-1"}, same: false},
+		"换了工作区":      {other: session.SessionHeader{ID: "s1", CreatedAt: 7, WorkspaceID: "ws-2"}, same: false},
 		"没给工作目录":     {other: session.SessionHeader{ID: "s1", CreatedAt: 7}, same: false},
 	}
 
@@ -63,16 +63,17 @@ func TestIdentityIsComparableSoMatchingIsOneEquals(t *testing.T) {
 func TestIdentityGoesThroughJSONVerbatim(t *testing.T) {
 	t.Parallel()
 
-	// 字段名就是介质上的字段名，改了它等于把旧库读废。
-	encoded, err := json.Marshal(Identity{CreatedAt: 7, Cwd: "/work"})
+	// 字段名就是介质上的字段名，改了它旧库里那一项就读不出来了（见
+	// [Identity.WorkspaceID] 上那条说明）。
+	encoded, err := json.Marshal(Identity{CreatedAt: 7, WorkspaceID: "ws-1"})
 	if err != nil {
 		t.Fatalf("排不出去：%v", err)
 	}
-	if string(encoded) != `{"createdAt":7,"cwd":"/work"}` {
+	if string(encoded) != `{"createdAt":7,"workspaceId":"ws-1"}` {
 		t.Fatalf("介质上的样子不对：%s", encoded)
 	}
 
-	// 没有工作目录时那个键整个缺席，和 DSH 的 `cwd?: string` 在介质上一模一样。
+	// 没有工作目录时那个键整个缺席，和 DSH 的 `cwd?: string` 在介质上一样。
 	encoded, err = json.Marshal(Identity{CreatedAt: 7})
 	if err != nil {
 		t.Fatalf("排不出去：%v", err)
@@ -87,7 +88,7 @@ func TestValidateRecordAcceptsTheRowsThatAreInRange(t *testing.T) {
 
 	cases := map[string]Record{
 		"一条正常的行": {
-			Identity: Identity{CreatedAt: 7, Cwd: "/work"},
+			Identity: Identity{CreatedAt: 7, WorkspaceID: "ws-1"},
 			Rows:     projection.Checkpoint{"count": countRow(t, 0, 3, 4)},
 		},
 		"水位负一（一条都没折过）": {
@@ -205,14 +206,14 @@ func TestRecordRoundTripsThroughTheDomain(t *testing.T) {
 	}
 
 	want := Record{
-		Identity: Identity{CreatedAt: 7, Cwd: "/work"},
+		Identity: Identity{CreatedAt: 7, WorkspaceID: "ws-1"},
 		Rows:     projection.Checkpoint{"count": countRow(t, 0, 3, 4)},
 	}
 	if err := table.Put(context.Background(), "s1", want); err != nil {
 		t.Fatalf("写不该失败：%v", err)
 	}
 
-	got, ok, err := table.Get("s1")
+	got, ok, err := table.Get(t.Context(), "s1")
 	if err != nil || !ok {
 		t.Fatalf("该读得回来：%v %v", ok, err)
 	}

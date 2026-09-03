@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -16,10 +15,11 @@ import (
 	"github.com/snight1983/ds-harness-go/core/scope"
 	"github.com/snight1983/ds-harness-go/core/systemprompt"
 	"github.com/snight1983/ds-harness-go/core/tools"
+	"github.com/snight1983/ds-harness-go/fs"
+	"github.com/snight1983/ds-harness-go/fs/fstest"
 	"github.com/snight1983/ds-harness-go/interaction/userapproval"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/preset/agentpresets"
-	"github.com/snight1983/ds-harness-go/preset/presetstore/localdir"
 	"github.com/snight1983/ds-harness-go/session"
 )
 
@@ -102,7 +102,7 @@ func TestChildSessionMetaStampsTheLineage(t *testing.T) {
 	parent := agentAtDepth(t, "parent", 1)
 	meta := ChildSessionMeta(parent, 2, 5, nil)
 
-	if meta.Cwd != testAbsolutePath || meta.ParentSession != "parent" {
+	if meta.WorkspaceID != testWorkspaceID || meta.ParentSession != "parent" {
 		t.Fatalf("该盖上父的工作目录和血统，实际 %#v", meta)
 	}
 	if meta.Origin != session.OriginSubagent {
@@ -122,7 +122,8 @@ func TestChildSessionMetaStampsTheLineage(t *testing.T) {
 // 「一份都没认」。要的正是这个——presets 在不在场那条分支和名册里有什么无关。
 func emptyRoster(t *testing.T) *agentpresets.Roster {
 	t.Helper()
-	roster, err := agentpresets.New(agentpresets.Config{Store: localdir.New(), Default: "base"}, nil)
+	roster, err := agentpresets.New(
+		agentpresets.Config{FileSystem: fstest.New(), Default: "base"}, nil)
 	if err != nil {
 		t.Fatalf("造预设名册失败：%v", err)
 	}
@@ -272,22 +273,16 @@ func TestApplyChildCompositionJoinsTheParentPresetWhenThereIsARoster(t *testing.
 func mountedRoster(t *testing.T, parentKey *scope.Key) *agentpresets.Roster {
 	t.Helper()
 
-	// 这道缝上的路径是斜杠分隔的（见 preset/agentpresets/store.go），而
-	// [testing.T.TempDir] 在 Windows 上给的是反斜杠，所以进包之前先翻一次。
-	store := localdir.New()
-	root := filepath.ToSlash(t.TempDir())
+	// 这道缝上的路径是斜杠分隔的（见 preset/agentpresets/content.go），
+	// 而这份内存假件的键就是这样的路径。
+	store := fstest.New()
+	root := "/presets"
 	dir := path.Join(root, "demo")
-	if err := store.MakeDir(context.Background(), dir); err != nil {
-		t.Fatalf("建不出预设目录：%v", err)
-	}
-	file := path.Join(dir, agentpresets.CompositionFile)
-	if err := store.WriteFile(context.Background(), file, []byte("- name: alpha\n"), false); err != nil {
-		t.Fatalf("写不了组合文件：%v", err)
-	}
+	store.Seed(fs.TargetKey(path.Join(dir, agentpresets.CompositionFile)), "- name: alpha\n")
 	roster, err := agentpresets.New(agentpresets.Config{
-		Store:   store,
-		Default: "demo",
-		Roots:   []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
+		FileSystem: store,
+		Default:    "demo",
+		Roots:      []agentpresets.Root{{Path: root, Trust: agentpresets.TrustSystem}},
 		Composers: agentpresets.ComposerSet{
 			"alpha": func(context.Context, *scope.Scope, json.RawMessage) (func(context.Context) error, error) {
 				return nil, nil

@@ -33,7 +33,7 @@ func (f *continuationFixture) persistChild(
 	f.store.put(session.SessionHeader{
 		Version:         session.FormatVersion,
 		ID:              childID,
-		Cwd:             testAbsolutePath,
+		WorkspaceID:     testWorkspaceID,
 		ParentSession:   parent,
 		Origin:          session.OriginSubagent,
 		DelegationDepth: 1,
@@ -112,7 +112,7 @@ func (f *continuationFixture) spawnCountingParent(
 	t.Helper()
 	agentScope := keyedScope(t, string(id), f.owner.Key())
 	live, err := f.sessions.Create(t.Context(), agentScope, id, coresession.CreateOptions{
-		Cwd: testAbsolutePath,
+		WorkspaceID: testWorkspaceID,
 	})
 	if err != nil {
 		t.Fatalf("建父会话失败：%v", err)
@@ -275,7 +275,7 @@ func TestStartContinuableRecheckesEveryGateAfterTheArchiveProbe(t *testing.T) {
 				// 一个活会话——而不是一个活 agent——就够了：这道闸认的是两者之一。
 				if _, err := f.sessions.Create(
 					context.Background(), keyedScope(t, "抢先", nil), "child",
-					coresession.CreateOptions{Cwd: testAbsolutePath},
+					coresession.CreateOptions{WorkspaceID: testWorkspaceID},
 				); err != nil {
 					t.Fatalf("抢下这个 id 失败：%v", err)
 				}
@@ -509,7 +509,7 @@ func TestStartContinuableRecheckesTheGatesAfterPreparing(t *testing.T) {
 				// 一个活会话——而不是一个活 agent——就够了：这道闸认的是两者之一。
 				if _, err := f.sessions.Create(
 					context.Background(), keyedScope(t, "抢先", nil), "child",
-					coresession.CreateOptions{Cwd: testAbsolutePath},
+					coresession.CreateOptions{WorkspaceID: testWorkspaceID},
 				); err != nil {
 					t.Fatalf("抢下这个 id 失败：%v", err)
 				}

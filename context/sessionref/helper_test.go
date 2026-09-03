@@ -38,8 +38,8 @@ func newFakeSessions() *fakeSessions {
 }
 
 // put 往替身里放一个会话，同时登记它的表面。
-func (f *fakeSessions) put(id session.SessionID, cwd string, createdAt int64, events []session.Event) {
-	header := session.SessionHeader{Version: 1, ID: id, CreatedAt: createdAt, Cwd: cwd}
+func (f *fakeSessions) put(id session.SessionID, workspace session.WorkspaceID, createdAt int64, events []session.Event) {
+	header := session.SessionHeader{Version: 1, ID: id, CreatedAt: createdAt, WorkspaceID: workspace}
 	f.records = append(f.records, sessionquery.Record{Header: header, Live: true})
 	captured, capturedAny := 0, false
 	if len(events) > 0 {
@@ -215,13 +215,13 @@ func toolResultEvent(t *testing.T, seq int) session.Event {
 }
 
 // snapshotOf 把一串事件包成一份表面快照。
-func snapshotOf(id session.SessionID, cwd string, events []session.Event) sessionquery.SurfaceSnapshot {
+func snapshotOf(id session.SessionID, workspace session.WorkspaceID, events []session.Event) sessionquery.SurfaceSnapshot {
 	captured, capturedAny := 0, false
 	if len(events) > 0 {
 		captured, capturedAny = events[len(events)-1].Seq, true
 	}
 	return sessionquery.SurfaceSnapshot{
-		Session:            session.SessionHeader{Version: 1, ID: id, Cwd: cwd},
+		Session:            session.SessionHeader{Version: 1, ID: id, WorkspaceID: workspace},
 		CapturedThroughSeq: captured,
 		CapturedAny:        capturedAny,
 		Events:             events,

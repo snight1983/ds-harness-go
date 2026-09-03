@@ -79,9 +79,9 @@
 //     用一份零值快照表达「没有标题」会把它和「标题是空串」混成一件，
 //     而那两件事在界面上不一样。见 [Engine.ReadTitleSnapshots]。
 //  10. **seq 不是下标。**DSH 全篇拿 seq 直接索引事件数组，靠的是「日志从 0 开始
-//      连续、一条不删」。本仓库的日志会从最老的一头弹出事件
-//      （见 docs/session-log-limit.md），所以一份日志的起始 seq 是个变量：
-//      定位一律先减起点、减完当场校验对上的还是同一条。落在起点之前的 seq
-//      是**被弹掉了**，答 [CodeEventNotFound]；落在现存范围内却对不上，
-//      才是这份日志坏了。见 [Engine.ReadEvent] 和 [TraceEvent]。
+//     连续、一条不删」。本仓库的日志会从最老的一头弹出事件
+//     （见 docs/session-log-limit.md），所以一份日志的起始 seq 是个变量：
+//     定位一律先减起点、减完当场校验对上的还是同一条。落在起点之前的 seq
+//     是**被弹掉了**，答 [CodeEventNotFound]；落在现存范围内却对不上，
+//     才是这份日志坏了。见 [Engine.ReadEvent] 和 [TraceEvent]。
 package sessionquery

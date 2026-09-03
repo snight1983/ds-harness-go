@@ -42,20 +42,25 @@ const TableName = "sessions"
 // 都要拿调用方手上那份头（列表读拿活会话的头，冷读拿存档里的头）来核对身份。
 //
 // 新增: 这是一个**可比较**的结构体，核对身份就是一次 ==。DSH 那边 cwd 是
-// `string | undefined`，要写一个逐字段的 identityMatches；Go 里「没给 cwd」
-// 就是空串，两者本来就是同一件事（见 [session.SessionHeader.Cwd]）。
+// `string | undefined`，要写一个逐字段的 identityMatches；Go 里「不属于任何工作区」
+// 就是空串，两者本来就是同一件事（见 [session.SessionHeader.WorkspaceID]）。
 type Identity struct {
 	// CreatedAt 是建会话时的 Unix 纪元毫秒。
 	CreatedAt int64 `json:"createdAt"`
-	// Cwd 是建会话时的绝对工作目录；空串表示没有。
-	Cwd string `json:"cwd,omitempty"`
+	// WorkspaceID 是建会话时的归属工作区；空串表示不属于任何工作区。
+	//
+	// 新增: 介质上的键名跟着从 `cwd` 改成了 `workspaceId`。改键名会让旧记录读不
+	// 出这一项——那正是要的：这个字段的**含义**也变了（宿主机路径→不透明的归属标识），
+	// 一条按旧含义写下的记录再匹配上就是一次错误的命中。键名不同则解出空串、
+	// 身份对不上、这条记录被当成失效重算，代价只是一次冷读。
+	WorkspaceID session.WorkspaceID `json:"workspaceId,omitempty"`
 }
 
 // IdentityOf 把一份会话头投影成它的日志身份。
 //
 // 源: packages/session/session-projection-cache/src/index.ts:289-292
 func IdentityOf(header session.SessionHeader) Identity {
-	return Identity{CreatedAt: header.CreatedAt, Cwd: header.Cwd}
+	return Identity{CreatedAt: header.CreatedAt, WorkspaceID: header.WorkspaceID}
 }
 
 // Record 是一个会话在介质上那条记录：它折自哪一段日志，加上每个单元的检查点行。

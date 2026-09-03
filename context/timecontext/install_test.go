@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -34,9 +32,11 @@ import (
 //     "Elapsed since…" 会被模型当成事实。
 //   - 节流配了等于没配：两次注入之间没走满间隔也照注。
 
-// absolutePath 是一条在本机上确实绝对的路径；会话头要求 cwd 是绝对的，而写死
-// 哪一边的字面量都会让另一个平台上的用例变成假失败。
-var absolutePath = filepath.Join(os.TempDir(), "ds-harness-go-timecontext")
+// workspaceID 是这些用例里那个会话归属的工作区登记。
+//
+// 新增: 它是一个不透明标识，不是路径，也和文件系统里有什么东西没有关系，
+// 见 [session.SessionHeader.WorkspaceID]。
+var workspaceID = session.WorkspaceID("ws-timecontext")
 
 // ---- 假注册表 ----
 
@@ -122,7 +122,7 @@ func newWorld(t *testing.T, config Config) *world {
 	// 会话的时钟跟着同一个字段走：读数上的采样时刻和它落库的时刻必须能比先后，
 	// 而不变量正是查这一条。
 	live, err := coresession.NewSession("s", coresession.Options{
-		Header: &session.SessionHeader{ID: "s", Cwd: absolutePath},
+		Header: &session.SessionHeader{ID: "s", WorkspaceID: workspaceID},
 		Now:    func() int64 { return made.now.UnixMilli() },
 	})
 	if err != nil {
@@ -298,7 +298,7 @@ func TestInstallFallsBackToTheProcessDefaults(t *testing.T) {
 		t.Fatalf("装不上：%v", err)
 	}
 	live, err := coresession.NewSession("s", coresession.Options{
-		Header: &session.SessionHeader{ID: "s", Cwd: absolutePath}})
+		Header: &session.SessionHeader{ID: "s", WorkspaceID: workspaceID}})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)
 	}

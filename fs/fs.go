@@ -41,6 +41,12 @@
 // processPath 和 fileUrl 两个只有「目标在操作系统里也有名字」的后端做得到，
 // 挪进可选的 [OSPathFileSystem]。理由写在那个接口上。
 //
+// 新增: [FileSystem] 后来又多了四个 DSH 没有的方法——WriteBytes、MakeDir、
+// Remove、RemoveTree。它们不是从 DSH 抄来的，是本仓库把**第二条**内容读写接缝
+// （原 preset/agentpresets.Store，七个方法，和这里一一对应地重复）并回来时补上的
+// 缺口：那条缝有命名空间的写和字节的写，这条没有。合并的理由是「来一个新介质就得
+// 重写一大堆」——业务代码只该认一个接口，挂对象存储还是挂外接硬盘是装配时的配置。
+//
 // 事件那一半不做成接口，理由和 credentials 包里的 [Notifier] 一样：
 // 它背后是一张活着的订阅表，那是**状态**，而接口存不下状态。
 //
@@ -67,7 +73,7 @@ import (
 	"iter"
 )
 
-// FileSystem 是文件系统提供方**必须**实现的那十个原语。
+// FileSystem 是文件系统提供方**必须**实现的那十四个原语。
 //
 // 另外两个（进程路径、file: URI）不是每个后端都有，它们在可选的
 // [OSPathFileSystem] 上。
@@ -177,6 +183,46 @@ type FileSystem interface {
 	//
 	// expected 为 nil 表示不带新鲜度前置条件地编辑当前内容。
 	EditText(ctx context.Context, target Target, edit EditRequest, expected *EditIntent) (EditOutcome, error)
+
+	// WriteBytes 原子地创建或替换原始字节，守卫与原子性语义同 [FileSystem.WriteText]。
+	//
+	// 新增: DSH 那边没有这个方法——它的 writeText 收 string，而 JS 的 string 装得下
+	// 任意字节。Go 不行：一份二进制内容过一趟 string 会被 UTF-8 解码规则动到。
+	// 有了它，「一棵内容树的读写」这件事在本仓库里只剩这一条接缝
+	// （见 [github.com/snight1983/ds-harness-go/preset/agentpresets]）。
+	//
+	// 它**不带权限位**。一个对象存储答不出「这份内容可不可执行」，让它编一个出来，
+	// 会让上层那些「这个脚本能不能跑」的判断在那份介质上悄悄地永远成立或永远不成立。
+	// 服务端也没有任何一处会去 exec 一条路径。
+	//
+	// 交回的是写完之后的版本，而不是 [WriteOutcome]：后者带着 Before / After 两段
+	// **文本**，那是给 diff 用的，而一份字节内容没有可展示的 diff。
+	WriteBytes(ctx context.Context, target Target, content []byte, expected WriteIntent) (Version, error)
+
+	// MakeDir 建出一条路径上的目录，连同缺掉的上级；已经在了不算错。
+	//
+	// 新增: 它是路径形状而不是目标形状的，理由同 [FileSystem.Lstat]：要建的那个东西
+	// 按定义还不存在，[FileSystem.Resolve] 给不出它的稳定身份。cwd 的规则同 Resolve。
+	//
+	// 对象存储那类没有真目录的介质**如实什么都不做**，只把路径解析出来交回——
+	// 那里 [FileSystem.WriteText] 和 [FileSystem.WriteBytes] 本来就不要求上级先存在。
+	// 它仍然留在这条接缝上，因为本地磁盘后端做不到「不做」：那边不先建目录，
+	// 接下来那次写就失败。
+	MakeDir(ctx context.Context, path string, cwd string) (Target, error)
+
+	// Remove 删掉单个目标；不在不算错。
+	//
+	// 「不在」不算错，是因为调用方要的是「删完之后它不在」这个后果，
+	// 而不是「这一次调用亲手删掉了它」。报错会让每一处清理都得先探测一次，
+	// 而探测和删之间那道缝正是并发下出问题的地方。
+	Remove(ctx context.Context, target Target) error
+
+	// RemoveTree 删掉一棵子树；不在不算错。
+	//
+	// 它是「一次失败的写入什么都不留下」那条撤销路唯一的依靠，所以**必须**在
+	// 部分写入之后仍然清得干净——半途遇到一个删不掉的子项时继续往下删，
+	// 最后把失败一并报出来，而不是当场停在那儿留下一半。
+	RemoveTree(ctx context.Context, target Target) error
 }
 
 // OSPathFileSystem 是一个**可选**能力：这个后端上的目标在操作系统的文件命名空间里

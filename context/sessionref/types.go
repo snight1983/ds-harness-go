@@ -236,8 +236,8 @@ type Candidate struct {
 	SessionID session.SessionID
 	// Label 是日志里折出来的最新标题，没有标题时退回会话 id。
 	Label string
-	// Cwd 是那个会话的工作目录；空串表示日志里没记。
-	Cwd string
+	// WorkspaceID 是那个会话的归属工作区；空串表示不属于任何工作区。
+	WorkspaceID session.WorkspaceID
 	// CreatedAt 是那个会话的建立时间，Unix 纪元毫秒。
 	CreatedAt int64
 }

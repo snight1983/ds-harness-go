@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // SettingsNamespace 是那份带着用户所选默认预设的设置命名空间。
@@ -67,10 +68,10 @@ type standingMount struct {
 // 不该互相看得见对方装了什么。
 type Roster struct {
 	config Config
-	// store 是这份名册读写预设内容的那道缝，构造时从配置里取出来放在手边。
+	// fsys 是这份名册读写预设内容的那道缝，构造时从配置里取出来放在手边。
 	//
-	// 新增: 名册对「内容住在哪儿」只透过 [Store] 说话，理由见 store.go。
-	store Store
+	// 新增: 名册对「内容住在哪儿」只透过 [fs.FileSystem] 说话，理由见 content.go。
+	fsys fs.FileSystem
 	// roots 是发现和创作真正会扫的那些根，构造时算一次。
 	//
 	// 源: packages/preset/agent-presets/src/index.ts:99-104
@@ -128,8 +129,8 @@ func New(config Config, defaults DefaultSource) (*Roster, error) {
 	if config.Default == "" {
 		return nil, fmt.Errorf("%w: 需要一个默认预设 id", ErrInvalidConfig)
 	}
-	if config.Store == nil {
-		return nil, fmt.Errorf("%w: 需要一个预设存储", ErrInvalidConfig)
+	if config.FileSystem == nil {
+		return nil, fmt.Errorf("%w: 需要一个文件系统", ErrInvalidConfig)
 	}
 	for index, root := range config.Roots {
 		if root.Path == "" {
@@ -141,7 +142,7 @@ func New(config Config, defaults DefaultSource) (*Roster, error) {
 	}
 	return &Roster{
 		config:       config,
-		store:        config.Store,
+		fsys:         config.FileSystem,
 		roots:        config.resolvedRoots(),
 		defaults:     defaults,
 		standingRoot: scope.NewRoot(),
@@ -192,7 +193,7 @@ func (r *Roster) Authorable() bool {
 //
 // 源: packages/preset/agent-presets/src/index.ts:199-201
 func (r *Roster) List(ctx context.Context) ([]Preset, error) {
-	return DiscoverPresets(ctx, r.store, r.roots)
+	return DiscoverPresets(ctx, r.fsys, r.roots)
 }
 
 // Resolve 按 id 解算一份预设；id 传空串表示用 [Roster.DefaultID]。
@@ -434,7 +435,7 @@ func (r *Roster) Read(ctx context.Context, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return ReadComposition(ctx, r.store, preset)
+	return ReadComposition(ctx, r.fsys, preset)
 }
 
 // Copy 靠整份复制一份已有的预设，建出一份本地创作的。
@@ -463,7 +464,7 @@ func (r *Roster) Copy(ctx context.Context, from, id, name string) error {
 			return &PresetExistsError{PresetID: id}
 		}
 	}
-	if _, err := CopyComposition(ctx, r.store, r.roots, source, id, name); err != nil {
+	if _, err := CopyComposition(ctx, r.fsys, r.roots, source, id, name); err != nil {
 		return err
 	}
 	// 这个 id 底下要是还坐着一份装好的组合，那它只可能是**过期**的（它那份预设是在
@@ -481,7 +482,7 @@ func (r *Roster) Remove(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := DeleteComposition(ctx, r.store, r.roots, preset); err != nil {
+	if err := DeleteComposition(ctx, r.fsys, r.roots, preset); err != nil {
 		return err
 	}
 	// 跑在这份被删预设上的那些会话留着它们的常驻装载；只有新会话看到的名册里没有它了。
@@ -520,9 +521,9 @@ func (r *Roster) ensureStanding(ctx context.Context, preset Preset) (*standingMo
 			// 的东西：文件变了就在这里为这个和之后的会话开下一代。戳读不出来时**继续
 			// 服务当前这一代**——一份装载必须熬得过它那个文件消失，为一次 stat 让会话
 			// 失败是说不过去的。
-			current, readable := readCompositionStamp(ctx, r.store, preset.Path)
+			current, readable := readCompositionStamp(ctx, r.fsys, preset.Path)
 			// 两个戳都是空串时也留在当前这一代：那表示这份介质**答不出**身份
-			// （见 [Entry.Stamp]），而那时唯一诚实的做法是不换代——为一份看不出
+			// （见 [fs.Info.Version]），而那时唯一诚实的做法是不换代——为一份看不出
 			// 变没变过的组合每次都开一代，等于把单飞整个作废。
 			if !readable || mounted.stamp == current {
 				return mounted, nil
@@ -583,7 +584,7 @@ func (r *Roster) composeStanding(ctx context.Context, preset Preset) (*standingM
 	}
 	// 在读文件**之前**盖戳：一次和装载抢跑的编辑因此让戳显得过期、而不是悄悄显得
 	// 当前，于是下一个会话会去换代，而不是信任一份比它的戳还老的组合。
-	stamp, readable := readCompositionStamp(ctx, r.store, preset.Path)
+	stamp, readable := readCompositionStamp(ctx, r.fsys, preset.Path)
 	if !readable {
 		_ = standing.Dispose(ctx)
 		return nil, &PresetMountError{
@@ -591,7 +592,7 @@ func (r *Roster) composeStanding(ctx context.Context, preset Preset) (*standingM
 			Reason:   fmt.Sprintf("composition file is unreadable: %s", preset.Path),
 		}
 	}
-	dispose, err := mountComposition(ctx, r.store, standing, preset, r.config.Composers)
+	dispose, err := mountComposition(ctx, r.fsys, standing, preset, r.config.Composers)
 	if err != nil {
 		_ = standing.Dispose(ctx)
 		return nil, err

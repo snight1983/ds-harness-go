@@ -183,8 +183,8 @@ func New(opened *domain.Domain, options Options) (*Cache, error) {
 	}, nil
 }
 
-// CachedSnapshot 是零 I/O 那一级：直接从已经读进内存的那条记录看一份读切，
-// 一条日志都不读。第一个返回值为 nil 表示这个会话没有可用的记录。
+// CachedSnapshot 是最快那一级：读一条缓存记录就折出一份读切，**一条日志都不读**。
+// 第一个返回值为 nil 表示这个会话没有可用的记录。
 //
 // 源: packages/session/session-projection-cache/src/index.ts:107-130
 //
@@ -194,8 +194,15 @@ func New(opened *domain.Domain, options Options) (*Cache, error) {
 // 给出来的值旧到上一次耐久检查点那一刻，但绝不会是错的。整块只带**一个**水位
 // ——所有被端出来的行里最低的那个，也就是「每个值至少截止到这里是新的」。
 // 少报是安全的（客户端那边按高 seq 覆盖低 seq），多报会让一个旧值压住一次推送。
-func (c *Cache) CachedSnapshot(meta session.SessionHeader) (*projection.Snapshot, error) {
-	record, ok, err := c.recordFor(meta.ID, IdentityOf(meta))
+//
+// 新增: 它以前叫「零 I/O」，因为域的记录整份躺在进程内存里。权威搬回介质之后
+// （见 storage/domain 的 domain.go 开头），这一级也要一次往返，所以它收 ctx。
+// 阶梯的形状没变——这一级仍然是最便宜的那一档：**一次单条读**，而下面两级
+// 要读一截日志或者整条日志。
+func (c *Cache) CachedSnapshot(
+	ctx context.Context, meta session.SessionHeader,
+) (*projection.Snapshot, error) {
+	record, ok, err := c.recordFor(ctx, meta.ID, IdentityOf(meta))
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -232,7 +239,7 @@ func (c *Cache) CachedSnapshot(meta session.SessionHeader) (*projection.Snapshot
 // 折出来的状态因此可能是残缺的（最后一次更新落在被弹区间里的单元丢了），
 // 这是原则第 5 条认下的代价。
 func (c *Cache) ColdSnapshot(ctx context.Context, id session.SessionID) (projection.Snapshot, error) {
-	record, hasRecord, err := c.table.Get(string(id))
+	record, hasRecord, err := c.table.Get(ctx, string(id))
 	if err != nil {
 		return projection.Snapshot{}, err
 	}
@@ -461,8 +468,10 @@ func (c *Cache) markClean(id session.SessionID) {
 // recordFor 读出一个会话的记录，只在它绑定的日志身份和 expected 一致时才认。
 //
 // 源: packages/session/session-projection-cache/src/index.ts:101-105
-func (c *Cache) recordFor(id session.SessionID, expected Identity) (Record, bool, error) {
-	record, ok, err := c.table.Get(string(id))
+func (c *Cache) recordFor(
+	ctx context.Context, id session.SessionID, expected Identity,
+) (Record, bool, error) {
+	record, ok, err := c.table.Get(ctx, string(id))
 	if err != nil || !ok {
 		return Record{}, false, err
 	}

@@ -200,7 +200,13 @@ func (c *Controller) callerOf(key *scope.Key) agent.Agent {
 //
 // 只有那两件指名一件作业的工具有预算可言：job_list 交出去的是一份清单，
 // 它不属于任何一件作业，也就没有哪件作业的上限管得着它。
-func (c *Controller) visibleOutputLimit(exec tools.Execution) (int, bool) {
+//
+// 新增: ctx 由调用方给。[tools.PreRule] 和 [tools.Definition.FinalizeContent]
+// 这两条缝都是不收 ctx 的（照 DSH 那两条事件监听器的形状），所以那两处交的是
+// [context.Background]——这次列举现在会失败（见 [jobs.Registry]），而它失败的后果
+// 恰好就是这个函数本来就有的那条「没有预算」出口：整段内容按老办法整段让。
+// 一次读不出账本的调用因此**不会**被这条旁路弄失败。
+func (c *Controller) visibleOutputLimit(ctx context.Context, exec tools.Execution) (int, bool) {
 	if exec.Name != OutputToolName && exec.Name != KillToolName {
 		return 0, false
 	}
@@ -210,7 +216,11 @@ func (c *Controller) visibleOutputLimit(exec tools.Execution) (int, bool) {
 		return 0, false
 	}
 	wanted := jobs.JobID(target.JobID)
-	for _, snapshot := range c.service.List(c.callerOf(exec.Agent)) {
+	snapshots, err := c.service.List(ctx, c.callerOf(exec.Agent))
+	if err != nil {
+		return 0, false
+	}
+	for _, snapshot := range snapshots {
 		if snapshot.ID == wanted {
 			return snapshot.OutputLimitBytes, true
 		}
@@ -228,7 +238,7 @@ func (c *Controller) visibleOutputLimit(exec tools.Execution) (int, bool) {
 // 这不影响正确性：记不上的那次调用会在收尾时回头现查一遍（见
 // [Controller.finalizeContent]），记账只是省掉那一次查。
 func (c *Controller) captureOutputLimit(exec tools.Execution, next func() (tools.PreDecision, error)) (tools.PreDecision, error) {
-	if maxBytes, ok := c.visibleOutputLimit(exec); ok {
+	if maxBytes, ok := c.visibleOutputLimit(context.Background(), exec); ok {
 		c.mutex.Lock()
 		c.outputLimits[exec.Token] = maxBytes
 		c.mutex.Unlock()
@@ -250,7 +260,7 @@ func (c *Controller) takeOutputLimit(exec tools.Execution) (int, bool) {
 	if recorded {
 		return maxBytes, true
 	}
-	return c.visibleOutputLimit(exec)
+	return c.visibleOutputLimit(context.Background(), exec)
 }
 
 // finalizeContent 把一次调用交给模型的那段内容收进这件作业自己的预算。
@@ -511,7 +521,7 @@ func (c *Controller) readOutput(
 			return nil, err
 		}
 	}
-	read, err := c.service.Read(id, caller)
+	read, err := c.service.Read(ctx, id, caller)
 	if err != nil {
 		return nil, err
 	}
@@ -569,11 +579,14 @@ func (c *Controller) newListTool() *tools.Definition {
 // 新增: 这份切片必须是 make 出来的，不能是 nil。一个 nil 切片排出去是 `null`，
 // 而输出契约说的是数组——空清单在那份 schema 下会当场验不过。
 func (c *Controller) listJobs(
-	_ context.Context,
+	ctx context.Context,
 	_ json.RawMessage,
 	exec *tools.RunContext,
 ) (json.RawMessage, error) {
-	snapshots := c.service.List(c.callerOf(execAgent(exec)))
+	snapshots, err := c.service.List(ctx, c.callerOf(execAgent(exec)))
+	if err != nil {
+		return nil, err
+	}
 	public := make([]PublicSnapshot, 0, len(snapshots))
 	for _, snapshot := range snapshots {
 		public = append(public, publicJob(snapshot))
@@ -646,7 +659,7 @@ func (c *Controller) newKillTool() *tools.Definition {
 //
 // 源: packages/jobs/tool-jobs/src/index.ts:386-397
 func (c *Controller) killJob(
-	_ context.Context,
+	ctx context.Context,
 	args json.RawMessage,
 	exec *tools.RunContext,
 ) (json.RawMessage, error) {
@@ -659,12 +672,12 @@ func (c *Controller) killJob(
 		return nil, err
 	}
 	caller := c.callerOf(execAgent(exec))
-	result, err := c.service.Kill(id, caller, input.Reason)
+	result, err := c.service.Kill(ctx, id, caller, input.Reason)
 	if err != nil {
 		return nil, err
 	}
 	// 取快照而不是读：快照说的是当下的状态，它不会把还没交出去的输出消费掉。
-	snapshot, err := c.service.Get(id, caller)
+	snapshot, err := c.service.Get(ctx, id, caller)
 	if err != nil {
 		return nil, err
 	}

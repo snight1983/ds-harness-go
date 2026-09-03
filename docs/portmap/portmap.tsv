@@ -9716,9 +9716,9 @@ subagent/subagent	src/list-children.ts	81	function	listChildren		PORTED	subagent
 subagent/subagent	src/list-children.ts	108	function	listDescendants		PORTED	subagent.ListDescendants	
 subagent/subagent	src/out-of-process.ts	57	const	NO_START_CAPABILITIES		PORTED	subagent.NoStartCapabilities	TS 是一个冻结的常量对象；Go 里零值结构体本来就是它，用一个函数交出去免得调用方共享同一份可改的全局。
 subagent/subagent	src/out-of-process.ts	72	function	assertPositiveFinite		PORTED	subagent.AssertPositiveTimeout	TS 收的是毫秒数，要自己排掉 NaN 和 Infinity；Go 收 time.Duration，那两种取值在类型上就不存在，只剩非正数这一条要拒。
-subagent/subagent	src/out-of-process.ts	106	function	assertUsableCwd		PORTED	subagent.AssertUsableCwd	
-subagent/subagent	src/out-of-process.ts	126	function	validateConfiguredCwd		PORTED	subagent.ValidateConfiguredCwd	
-subagent/subagent	src/out-of-process.ts	147	function	resolveChildCwd		PORTED	subagent.ResolveChildCwd	
+subagent/subagent	src/out-of-process.ts	106	function	assertUsableCwd		SKIP		宿主机工作目录这个概念在服务端整体不承诺，这三行是这个裁剪的记录：服务端没有可用硬盘（存储全部落在 datastore 和 fs/objectstore 上），会话头记的是一个不透明的工作区标识（session.SessionHeader.WorkspaceID）而不是一条路径。上游这三个函数（连同它们内部的 isEnterableDirectory）拿 fs.statSync 验一个宿主机目录当不当得了子进程的 cwd，验不过就在起进程之前失败——那台机器在这套部署里不存在。要起本机子进程的后端自己知道该在本机哪里落脚，那是它和 subprocess 那条接缝之间的事，不该由一个跑在无盘服务上的通用词汇表来规定。
+subagent/subagent	src/out-of-process.ts	126	function	validateConfiguredCwd		SKIP		同 assertUsableCwd。
+subagent/subagent	src/out-of-process.ts	147	function	resolveChildCwd		SKIP		同 assertUsableCwd。
 subagent/subagent	src/out-of-process.ts	165	interface	RunResultSettlement		PORTED	subagent.RunResultSettlement	
 subagent/subagent	src/out-of-process.ts	192	function	settleRunResult		PORTED	subagent.SettleRunResult	
 subagent/subagent	src/out-of-process.ts	222	interface	SubprocessRunHandleParts		PORTED	subagent.SubprocessRunParts	

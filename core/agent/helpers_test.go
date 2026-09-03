@@ -6,8 +6,6 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -17,11 +15,11 @@ import (
 	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
-// testAbsolutePath 是一条在本机上确实绝对的路径。
+// testWorkspaceID 是这些用例里那个会话归属的工作区登记。
 //
-// 理由和 core/session 那一处逐字相同：写死哪一边的字面量都会让另一个平台上的
-// 测试变成假通过。
-var testAbsolutePath = filepath.Join(os.TempDir(), "ds-harness-go-agent-test")
+// 新增: 它是一个不透明标识，不是路径，也和文件系统里有什么东西没有关系，
+// 见 [sessionlog.SessionHeader.WorkspaceID]。
+var testWorkspaceID = sessionlog.WorkspaceID("ws-agent-test")
 
 // fixedClock 是一个走得可预测的时钟：每读一次加一毫秒。
 func fixedClock() func() int64 {
@@ -51,7 +49,7 @@ func keyedScope(t testing.TB, label string, parent *scope.Key) *scope.Scope {
 // newFreeSession 造一个游离会话，seed 由调用方给（nil 表示不给）。
 func newFreeSession(t testing.TB, id sessionlog.SessionID, seed []sessionlog.Event) *session.Session {
 	t.Helper()
-	header := sessionlog.SessionHeader{ID: id, Cwd: testAbsolutePath, SeedLength: len(seed)}
+	header := sessionlog.SessionHeader{ID: id, WorkspaceID: testWorkspaceID, SeedLength: len(seed)}
 	live, err := session.NewSession(id, session.Options{
 		Seed:   seed,
 		Header: &header,
@@ -82,7 +80,7 @@ func busyInbox(t testing.TB) (*Inbox, func(body func())) {
 	if err != nil {
 		t.Fatalf("造会话存储失败：%v", err)
 	}
-	live, err := store.Prepare("busy", session.CreateOptions{Cwd: testAbsolutePath})
+	live, err := store.Prepare("busy", session.CreateOptions{WorkspaceID: testWorkspaceID})
 	if err != nil {
 		t.Fatalf("备会话失败：%v", err)
 	}

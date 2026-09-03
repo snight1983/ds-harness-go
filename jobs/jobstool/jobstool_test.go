@@ -92,6 +92,7 @@ type stubService struct {
 	read jobs.Read
 
 	// 这几个不为 nil 时对应那一次调用失败。
+	listErr    error
 	readErr    error
 	getErr     error
 	killErr    error
@@ -109,9 +110,14 @@ type stubService struct {
 	waits []waitCall
 }
 
-func (s *stubService) List(agent.Agent) []jobs.Snapshot { return s.snapshots }
+func (s *stubService) List(_ context.Context, _ agent.Agent) ([]jobs.Snapshot, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	return s.snapshots, nil
+}
 
-func (s *stubService) Get(id jobs.JobID, _ agent.Agent) (jobs.Snapshot, error) {
+func (s *stubService) Get(_ context.Context, id jobs.JobID, _ agent.Agent) (jobs.Snapshot, error) {
 	if s.getErr != nil {
 		return jobs.Snapshot{}, s.getErr
 	}
@@ -123,14 +129,19 @@ func (s *stubService) Get(id jobs.JobID, _ agent.Agent) (jobs.Snapshot, error) {
 	return jobs.Snapshot{}, errors.New("no such job")
 }
 
-func (s *stubService) Read(jobs.JobID, agent.Agent) (jobs.Read, error) {
+func (s *stubService) Read(context.Context, jobs.JobID, agent.Agent) (jobs.Read, error) {
 	if s.readErr != nil {
 		return jobs.Read{}, s.readErr
 	}
 	return s.read, nil
 }
 
-func (s *stubService) Kill(id jobs.JobID, caller agent.Agent, reason string) (jobs.KillResult, error) {
+func (s *stubService) Kill(
+	_ context.Context,
+	id jobs.JobID,
+	caller agent.Agent,
+	reason string,
+) (jobs.KillResult, error) {
 	s.kills = append(s.kills, killCall{id: id, caller: caller, reason: reason})
 	if s.killErr != nil {
 		return "", s.killErr
@@ -640,11 +651,32 @@ func TestOnlyTheTwoJobTargetedToolsHaveABudget(t *testing.T) {
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
-			got, ok := controller.visibleOutputLimit(item.exec)
+			got, ok := controller.visibleOutputLimit(t.Context(), item.exec)
 			if ok != item.wantAny || got != item.want {
 				t.Fatalf("查出来的是 (%d, %v)，要的是 (%d, %v)", got, ok, item.want, item.wantAny)
 			}
 		})
+	}
+}
+
+// TestALedgerFailureLeavesTheCallUnbounded 钉住那条旁路的失败姿态：账本读不出来时
+// 这次调用得不到预算，而不是拿到一个 0（那会把整段内容当场截光）。
+//
+// 新增: 这一条本仓库自有——列举现在会失败（见
+// [github.com/snight1983/ds-harness-go/jobs/jobs.Registry]），
+// 而它失败的出口必须和「这件作业没有上限」是同一个。
+func TestALedgerFailureLeavesTheCallUnbounded(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	w.service.snapshots = []jobs.Snapshot{{ID: "j1", OutputLimitBytes: 64}}
+	w.service.listErr = errors.New("账本读不动")
+	controller := w.controller(nil)
+
+	got, ok := controller.visibleOutputLimit(
+		t.Context(), execFor(OutputToolName, `{"job_id":"j1"}`, w.agentScope.Key()))
+	if ok || got != 0 {
+		t.Fatalf("账本读不出来时查出来的是 (%d, %v)，该是 (0, false)", got, ok)
 	}
 }
 

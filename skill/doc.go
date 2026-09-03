@@ -27,7 +27,7 @@
 //
 // # 缓存与 revision
 //
-// 一次 collect 会问遍每个提供方，那是真 I/O。所以结果按「cwd + 作用域链 + revision」
+// 一次 collect 会问遍每个提供方，那是真 I/O。所以结果按「工作目录 + 作用域链 + revision」
 // 缓存起来，任何一次注册变动都把 revision 加一并清空缓存。**不完整**的发现结果
 // （某个提供方报错了、或者它自己说 Incomplete）永远不进缓存：消费方拿到
 // [CatalogSnapshot].Complete 为假时应当留着上一份好的，下一个请求边界再试。
@@ -39,7 +39,7 @@
 // [Options].OnChange 这个回调——和 core/tools 那边一样。
 //
 // 新增: AbortSignal → [context.Context]。DSH 的 SkillLookupOptions 上带一个 signal，
-// Go 里 ctx 是第一个参数，所以 [LookupOptions] 和 [ViewOptions] 里只剩 cwd 和 scope。
+// Go 里 ctx 是第一个参数，所以 [LookupOptions] 和 [ViewOptions] 里只剩工作目录和作用域两项。
 //
 // 新增: DSH 的 provider.list() 可以返回「一个数组」或者「一份 {candidates, complete}
 // 观察」，normalizeProviderObservation 在运行期分辨这两种形状。Go 有类型，只留

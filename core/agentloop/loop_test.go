@@ -875,7 +875,7 @@ func TestUnwindTakesTheFactoryAndItsVariablesBackOff(t *testing.T) {
 		t.Error("造法该已经摘掉了")
 	}
 
-	// 同一个舞台上能再装一个，说明那三个变量的名字也让出来了。
+	// 同一个舞台上能再装一个，说明那两个变量的名字也让出来了。
 	if _, second, err := New(ctx, world.deps, world.owner, Config{Logger: quietLogger()}); err != nil {
 		t.Errorf("拆干净之后该能再装一个：%v", err)
 	} else {
@@ -885,10 +885,12 @@ func TestUnwindTakesTheFactoryAndItsVariablesBackOff(t *testing.T) {
 
 // ---- 系统提示词变量 ----
 
-// TestTheAgentVariablesReadFromTheAgentOnThatScope 钉住那三个变量从**这个作用域上
+// TestTheAgentVariablesReadFromTheAgentOnThatScope 钉住那两个变量从**这个作用域上
 // 那个 agent** 身上读。
 //
 // 源: packages/core/agent-loop/src/index.ts:377-379
+//
+// 新增: DSH 那边是三个，第三个 `cwd` 本仓库没有登记，理由见 [New] 里那条说明。
 //
 // 系统提示词里 `{{model}}` 这种引用，说的是「正在跑这一步的那个 agent 的模型」。
 // 读错对象的话，一个进程里同时跑着两个走不同模型的 agent，其中一个的提示词里会
@@ -899,13 +901,9 @@ func TestTheAgentVariablesReadFromTheAgentOnThatScope(t *testing.T) {
 	world := newFactoryWorld(t)
 	loop := world.install(t, Config{})
 
-	// 会话头要求工作目录是**本机**意义上的绝对路径（见 core/session 那条校验），
-	// 所以这里不能写一个手搓的字面量——它在 Windows 上不成立。
-	cwd := t.TempDir()
-
 	ctx := context.Background()
 	live, err := loop.Create(ctx, "带变量的",
-		agent.Options{Provider: "甲", Model: "m-1"}, cwd)
+		agent.Options{Provider: "甲", Model: "m-1"}, "ws-带变量的")
 	if err != nil {
 		t.Fatalf("造 agent 失败：%v", err)
 	}
@@ -915,7 +913,7 @@ func TestTheAgentVariablesReadFromTheAgentOnThatScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("装配失败：%v", err)
 	}
-	want := map[string]string{"provider": "甲", "model": "m-1", "cwd": cwd}
+	want := map[string]string{"provider": "甲", "model": "m-1"}
 	for name, expected := range want {
 		value, registered := assembly.Variables[name]
 		if !registered {
@@ -929,7 +927,7 @@ func TestTheAgentVariablesReadFromTheAgentOnThatScope(t *testing.T) {
 }
 
 // TestTheAgentVariablesAreAbsentOffAnyAgent 钉住一次不属于任何 agent 的装配里
-// 那三个变量**没有值**。
+// 那两个变量**没有值**。
 //
 // 源: packages/core/agent-loop/src/index.ts:377-379（DSH 那三行的 `?.` 短路）
 //
@@ -947,7 +945,7 @@ func TestTheAgentVariablesAreAbsentOffAnyAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("装配失败：%v", err)
 	}
-	for _, name := range []string{"provider", "model", "cwd"} {
+	for _, name := range []string{"provider", "model"} {
 		value, registered := assembly.Variables[name]
 		if !registered {
 			t.Errorf("变量 %q 该登记过", name)
@@ -1671,12 +1669,12 @@ func TestAConfiguredResumingEntryRebuildsOnTheArchivedSession(t *testing.T) {
 // 源: packages/core/agent-loop/src/index.ts:405-410
 //
 // 这一支和 restore 那一支有一处关键的不同：restore 读不回来时会**回落到新建**
-//（见 [AgentLoop.restoreOrCreateConfigured]），而续跑没有回落——配置说的是
+// （见 [AgentLoop.restoreOrCreateConfigured]），而续跑没有回落——配置说的是
 // 「接着上次跑」，凭空造一个空会话不是它要的东西。所以这里除了通报之外什么都
 // 不做，而那条通报就是消费方唯一的信号。
 //
 // 观察者得在这一项起步之前挂上，所以不走 world.install，自己拼一遍装配次序
-//（同 [TestAResumingEntryWithoutPersistenceIsReportedNotHung]）。
+// （同 [TestAResumingEntryWithoutPersistenceIsReportedNotHung]）。
 func TestAConfiguredResumeThatFailsIsReported(t *testing.T) {
 	t.Parallel()
 

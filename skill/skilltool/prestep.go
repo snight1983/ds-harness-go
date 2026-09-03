@@ -348,7 +348,7 @@ func (c *Controller) viewOptions(target agent.Agent) skill.ViewOptions {
 	}
 	options := skill.ViewOptions{Scope: target.Scope().Key()}
 	if sess := target.Session(); sess != nil {
-		options.Cwd = sess.Header().Cwd
+		options.WorkspaceID = sess.Header().WorkspaceID
 	}
 	return options
 }

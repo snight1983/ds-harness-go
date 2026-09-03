@@ -275,8 +275,11 @@ type CreateOptions struct {
 	// [Store.Fork] 把来源的 [Session.BaseSeq] 原样带过来。
 	BaseSeq int
 
-	// Cwd 是这个会话的工作目录，必须是本机上的绝对路径。存储后端拿它做目录键。
-	Cwd string
+	// WorkspaceID 是这个会话属于哪一条工作区登记；空串表示不属于任何工作区。
+	//
+	// 新增: DSH 这里是 `cwd`，一条宿主机绝对路径。换成不透明归属标识的理由见
+	// [sessionlog.SessionHeader.WorkspaceID]。
+	WorkspaceID sessionlog.WorkspaceID
 
 	// ParentSession 是分叉来源的标识。
 	ParentSession sessionlog.SessionID
@@ -396,7 +399,7 @@ func (s *Store) Prepare(id sessionlog.SessionID, options CreateOptions) (*Sessio
 		Version:         sessionlog.FormatVersion,
 		ID:              sessionID,
 		CreatedAt:       createdAt,
-		Cwd:             options.Cwd,
+		WorkspaceID:     options.WorkspaceID,
 		ParentSession:   options.ParentSession,
 		SeedLength:      options.SeedLength,
 		Origin:          options.Origin,

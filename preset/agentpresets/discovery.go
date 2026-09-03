@@ -15,6 +15,8 @@ import (
 	"strings"
 
 	yaml "go.yaml.in/yaml/v3"
+
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // CompositionFile 是那份让一个目录成为预设的组合文件。
@@ -102,8 +104,8 @@ func entryListProblem(node *yaml.Node, at string) string {
 // compositionProblem 说清 path 上那份组合为什么装不了，能装就给空串。
 //
 // 源: packages/preset/agent-presets/src/discovery.ts:86-106
-func compositionProblem(ctx context.Context, store Store, file string) string {
-	content, err := store.ReadFile(ctx, file)
+func compositionProblem(ctx context.Context, fsys fs.FileSystem, file string) string {
+	content, err := readFile(ctx, fsys, file)
 	if err != nil {
 		// 调用方刚刚才看过这个文件；此刻任何读失败——中间被删了、权限——
 		// 和解不动是同一个答案。
@@ -125,11 +127,11 @@ func compositionProblem(ctx context.Context, store Store, file string) string {
 // isFile 判一条路径上是不是一个存在的常规文件。
 //
 // 源: packages/preset/agent-presets/src/discovery.ts:113-122
-func isFile(ctx context.Context, store Store, file string) bool {
-	entry, found, err := store.Stat(ctx, file)
+func isFile(ctx context.Context, fsys fs.FileSystem, file string) bool {
+	info, found, err := statPath(ctx, fsys, file)
 	// 任何看不成——不在、读不了、断链——都表示这个目录没有摆出一份组合，
 	// 而那不是错误：这个目录只是不是一份预设。
-	return err == nil && found && entry.Regular
+	return err == nil && found && info.Type == fs.TypeFile
 }
 
 // ScanRoot 扫一个根，找出它下面的预设目录。
@@ -142,9 +144,9 @@ func isFile(ctx context.Context, store Store, file string) bool {
 // 每一个名字能当预设 id 用的目录都是一行名册项——组合缺了或者装不动时带上 Broken。
 // 一个名字在 [IsPresetID] 之外的目录则**跳过**：没有任何副本能取到那个名字，所以它
 // 什么都不挡；而把 `.DS_Store` 那个量级的残渣报成坏掉的预设，只会教会用户无视这个标记。
-func ScanRoot(ctx context.Context, store Store, root Root) ([]Preset, error) {
+func ScanRoot(ctx context.Context, fsys fs.FileSystem, root Root) ([]Preset, error) {
 	dir := path.Clean(root.Path)
-	children, found, err := store.List(ctx, dir)
+	children, found, err := listDir(ctx, fsys, dir)
 	if err != nil {
 		return nil, fmt.Errorf("agent-presets: 读不了预设根 %s：%w", dir, err)
 	}
@@ -153,19 +155,19 @@ func ScanRoot(ctx context.Context, store Store, root Root) ([]Preset, error) {
 	}
 	presets := make([]Preset, 0, len(children))
 	for _, child := range children {
-		if !child.Dir || !IsPresetID(child.Name) {
+		if child.Type != fs.TypeDirectory || !IsPresetID(child.Name) {
 			continue
 		}
 		directory := path.Join(dir, child.Name)
 		file := path.Join(directory, CompositionFile)
 		broken := "the composition file " + CompositionFile +
 			" is missing — the directory still occupies the id; delete it or restore the file"
-		if isFile(ctx, store, file) {
-			broken = compositionProblem(ctx, store, file)
+		if isFile(ctx, fsys, file) {
+			broken = compositionProblem(ctx, fsys, file)
 		}
 		// 只有展示文字，而且永不致命：一份元数据读不出来的预设照样装得起来，
 		// 它只是显示自己的 id。
-		metadata := ReadMetadata(ctx, store, directory)
+		metadata := ReadMetadata(ctx, fsys, directory)
 		presets = append(presets, Preset{
 			ID:          child.Name,
 			Trust:       root.Trust,
@@ -200,11 +202,11 @@ func orderOf(preset Preset) float64 {
 // 源: packages/preset/agent-presets/src/discovery.ts:325-343（discoverPresets）
 //
 // 靠前的根赢下重名的 id。
-func DiscoverPresets(ctx context.Context, store Store, roots []Root) ([]Preset, error) {
+func DiscoverPresets(ctx context.Context, fsys fs.FileSystem, roots []Root) ([]Preset, error) {
 	seen := make(map[string]struct{}, len(roots)*4)
 	var all []Preset
 	for _, root := range roots {
-		presets, err := ScanRoot(ctx, store, root)
+		presets, err := ScanRoot(ctx, fsys, root)
 		if err != nil {
 			return nil, err
 		}

@@ -735,7 +735,7 @@ func TestPrependReportsWhatTheInboxRefused(t *testing.T) {
 // 从这把锁里走一遍。
 //
 // 不在队里就静默返回，是 [github.com/snight1983/ds-harness-go/core/agent.Inbox.Remove] 那边定的
-//（找不到时交回 false 而不是错）。这条得在这一层也钉住：使用者按下取消的那一刻，
+// （找不到时交回 false 而不是错）。这条得在这一层也钉住：使用者按下取消的那一刻，
 // 那条消息完全可能刚好被一个步骤认领走，而那不是任何人的错，不该走出错那条边。
 //
 // 断言从一件维护活儿**里面**做，理由见 [TestSendTargetsTheRightInboxBoundary]。
@@ -776,7 +776,7 @@ func TestRemoveTakesOneQueuedMessageAndLeavesTheRestAlone(t *testing.T) {
 // 新增: 理由同 [TestRemoveTakesOneQueuedMessageAndLeavesTheRestAlone]。
 //
 // 「原地」是这个方法的全部意义：它的用途是一条排队的输入在跑之前被改写
-//（比如插件把一句话补全）。做成「删掉再放到队尾」的话，改一个字就会把它挪到
+// （比如插件把一句话补全）。做成「删掉再放到队尾」的话，改一个字就会把它挪到
 // 后来那些消息的后面，模型看见的先后跟人写的先后对不上。
 func TestReplaceSwapsTheMessageInPlaceKeepingItsPosition(t *testing.T) {
 	t.Parallel()
@@ -856,7 +856,7 @@ func TestStatusReadsThePhaseThatIsLiveRightNow(t *testing.T) {
 // 源: packages/core/agent-loop/src/agent.ts:416
 //
 // [ExecuteToolCalls] 那边只验到「交给了接收方」
-//（[TestExecuteToolCallsHandsCommittedContextsToTheSink] 用的是一个桩接收方），
+// （[TestExecuteToolCallsHandsCommittedContextsToTheSink] 用的是一个桩接收方），
 // 而循环自己那个接收方 acceptToolContext 把它排进 next-step 队尾——**这段接线
 // 从来没有被验过**。断在这里的话，一个靠捎话传指令的工具（「接下来请只读不写」）
 // 会静默失效，而两头的用例都还是绿的。
@@ -898,8 +898,8 @@ func TestAToolsDeferredContextReachesTheNextStep(t *testing.T) {
 //
 // 和 [TestAToolsDeferredContextReachesTheNextStep] 同一个毛病的另一半：
 // [ExecuteToolCalls] 那边只验到「这一位报上来了」
-//（[TestExecuteToolCallsReportsAResultThatConcludesTheTurn]），而循环拿它去停
-//**从来没有被验过**。断在这里的话，一个把答复交回给用户的收尾工具跑完之后，
+// （[TestExecuteToolCallsReportsAResultThatConcludesTheTurn]），而循环拿它去停
+// **从来没有被验过**。断在这里的话，一个把答复交回给用户的收尾工具跑完之后，
 // 循环会接着发下一次请求——而那个工具说的正是「别再发了」。多出来的那一次是
 // 真花钱的，而且模型会对着一份已经了结的对话再说一遍。
 func TestAToolThatConcludesTheTurnStopsTheLoop(t *testing.T) {

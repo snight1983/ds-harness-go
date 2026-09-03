@@ -161,6 +161,49 @@ type Snapshot struct {
 	Global json.RawMessage
 }
 
+// Revision 是一条记录（或全局槽）在介质上的**不透明**修订标识。
+//
+// 新增: DSH 没有这个概念。它那边整个存储层跑在一个进程里，读出来的值到写回去
+// 之间不会有第二个写者，所以「我读的还是不是最新的」这个问题问不出来。
+// 这个服务是多副本的，那个问题不但问得出来，而且不问就会丢更新。
+//
+// 不透明是有意的：调用方只能拿它原样回传给 [ReplaceIfRevision]，不能比大小、
+// 不能自己造一个。后端可以拿它装一个自增计数、一个 ETag 或者一个时间戳，
+// 换实现时不必担心有人依赖了它的内部形状。空串表示「这条记录不存在」。
+type Revision string
+
+// WriteIntent 是一次写的**前置条件**，封闭的两种。
+//
+// 新增: 形状照 [github.com/snight1983/ds-harness-go/fs.WriteIntent] 抄，不发明第二套——
+// 同一个仓库里两处「条件写」长得不一样的话，装配方要记两遍。
+//
+// 传 nil 表示无条件覆盖，**它不是第三个成员**：没有前置条件这件事的表达方式是
+// 这个值不存在，而不是一个叫「无条件」的成员。多一个成员就多一处要分派的分支，
+// 而那个分支和 nil 分支永远做同一件事。
+type WriteIntent interface {
+	sealedWriteIntent()
+}
+
+// CreateIfAbsent 要求这条记录此刻**不存在**。
+//
+// 已经存在时返回 Code 为 [CodeStaleRevision] 的 *[Error]。后端必须让「不存在才写」
+// 在介质上是一次原子操作（SQL 的 ON CONFLICT DO NOTHING 一类），**不许**先查一次
+// 再写一次——那两步之间正是别的副本插进来的地方。
+type CreateIfAbsent struct{}
+
+func (CreateIfAbsent) sealedWriteIntent() {}
+
+// ReplaceIfRevision 要求这条记录此刻的修订标识**正好**是 Revision。
+//
+// 对不上（包括记录已经被删掉）时返回 Code 为 [CodeStaleRevision] 的 *[Error]。
+// 这是读-改-写唯一安全的收尾方式：拿 [KVUnit.ReadRecord] 给出的那个修订标识回传，
+// 中间被别的副本改过就写不进去。
+type ReplaceIfRevision struct {
+	Revision Revision
+}
+
+func (ReplaceIfRevision) sealedWriteIntent() {}
+
 // KVUnit 是一个已打开的单元。
 //
 // 源: packages/storage/storage/src/backend.ts:66-115（KvUnit）
@@ -177,20 +220,69 @@ type Snapshot struct {
 // 而 any 会逼着它在某处做一次编解码——那次编解码就是解释。更要命的是，
 // 一个 Go 里编不出来的值（chan、func、循环引用）在 any 下要等到写的那一刻才失败，
 // 而那时它已经在事务里了。RawMessage 把「这是一段已经成型的 JSON」变成类型层面的事实。
+// 新增: 单条读（[KVUnit.ReadRecord] / [KVUnit.ReadGlobal]）和写上那个前置条件参数
+// 都是本仓库加的。DSH 只有整单元快照读加无条件写，因为它上面那一层把权威状态放在
+// 进程内存里，读根本不到这一层来。这个服务是多副本的，进程内存不再是权威，
+// 每次读都得穿到介质；而穿到介质的读一旦要改回去，就必须能说清「我改的是哪一版」。
 type KVUnit interface {
 	// LoadAll 读出当前的完整快照。
 	LoadAll(ctx context.Context) (Snapshot, error)
 
-	// PutRecord 持久地写入一条记录。**覆盖语义**：已存在的键被替换。
+	// LoadTable 只读出其中一张表的全部记录。
+	//
+	// 声明过而一条记录都没有的表、以及压根没声明过的表，都交出一张**空 map 而不是
+	// nil**——调用方问的是「这张表里有什么」，答案是「什么都没有」。
+	//
+	// 新增: DSH 没有这个方法，因为那边整张表本来就躺在进程内存里，要哪张挑哪张。
+	// 读穿到介质之后，「列一张表」如果只能走 [KVUnit.LoadAll]，就得把同一个单元里
+	// 其余的表全部白读一遍。这一条把那份浪费去掉。
+	//
+	// 它**不保证**跨表一致：要几张表在同一时刻的样子，走 [KVUnit.LoadAll]。
+	LoadTable(ctx context.Context, table string) (map[string]json.RawMessage, error)
+
+	// ReadRecord 读出单独一条记录，连同它此刻的修订标识。
+	//
+	// 第三个返回值为 false 表示这条记录不存在，此时值为 nil、修订标识为空串。
+	// **不存在不是错误**：调用方问的就是「在不在」。
+	ReadRecord(ctx context.Context, table, key string) (json.RawMessage, Revision, bool, error)
+
+	// ReadGlobal 读出全局单例槽，连同它此刻的修订标识。
+	//
+	// 只有描述符声明了 HasGlobal 时才合法。从没写过时值为 nil、修订标识为空串。
+	ReadGlobal(ctx context.Context) (json.RawMessage, Revision, error)
+
+	// PutRecord 持久地写入一条记录，返回写完之后的修订标识。
+	//
+	// expected 为 nil 时是**覆盖语义**：已存在的键被替换。给了前置条件而条件不成立时，
+	// 介质上一个字都不许改，并返回 Code 为 [CodeStaleRevision] 的 *[Error]。
+	//
+	// 每一次成功的写都必须换一个新的修订标识，**即使写进去的值和原来一模一样**。
+	// 不换的话，一个「读到 rev=3、写了个相同的值、还是 rev=3」的序列会让另一个副本
+	// 的守卫误判成「没人动过」。
 	//
 	// key 可以是任意字符串——记录键永远不会出现在文件路径里，这是后端的义务。
-	PutRecord(ctx context.Context, table, key string, value json.RawMessage) error
+	PutRecord(ctx context.Context, table, key string, value json.RawMessage, expected WriteIntent) (Revision, error)
 
-	// DeleteRecord 持久地删掉一条记录。**幂等**：键不存在就什么也不做，不是错误。
-	DeleteRecord(ctx context.Context, table, key string) error
+	// DeleteRecord 持久地删掉一条记录，返回它删之前在不在。
+	//
+	// expected 为 nil 时**幂等**：键不存在就什么也不做，返回 false 而不是错误。
+	// 给了修订标识而对不上（包括记录已经不在了）时返回 [CodeStaleRevision]，
+	// 且介质上一个字都不许改。
+	//
+	// 新增: 参数是 *[ReplaceIfRevision] 而不是 [WriteIntent]。删这一侧只有
+	// 「必须还是那一版」讲得通——[CreateIfAbsent] 落到删上是「删一个必须不存在的
+	// 东西」，那句话没有意义，而收下一个没有意义的输入就得在运行期把它拒掉。
+	// 用更窄的类型，它在编译期就写不出来。
+	//
+	// 返回「删之前在不在」也是本仓库加的：上面那一层的 Delete 要回答这件事，
+	// 而它以前是拿进程内存里那份状态回答的。读穿到介质之后，只有真正执行删除的
+	// 那条语句知道答案，先查一次再删会在两步之间被别的副本抢走。
+	DeleteRecord(ctx context.Context, table, key string, expected *ReplaceIfRevision) (bool, error)
 
-	// SetGlobal 持久地写入全局单例槽。只有描述符声明了 HasGlobal 时才合法。
-	SetGlobal(ctx context.Context, value json.RawMessage) error
+	// SetGlobal 持久地写入全局单例槽，返回写完之后的修订标识。
+	//
+	// 只有描述符声明了 HasGlobal 时才合法。前置条件的语义和 [KVUnit.PutRecord] 一致。
+	SetGlobal(ctx context.Context, value json.RawMessage, expected WriteIntent) (Revision, error)
 
 	// Close 把这个单元在途的写排干并释放它。**幂等**。
 	Close(ctx context.Context) error

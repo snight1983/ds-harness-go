@@ -28,7 +28,7 @@ func TestSessionHeaderDropsItsAbsentOptionalFields(t *testing.T) {
 
 	full := SessionHeader{
 		Version: FormatVersion, ID: "s2", CreatedAt: 8,
-		Cwd: "/w", ParentSession: "s1", SeedLength: 3,
+		WorkspaceID: "ws-1", ParentSession: "s1", SeedLength: 3,
 		Origin: OriginSubagent, DelegationDepth: 1, AgentPreset: "coder",
 	}
 	line, err := json.Marshal(full)

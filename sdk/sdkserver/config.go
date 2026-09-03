@@ -15,6 +15,7 @@ import (
 	coresession "github.com/snight1983/ds-harness-go/core/session"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/sdk/sdkprotocol"
+	sessionlog "github.com/snight1983/ds-harness-go/session"
 	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
@@ -64,6 +65,25 @@ type LLMService interface {
 // 它为 nil，或者它交回错误，都等于 DSH 那句 `no adapter registered for provider`。
 type MountAdapter func(ctx context.Context, provider string) (func(context.Context) error, error)
 
+// WorkspaceLookup 是这台服务器用得到的那一块工作区登记册：把握手时报上来的那条
+// cwd 换成一个工作区标识。
+//
+// 新增: DSH 没有这样东西——它把握手那条 `cwd` 原样写进每一个会话头，那条路径在服务端
+// 一路往下传。本仓库的会话头记的是一个不透明的工作区标识（见
+// [sessionlog.SessionHeader.WorkspaceID]），而握手报上来的 cwd 是**客户端那台机器**上
+// 的写法：它和服务端认识的任何东西都不在一个命名空间里。两者之间怎么对应只有装配方
+// 答得出来，所以摆成一个显式的窄口子（成例同 [LLMService]），而这条换算就是 cwd
+// 这个概念在服务端的终点。
+//
+// 它可以为 nil，那时这条线上建出来的会话都不属于任何工作区——和「挂了登记册但这条
+// cwd 没人认领」是同一件事。
+type WorkspaceLookup interface {
+	// WorkspaceOf 把客户端报上来的一条 cwd 换成一个工作区标识。
+	//
+	// 第二个返回值为假表示这条 cwd 没有对应的工作区登记。
+	WorkspaceOf(ctx context.Context, cwd string) (sessionlog.WorkspaceID, bool, error)
+}
+
 // Config 是这台服务器的装配面。
 //
 // 源: packages/sdk/server/src/index.ts:24-34（JsonRpcConfig）,
@@ -110,6 +130,9 @@ type Config struct {
 
 	// MountAdapter 是那条可选的兜底路，可以为 nil，见 [MountAdapter]。
 	MountAdapter MountAdapter
+
+	// Workspaces 是那一小块工作区登记册，可以为 nil，见 [WorkspaceLookup]。
+	Workspaces WorkspaceLookup
 
 	// MaxTokensAsSuccess 为真表示「撞上输出上限」算一个被接受的结果，而不是一次
 	// 基础设施错误。

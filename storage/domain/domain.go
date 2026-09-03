@@ -1,22 +1,33 @@
-// 本文件的作用：一个已打开的域的运行期——权威内存态、那条**唯一**的写链、变更事件的发出。
+// 本文件的作用：一个已打开的域的运行期——读穿到介质、那条**唯一**的写链、变更事件的发出。
 //
 // 源: packages/storage/storage-domain/src/domain.ts:1-10
 //
 // 三条不变量，整个包都建在它们上面：
 //
-//  1. **读是同步的**，直接从内存拿，不碰介质。
-//  2. **写按顺序过同一条链**：先等后端确认落盘，**再**改内存，**再**发事件。
-//  3. **落盘失败就什么都不动**：内存不变，事件不发。读到的东西和介质上的东西不会分叉。
+//  1. **本包不持有权威状态**：每一次读都穿到介质。
+//  2. **写按顺序过同一条链**：先等后端确认落盘，**再**发事件。
+//  3. **落盘失败就什么都不动**：事件不发。
 //
-// 第 2 条的次序不能换。先改内存再落盘的话，一次失败的写会在内存里留下一个介质上
-// 根本不存在的值，而重启之后它凭空消失；先发事件再落盘的话，订阅者会收到一次
-// 没有发生过的变更，并且照着它去做后续的事。
+// 新增: 第 1 条是本仓库改掉的。DSH 那边写的是「读是同步的，直接从内存拿，不碰介质」，
+// 因为它是一个单进程的桌面工具——进程内存就是权威，没有第二个写者。这个服务是多副本
+// 部署的：A 副本写下的记录，B 副本的内存里不会有；照着内存回答，B 会说「没有这个东西」。
+// 所以权威搬回介质，内存里一份都不留。
+//
+// 代价是每一次读都是一次往返，所以所有的读都收 ctx——它们会失败、会超时、会被取消，
+// 而一个不收 ctx 的读没地方说这三件事。
+//
+// 第 2 条的次序不能换：先发事件再落盘的话，订阅者会收到一次没有发生过的变更，
+// 并且照着它去做后续的事。
+//
+// 第 2 条那条写链只把**本副本**的写串起来。它挡不住别的副本——那件事由
+// [Table.Update] 上的条件写挡，见那里。
 
 package domain
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -25,23 +36,15 @@ import (
 	"github.com/snight1983/ds-harness-go/storage"
 )
 
-// record 是内存里一条记录的两面：登记方的类型化值，和它的 JSON 投影。
+// updateAttempts 是 [Table.Update] 撞上别的副本时重试几次。
 //
-// 新增: DSH 只留解析后的值，事件里带的也是它。这里两面都留，各有各的用处：
-// typed 面给 [Table] 的读，raw 面给 [Changed] 和不变量检查。
-// 两面在同一次写里一起换掉，所以它们永远说的是同一件事——这正是本包那条
-// 不变量（事件里的值 == 此刻的内存态）检查的东西。
-type record struct {
-	typed any
-	raw   json.RawMessage
-}
-
-// tableState 是一张表的内存态。
-type tableState struct {
-	spec TableSpec
-	// records 由 Domain.mutex 保护。
-	records map[string]record
-}
+// 新增: 上限存在的理由是「一直重试」和「死循环」在现场分不出来：一条被别的副本
+// 高频改写的记录会让调用方永远停在这里，而它看起来只是慢。撞上限之后原样交回
+// 后端那条 [storage.CodeStaleRevision]，调用方自己决定是重来还是放弃。
+//
+// 取 5 是因为每一轮都真的重读了一次最新值：连着五次都恰好被别人插进来，
+// 说明这条记录本来就在被抢，再多试几次也换不来别的结果。
+const updateAttempts = 5
 
 // Domain 是一个已打开的域。
 //
@@ -65,7 +68,7 @@ type Domain struct {
 	// Go 的互斥量天生没有这个问题：失败的那次解锁了就完事。
 	//
 	// 唯一的差别是 DSH 的链严格先进先出，而 Go 的互斥量不保证等待者顺序。
-	// 这一点不影响任何一条契约：删除和更新都在**轮到自己的那一刻**重新看内存，
+	// 这一点不影响任何一条契约：删除和更新都在**轮到自己的那一刻**才去读介质，
 	// 而两个真并发的调用之间本来就没有「谁先」可言。
 	writeMutex sync.Mutex
 
@@ -83,12 +86,15 @@ type Domain struct {
 	closeOnce sync.Once
 	closeErr  error
 
+	// mutex 只保护 closed 这一个字段。
+	//
+	// 新增: 它以前还保护那几张内存表。表没了之后剩下的就只有这个标志位——
+	// 留着一把锁而不是换成原子布尔，是因为「读到 closed」和「拒掉这次调用」
+	// 之间不能被 [Domain.runClose] 插进来。
 	mutex  sync.RWMutex
 	closed bool
-	// tables 建好之后**这张表本身**不再变（变的是每张表里的 records），
-	// 所以按表名取 tableState 不需要加锁。
-	tables map[string]*tableState
-	global record
+	// tables 是按表名索引的声明，建好之后不再变，所以取它不需要加锁。
+	tables map[string]TableSpec
 }
 
 // Name 是这个域的域名。
@@ -113,34 +119,47 @@ func (d *Domain) TableNames() []string {
 // 这是诊断面，对应 DSH 那边 DomainFacility.get 交出来的那个不带类型的 DomainImpl：
 // 本包自己的不变量检查要拿它和事件里的值对，而检查按定义不知道记录是什么 Go 类型。
 // 正常的使用方手上有 [Table] 句柄，读那个。
-func (d *Domain) RawRecord(table, key string) (json.RawMessage, bool, error) {
-	state, declared := d.tables[table]
-	if !declared {
-		return nil, false, fmt.Errorf("storage/domain: 域 %q 没有声明表 %q", d.spec.Name, table)
+func (d *Domain) RawRecord(
+	ctx context.Context, table, key string,
+) (json.RawMessage, storage.Revision, bool, error) {
+	if _, declared := d.tables[table]; !declared {
+		return nil, "", false, fmt.Errorf("storage/domain: 域 %q 没有声明表 %q", d.spec.Name, table)
 	}
-	d.mutex.RLock()
-	defer d.mutex.RUnlock()
-	if d.closed {
-		return nil, false, d.closedError()
+	if err := d.live(); err != nil {
+		return nil, "", false, err
 	}
-	stored, exists := state.records[key]
-	if !exists {
-		return nil, false, nil
-	}
-	return stored.raw, true, nil
+	return d.unit.ReadRecord(ctx, table, key)
 }
 
 // RawGlobal 读全局值的 JSON 投影，**不带类型**，用途同 [Domain.RawRecord]。
-func (d *Domain) RawGlobal() (json.RawMessage, error) {
+//
+// 介质上还没写过全局槽时交回的是声明里那份初值的投影，和 [Global.Get] 一致——
+// 这两条路要是对同一个「还没写过」给出不同的答案，不变量检查会抓着一个假问题不放。
+func (d *Domain) RawGlobal(ctx context.Context) (json.RawMessage, storage.Revision, error) {
 	if d.spec.Global == nil {
-		return nil, fmt.Errorf("storage/domain: 域 %q 没有声明全局槽", d.spec.Name)
+		return nil, "", fmt.Errorf("storage/domain: 域 %q 没有声明全局槽", d.spec.Name)
 	}
+	if err := d.live(); err != nil {
+		return nil, "", err
+	}
+	raw, revision, err := d.unit.ReadGlobal(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	if isJSONNull(raw) {
+		return d.spec.Global.initialRaw, "", nil
+	}
+	return raw, revision, nil
+}
+
+// live 判这个域此刻还开着没有。
+func (d *Domain) live() error {
 	d.mutex.RLock()
 	defer d.mutex.RUnlock()
 	if d.closed {
-		return nil, d.closedError()
+		return d.closedError()
 	}
-	return d.global.raw, nil
+	return nil
 }
 
 // Close 关掉这个域。
@@ -218,7 +237,7 @@ func (d *Domain) closedError() error {
 //
 // 源: packages/storage/storage-domain/src/domain.ts:246-261
 //
-// 订阅者炸掉只记日志，不往上报：提交点已经过了，介质和内存都拿着新值，
+// 订阅者炸掉只记日志，不往上报：提交点已经过了，介质上拿着的就是新值，
 // 一次已经成功的写不该因为旁边有人看崩了就变成失败。
 func (d *Domain) emitChanged(change Changed) {
 	d.facility.emit(change)
@@ -237,12 +256,11 @@ type Entry[V any] struct {
 //
 // 源: packages/storage/storage-domain/src/domain.ts:37-90
 //
-// 记录是**不可变数据**：读到的就是存着的那个值，没有防御性复制。
-// 值里带指针或者切片的话，原地改它会绕过整条写链（介质上还是旧的，事件也不会发），
-// 要换就走 [Table.Put] 或 [Table.Update]。
+// 每次读都从介质上重新解出一个值，所以调用方拿到的那一份是它自己的：原地改它
+// 既不会碰到介质，也不会被别的读者看见。要让改动生效就走 [Table.Put] 或 [Table.Update]。
 type Table[V any] struct {
 	domain *Domain
-	state  *tableState
+	spec   TableSpec
 }
 
 // TableOf 取出一张已声明表的类型化句柄。
@@ -256,46 +274,63 @@ type Table[V any] struct {
 // 核对的是 reflect.TypeFor[V]() 和声明时记下的那个类型，不核对的话
 // 一个写错的 V 会在读到第一条记录时才 panic，而那时候离声明处已经很远了。
 //
-// 句柄本身不带状态，每次取都新建一个是廉价的；它们指向同一份内存态，
+// 句柄本身不带状态，每次取都新建一个是廉价的；它们读写的是同一份介质，
 // 所以和 DSH「重复调用返回同一个实例」在行为上没有差别。
 func TableOf[V any](d *Domain, name string) (*Table[V], error) {
-	state, declared := d.tables[name]
+	spec, declared := d.tables[name]
 	if !declared {
 		return nil, fmt.Errorf("storage/domain: 域 %q 没有声明表 %q（声明了的：%s）",
 			d.spec.Name, name, describeNames(d.TableNames()))
 	}
 	want := reflect.TypeFor[V]()
-	if state.spec.valueType != want {
+	if spec.valueType != want {
 		return nil, fmt.Errorf("storage/domain: 域 %q 的表 %q 记录类型是 %s，这次要的是 %s",
-			d.spec.Name, name, state.spec.valueType, want)
+			d.spec.Name, name, spec.valueType, want)
 	}
-	return &Table[V]{domain: d, state: state}, nil
+	return &Table[V]{domain: d, spec: spec}, nil
 }
 
-// Get 读一条记录，同步地从内存里拿。
+// Get 读一条记录，穿到介质上去读。
 //
 // 源: packages/storage/storage-domain/src/domain.ts:44-48,287-290
 //
 // 第二个返回值是「在不在」。域已经关掉时返回 [CodeClosed]。
 //
-// 新增: DSH 的 get 只返回值，关掉之后 throw。Go 这边多一个 error 返回值，
-// 而不是「关掉之后一律返回不存在」——后者会让一个拿着过期句柄的调用方
-// 安静地读到一张空表，然后照着这个结论往下走，而它永远不会知道自己读的是一个死域。
-func (t *Table[V]) Get(key string) (V, bool, error) {
+// 新增: DSH 的 get 不收 ctx、只返回值，关掉之后 throw。Go 这边收 ctx 是因为这次读
+// 真的要往返一趟；多一个 error 返回值而不是「关掉之后一律返回不存在」，
+// 是因为后者会让一个拿着过期句柄的调用方安静地读到一张空表，然后照着这个结论
+// 往下走，而它永远不会知道自己读的是一个死域。
+func (t *Table[V]) Get(ctx context.Context, key string) (V, bool, error) {
 	var zero V
-	t.domain.mutex.RLock()
-	defer t.domain.mutex.RUnlock()
-	if t.domain.closed {
-		return zero, false, t.domain.closedError()
+	value, _, found, err := t.read(ctx, key)
+	if err != nil || !found {
+		return zero, false, err
 	}
-	stored, exists := t.state.records[key]
-	if !exists {
-		return zero, false, nil
+	return value, true, nil
+}
+
+// read 读一条记录并解出类型化的值，同时把它此刻的修订标识带回来。
+//
+// 修订标识只给 [Table.Update] 用：它是读-改-写唯一说得清「我改的是哪一版」的东西。
+func (t *Table[V]) read(ctx context.Context, key string) (V, storage.Revision, bool, error) {
+	var zero V
+	if err := t.domain.live(); err != nil {
+		return zero, "", false, err
 	}
-	// 断言必然成立：records 里的 typed 全部由这张表的 decode/encode 产出，
-	// 而 [TableOf] 已经核对过 V 就是声明时的类型。
-	typed, _ := stored.typed.(V)
-	return typed, true, nil
+	raw, revision, found, err := t.domain.unit.ReadRecord(ctx, t.spec.name, key)
+	if err != nil {
+		return zero, "", false, err
+	}
+	if !found {
+		return zero, "", false, nil
+	}
+	decoded, err := t.spec.decode(raw)
+	if err != nil {
+		return zero, "", false, invalidRecord(t.domain.spec.Name, t.spec.name, key, err)
+	}
+	// 断言必然成立：decode 由这张表的声明产出，而 [TableOf] 已经核对过 V 就是声明时的类型。
+	typed, _ := decoded.(V)
+	return typed, revision, true, nil
 }
 
 // Keys 返回当前的全部记录键，是一份**快照**。
@@ -305,40 +340,33 @@ func (t *Table[V]) Get(key string) (V, bool, error) {
 // 新增: 按字典序排好。DSH 给的是 Map 的插入序；Go 的 map 遍历顺序是**故意随机**的，
 // 原样交出去的话同一份数据两次调用给出的顺序都不一样，翻页、诊断输出和测试断言
 // 都没法用。排序是 Go 这边唯一稳定又不用额外记账的顺序。
-func (t *Table[V]) Keys() ([]string, error) {
-	t.domain.mutex.RLock()
-	defer t.domain.mutex.RUnlock()
-	if t.domain.closed {
-		return nil, t.domain.closedError()
+func (t *Table[V]) Keys(ctx context.Context) ([]string, error) {
+	records, err := t.loadTable(ctx)
+	if err != nil {
+		return nil, err
 	}
-	keys := make([]string, 0, len(t.state.records))
-	for key := range t.state.records {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys, nil
+	return sortedKeys(records), nil
 }
 
 // Entries 返回当前的全部记录，是一份**快照**，顺序同 [Table.Keys]。
 //
 // 源: packages/storage/storage-domain/src/domain.ts:50-55,292-295
 //
-// 快照而不是活视图：拿到之后排队中的写照样落地，但手上这一份不会在遍历途中变形。
-func (t *Table[V]) Entries() ([]Entry[V], error) {
-	t.domain.mutex.RLock()
-	defer t.domain.mutex.RUnlock()
-	if t.domain.closed {
-		return nil, t.domain.closedError()
+// 快照而不是活视图：拿到之后落下去的写不会让手上这一份在遍历途中变形。
+func (t *Table[V]) Entries(ctx context.Context) ([]Entry[V], error) {
+	records, err := t.loadTable(ctx)
+	if err != nil {
+		return nil, err
 	}
-	keys := make([]string, 0, len(t.state.records))
-	for key := range t.state.records {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
+	keys := sortedKeys(records)
 
 	entries := make([]Entry[V], 0, len(keys))
 	for _, key := range keys {
-		typed, _ := t.state.records[key].typed.(V)
+		decoded, decodeErr := t.spec.decode(records[key])
+		if decodeErr != nil {
+			return nil, invalidRecord(t.domain.spec.Name, t.spec.name, key, decodeErr)
+		}
+		typed, _ := decoded.(V)
 		entries = append(entries, Entry[V]{Key: key, Value: typed})
 	}
 	return entries, nil
@@ -347,28 +375,85 @@ func (t *Table[V]) Entries() ([]Entry[V], error) {
 // Size 是当前的记录条数。
 //
 // 源: packages/storage/storage-domain/src/domain.ts:63-64,302-305
-func (t *Table[V]) Size() (int, error) {
-	t.domain.mutex.RLock()
-	defer t.domain.mutex.RUnlock()
-	if t.domain.closed {
-		return 0, t.domain.closedError()
+func (t *Table[V]) Size(ctx context.Context) (int, error) {
+	records, err := t.loadTable(ctx)
+	if err != nil {
+		return 0, err
 	}
-	return len(t.state.records), nil
+	return len(records), nil
+}
+
+// loadTable 从介质上取这张表当前的全部记录。
+//
+// 新增: 走 [storage.KVUnit.LoadTable] 而不是整单元快照。这三个方法要的从来只有
+// 一张表，而一个域里可以声明好几张——读整份快照会把其余的表全部白读一遍，
+// 那份浪费随域里的表数和它们的大小一起长。
+//
+// 代价是这一份和同一个域里别的表**不保证同一时刻**。这三个方法本来也不承诺跨表
+// 一致：调用方拿到的是一张表的快照，不是一个域的快照。真要跨表一致的，
+// 那是另一个方法，本包目前没有人要。
+func (t *Table[V]) loadTable(ctx context.Context) (map[string]json.RawMessage, error) {
+	if err := t.domain.live(); err != nil {
+		return nil, err
+	}
+	records, err := t.domain.unit.LoadTable(ctx, t.spec.name)
+	if err != nil {
+		return nil, err
+	}
+	// 契约要求空表也在场（见 [storage.KVUnit.LoadTable]），所以 nil 只可能是后端违约。
+	if records == nil {
+		return nil, fmt.Errorf("storage/domain: 域 %q 的表 %q 交回了一个 nil",
+			t.domain.spec.Name, t.spec.name)
+	}
+	return records, nil
+}
+
+// sortedKeys 把一份记录的键排好交出去，理由见 [Table.Keys]。
+func sortedKeys(records map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(records))
+	for key := range records {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // Put 持久地写入或覆盖一条记录。
 //
 // 源: packages/storage/storage-domain/src/domain.ts:66-72,307-313
 //
-// 写的是**整条记录**，没有部分合并。返回时落盘已经完成、内存已经换掉、事件已经发过。
+// 写的是**整条记录**，没有部分合并。返回时落盘已经完成、事件已经发过。
+//
+// **无条件覆盖**：别的副本在这中间写过什么，这一次照盖不误。要「只在没人动过时才写」
+// 就走 [Table.Update]。
 func (t *Table[V]) Put(ctx context.Context, key string, value V) error {
 	return t.domain.enqueue(func() error {
-		raw, err := t.state.spec.encode(value)
+		raw, err := t.spec.encode(value)
 		if err != nil {
 			return fmt.Errorf("storage/domain: 域 %q 的表 %q 写记录 %q 失败：%w",
-				t.domain.spec.Name, t.state.spec.name, key, err)
+				t.domain.spec.Name, t.spec.name, key, err)
 		}
-		return t.store(ctx, key, value, raw)
+		return t.store(ctx, key, raw, nil)
+	})
+}
+
+// Create 只在这条记录**此刻不存在**时写进去。
+//
+// 新增: DSH 没有这个方法——它那边一个进程就是全部的写者，「先查一次再 Put」中间
+// 没有别人能插进来，所以这件事用 get + put 就表达得了。多副本之下那两步之间正是
+// 另一个副本插进来的地方，所以这里落成后端那一次原子的条件写
+// （见 [storage.CreateIfAbsent]）。
+//
+// 已经存在时返回后端那条 [storage.CodeStaleRevision]，**不写也不发事件**。
+// 调用方要的正是这个：一次「谁先写进去谁赢」的竞争，输的那一方必须知道自己输了。
+func (t *Table[V]) Create(ctx context.Context, key string, value V) error {
+	return t.domain.enqueue(func() error {
+		raw, err := t.spec.encode(value)
+		if err != nil {
+			return fmt.Errorf("storage/domain: 域 %q 的表 %q 建记录 %q 失败：%w",
+				t.domain.spec.Name, t.spec.name, key, err)
+		}
+		return t.store(ctx, key, raw, storage.CreateIfAbsent{})
 	})
 }
 
@@ -381,25 +466,22 @@ func (t *Table[V]) Put(ctx context.Context, key string, value V) error {
 func (t *Table[V]) Delete(ctx context.Context, key string) (bool, error) {
 	deleted := false
 	err := t.domain.enqueue(func() error {
-		// 「在不在」在**轮到这一步的时刻**判定，不在调用时刻判定：
-		// 排在前面的一次同键写入，这次删除必须看得见。
-		t.domain.mutex.RLock()
-		_, exists := t.state.records[key]
-		t.domain.mutex.RUnlock()
-		if !exists {
-			return nil
-		}
-		if err := t.domain.unit.DeleteRecord(ctx, t.state.spec.name, key); err != nil {
+		if err := t.domain.live(); err != nil {
 			return err
 		}
-		t.domain.mutex.Lock()
-		delete(t.state.records, key)
-		t.domain.mutex.Unlock()
-
+		// 「删之前在不在」由后端在真正执行删除的那一步回答——权威在介质上，
+		// 这一侧先读一次再删的话，两步之间别的副本插进来，回答就是错的。
+		existed, err := t.domain.unit.DeleteRecord(ctx, t.spec.name, key, nil)
+		if err != nil {
+			return err
+		}
+		if !existed {
+			return nil
+		}
 		deleted = true
 		t.domain.emitChanged(Changed{
 			Domain:    t.domain.spec.Name,
-			Table:     t.state.spec.name,
+			Table:     t.spec.name,
 			Key:       key,
 			Operation: OperationDeleted,
 		})
@@ -419,32 +501,52 @@ func (t *Table[V]) Delete(ctx context.Context, key string) (bool, error) {
 // 「自己 Get 再 Put」强的地方，后者中间隔着一个别人能插进来的窗口。
 //
 // 键不存在时返回 [CodeMissingKey]。fn 返回错误时什么都不写。
+//
+// 新增: 写回时带上读到的那一版做条件（见 [storage.ReplaceIfRevision]）。写链只把
+// **本副本**的写串起来，别的副本随时可以插在读和写之间；不带条件的话那次写会把
+// 对方刚落下的改动整个盖掉，而两边都返回了成功——这正是丢更新。
+//
+// 条件不成立就重读重试，最多 [updateAttempts] 轮，每一轮 fn 都拿到重读之后的值，
+// 所以 fn 可能被调用多次，它不该有副作用。撞上限之后原样交回后端那条
+// [storage.CodeStaleRevision]。
 func (t *Table[V]) Update(ctx context.Context, key string, fn func(current V) (V, error)) (V, error) {
 	var next V
 	err := t.domain.enqueue(func() error {
-		t.domain.mutex.RLock()
-		stored, exists := t.state.records[key]
-		t.domain.mutex.RUnlock()
-		if !exists {
-			return newError(CodeMissingKey, "域 %q 的表 %q 里没有记录 %q 可以更新",
-				t.domain.spec.Name, t.state.spec.name, key)
-		}
-		current, _ := stored.typed.(V)
+		var lastConflict error
+		for attempt := 0; attempt < updateAttempts; attempt++ {
+			current, revision, found, err := t.read(ctx, key)
+			if err != nil {
+				return err
+			}
+			if !found {
+				return newError(CodeMissingKey, "域 %q 的表 %q 里没有记录 %q 可以更新",
+					t.domain.spec.Name, t.spec.name, key)
+			}
 
-		updated, err := fn(current)
-		if err != nil {
-			return err
+			updated, err := fn(current)
+			if err != nil {
+				return err
+			}
+			raw, err := t.spec.encode(updated)
+			if err != nil {
+				return fmt.Errorf("storage/domain: 域 %q 的表 %q 更新记录 %q 失败：%w",
+					t.domain.spec.Name, t.spec.name, key, err)
+			}
+
+			err = t.store(ctx, key, raw, storage.ReplaceIfRevision{Revision: revision})
+			if err == nil {
+				next = updated
+				return nil
+			}
+			// 只有「有人抢先动了」才值得重来。别的失败（介质坏了、连不上、
+			// 已经关了）重试多少次都是同一个结果。
+			var typed *storage.Error
+			if !errors.As(err, &typed) || typed.Code != storage.CodeStaleRevision {
+				return err
+			}
+			lastConflict = err
 		}
-		raw, err := t.state.spec.encode(updated)
-		if err != nil {
-			return fmt.Errorf("storage/domain: 域 %q 的表 %q 更新记录 %q 失败：%w",
-				t.domain.spec.Name, t.state.spec.name, key, err)
-		}
-		if err := t.store(ctx, key, updated, raw); err != nil {
-			return err
-		}
-		next = updated
-		return nil
+		return lastConflict
 	})
 	if err != nil {
 		var zero V
@@ -453,23 +555,27 @@ func (t *Table[V]) Update(ctx context.Context, key string, fn func(current V) (V
 	return next, nil
 }
 
-// store 是 [Table.Put] 和 [Table.Update] 共用的那三步：落盘 → 换内存 → 发事件。
+// store 是 [Table.Put] 和 [Table.Update] 共用的那两步：落盘 → 发事件。
 //
-// 调用方必须已经在写链的槽位里（也就是在 [Domain.enqueue] 的 job 里）。
-func (t *Table[V]) store(ctx context.Context, key string, value V, raw json.RawMessage) error {
-	if err := t.domain.unit.PutRecord(ctx, t.state.spec.name, key, raw); err != nil {
+// expected 为 nil 就是无条件覆盖。调用方必须已经在写链的槽位里
+// （也就是在 [Domain.enqueue] 的 job 里）。
+func (t *Table[V]) store(
+	ctx context.Context, key string, raw json.RawMessage, expected storage.WriteIntent,
+) error {
+	if err := t.domain.live(); err != nil {
 		return err
 	}
-	t.domain.mutex.Lock()
-	t.state.records[key] = record{typed: value, raw: raw}
-	t.domain.mutex.Unlock()
-
+	revision, err := t.domain.unit.PutRecord(ctx, t.spec.name, key, raw, expected)
+	if err != nil {
+		return err
+	}
 	t.domain.emitChanged(Changed{
 		Domain:    t.domain.spec.Name,
-		Table:     t.state.spec.name,
+		Table:     t.spec.name,
 		Key:       key,
 		Operation: OperationPut,
 		Value:     raw,
+		Revision:  revision,
 	})
 	return nil
 }
@@ -499,19 +605,42 @@ func GlobalOf[G any](d *Domain) (*Global[G], error) {
 	return &Global[G]{domain: d, spec: d.spec.Global}, nil
 }
 
-// Get 读当前的全局值，同步地从内存里拿。第一次 [Global.Set] 之前它是声明里的初值。
+// Get 读当前的全局值，穿到介质上去读。第一次 [Global.Set] 之前它是声明里的初值。
 //
 // 源: packages/storage/storage-domain/src/domain.ts:20-25,190-193
-func (g *Global[G]) Get() (G, error) {
+//
+// 新增: 收 ctx 的理由同 [Table.Get]——这次读真的要往返一趟。
+func (g *Global[G]) Get(ctx context.Context) (G, error) {
+	value, _, err := g.read(ctx)
+	return value, err
+}
+
+// read 读全局值并把它此刻的修订标识带回来，用途同 [Table.read]。
+//
+// 介质上还没写过时交回的是声明里那份初值，修订标识是空串——空串在
+// [storage.ReplaceIfRevision] 里对不上任何一版，所以拿它去守卫一次写一定被拒，
+// 而那正是想要的：「我读到的是初值」这件事守不住，只能走 [storage.CreateIfAbsent]。
+func (g *Global[G]) read(ctx context.Context) (G, storage.Revision, error) {
 	var zero G
-	g.domain.mutex.RLock()
-	defer g.domain.mutex.RUnlock()
-	if g.domain.closed {
-		return zero, g.domain.closedError()
+	if err := g.domain.live(); err != nil {
+		return zero, "", err
 	}
-	// 断言必然成立，理由同 [Table.Get]。
-	typed, _ := g.domain.global.typed.(G)
-	return typed, nil
+	raw, revision, err := g.domain.unit.ReadGlobal(ctx)
+	if err != nil {
+		return zero, "", err
+	}
+	if isJSONNull(raw) {
+		// 断言必然成立：initial 由这个域的声明产出，而 [GlobalOf] 已经核对过 G。
+		typed, _ := g.spec.initial.(G)
+		return typed, "", nil
+	}
+	decoded, err := g.spec.decode(raw)
+	if err != nil {
+		// 两个空串是全局槽在 [RecordSlot] 里的约定，同 [Changed]。
+		return zero, "", invalidRecord(g.domain.spec.Name, "", "", err)
+	}
+	typed, _ := decoded.(G)
+	return typed, revision, nil
 }
 
 // Set 持久地换掉全局值。
@@ -522,21 +651,24 @@ func (g *Global[G]) Get() (G, error) {
 // 读到的是声明里的初值。
 func (g *Global[G]) Set(ctx context.Context, value G) error {
 	return g.domain.enqueue(func() error {
+		if err := g.domain.live(); err != nil {
+			return err
+		}
 		raw, err := g.spec.encode(value)
 		if err != nil {
 			return fmt.Errorf("storage/domain: 域 %q 写全局值失败：%w", g.domain.spec.Name, err)
 		}
-		if err := g.domain.unit.SetGlobal(ctx, raw); err != nil {
+		// 无条件覆盖，理由同 [Table.Put]。全局槽没有 Update 那条读-改-写的路，
+		// 需要守卫的调用方自己拿 [Domain.RawGlobal] 的修订标识去 SetGlobal。
+		revision, err := g.domain.unit.SetGlobal(ctx, raw, nil)
+		if err != nil {
 			return err
 		}
-		g.domain.mutex.Lock()
-		g.domain.global = record{typed: value, raw: raw}
-		g.domain.mutex.Unlock()
-
 		g.domain.emitChanged(Changed{
 			Domain:    g.domain.spec.Name,
 			Operation: OperationPut,
 			Value:     raw,
+			Revision:  revision,
 		})
 		return nil
 	})

@@ -2,7 +2,9 @@
 
 ## 定位
 
-`settings` 提供按 Namespace 注册的类型化配置、JSON 文档合并、修订冲突检测、监听和脱敏展示；`core/agentdefaultmodel` 在此基础上维护部署级默认模型选择。
+`settings` 提供按 Namespace 注册的类型化配置、JSON 文档合并、修订冲突检测、监听和脱敏展示。
+
+建在它上面的部署级默认模型选择另有一篇：[部署级默认模型](core-agentdefaultmodel.md)。
 
 ## 架构
 
@@ -23,9 +25,9 @@ Backend -> settings.Provider -> Namespace Registration -> Scope[T]
 - 更新先在内存构造并校验完整下一值，再写 Backend 和发布监听器。
 - `Publish` 用于 Backend 外部变化，仍经过注册校验后进入当前文档。
 
-## 脱敏与默认模型
+## 脱敏
 
-`Secret` 标记敏感字段，`Redact` 生成可展示的 `Redacted` 文档；描述接口不能返回秘密原文。`core/agentdefaultmodel` 从组合配置和动态设置中解析 provider、model、reasoning effort，新 Agent 或下一步读取最新默认值，显式 Agent 选择仍然优先。
+`Secret` 标记敏感字段，`Redact` 生成可展示的 `Redacted` 文档；描述接口不能返回秘密原文。
 
 ## 生命周期与并发
 
@@ -46,7 +48,6 @@ Backend -> settings.Provider -> Namespace Registration -> Scope[T]
 - 不内置文件、数据库或远程配置 Backend。
 - 不负责加密秘密；脱敏只保护展示路径。
 - 不提供跨进程共识，修订语义取决于 Backend 实现。
-- 默认模型配置不负责凭据解析或实际模型路由。
 
 ## 相关源码
 
@@ -54,4 +55,7 @@ Backend -> settings.Provider -> Namespace Registration -> Scope[T]
 - `settings/provider.go`
 - `settings/json.go`
 - `settings/redact.go`
-- `core/agentdefaultmodel/`
+
+## 深入阅读
+
+[部署级默认模型](core-agentdefaultmodel.md) · [凭据](credentials.md)

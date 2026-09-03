@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"path"
+
+	"github.com/snight1983/ds-harness-go/fs"
 )
 
 // ErrInvalidPresetID 是「这个 id 当不了根底下的目录名」。
@@ -92,8 +94,8 @@ func WritableRoot(roots []Root) (string, error) {
 // ReadComposition 读一份预设的组合文本。
 //
 // 源: packages/preset/agent-presets/src/authoring.ts:64-71（readComposition）
-func ReadComposition(ctx context.Context, store Store, preset Preset) (string, error) {
-	content, err := store.ReadFile(ctx, preset.Path)
+func ReadComposition(ctx context.Context, fsys fs.FileSystem, preset Preset) (string, error) {
+	content, err := readFile(ctx, fsys, preset.Path)
 	if err != nil {
 		return "", fmt.Errorf("agent-presets: 读不了 %s 的组合：%w", preset.ID, err)
 	}
@@ -108,11 +110,14 @@ func ReadComposition(ctx context.Context, store Store, preset Preset) (string, e
 // 让真正的建目录去撞。
 //
 // 新增: 上游这一支是 `lstatSync`，**不跟链接**，于是一条指不到东西的断链也算占着。
-// 这道缝上没有 lstat（理由见 store.go），[Store.Stat] 顺链，所以一条断链在这里
-// 报成没占着。代价只是那种情形拿到的不再是 [PresetExistsError] 而是随后那次建目录
-// 的失败——一条断链占着一个预设 id 本来就是一种要人去现场看的状态。
-func occupied(ctx context.Context, store Store, at string) bool {
-	_, found, err := store.Stat(ctx, at)
+// 这里走的是 [statPath]，它顺链（[fs.FileSystem.Resolve] 会跟过去），所以一条断链
+// 在这里报成没占着。代价只是那种情形拿到的不再是 [PresetExistsError] 而是随后那次
+// 建目录的失败——一条断链占着一个预设 id 本来就是一种要人去现场看的状态。
+//
+// 接缝上是有 [fs.FileSystem.Lstat] 的，这里刻意不用：它按定义看不见目标那一侧，
+// 而这里问的正是「这个 id 上有没有一份能当预设用的东西」。
+func occupied(ctx context.Context, fsys fs.FileSystem, at string) bool {
+	_, found, err := statPath(ctx, fsys, at)
 	return err == nil && found
 }
 
@@ -121,35 +126,33 @@ func occupied(ctx context.Context, store Store, at string) bool {
 // 源: packages/preset/agent-presets/src/authoring.ts:101-112, 149-152
 //
 // 新增: DSH 是 `cp(..., { recursive, dereference, errorOnExist })` 加一趟事后
-// tightenModes。这里两件事合成一趟走完：**顺链**（判类型走 [Store.Stat] 而不是
-// [Store.List] 给的那一行，于是一个符号链接按它指的那个实体复制过来）让副本自成
-// 一体，而不是一堆指回被复制的那套安装的链接；**收权限**归实现方，本包只把
-// [Entry.Executable] 这一位带过去——随部署发出去的预设在它的安装里通常是所有人
-// 可读，而副本和它旁边那份设置文档是同一个分量。
+// tightenModes。这里只剩**顺链**这一件：判类型走 [statPath] 而不是列举给的那一行，
+// 于是一个符号链接按它指的那个实体复制过来，副本自成一体，而不是一堆指回被复制的
+// 那套安装的链接。收权限和可执行位都没有跟过来，理由见 [writeFile]。
 //
 // 整份读进内存再整份写出去，而不是流式对拷：一份预设是一个装着组合、说明和几个
-// 技能文件的配置目录，而这道缝上没有流（一个对象存储的取回本来也是整份）。
-func copyTree(ctx context.Context, store Store, source, target string) error {
-	entry, found, err := store.Stat(ctx, source)
+// 技能文件的配置目录，而整份取回本来就是一个对象存储上的常态。
+func copyTree(ctx context.Context, fsys fs.FileSystem, source, target string) error {
+	info, found, err := statPath(ctx, fsys, source)
 	if err != nil {
 		return err
 	}
-	if !found || !entry.Dir {
+	if !found || info.Type != fs.TypeDirectory {
 		return fmt.Errorf("agent-presets: 源不是一个目录：%s", source)
 	}
-	if err := store.MakeDir(ctx, target); err != nil {
+	if _, err := fsys.MakeDir(ctx, target, ""); err != nil {
 		return err
 	}
-	children, _, err := store.List(ctx, source)
+	children, _, err := listDir(ctx, fsys, source)
 	if err != nil {
 		return err
 	}
 	for _, child := range children {
 		from := path.Join(source, child.Name)
 		to := path.Join(target, child.Name)
-		// 走 Stat 不看 child.Dir：后者说的是链接本身，而这里要的是它指的那个
-		// 实体——一个指向目录的链接要按目录整个复制过来。
-		childEntry, childFound, err := store.Stat(ctx, from)
+		// 走 statPath 不看 child.Type：这里要的是这一行指到的那个实体——
+		// 一个指向目录的链接要按目录整个复制过来。
+		childInfo, childFound, err := statPath(ctx, fsys, from)
 		if err != nil {
 			return err
 		}
@@ -158,22 +161,22 @@ func copyTree(ctx context.Context, store Store, source, target string) error {
 			// 断掉的链接，等于让副本带上一件本来就坏的东西。
 			continue
 		}
-		if childEntry.Dir {
-			if err := copyTree(ctx, store, from, to); err != nil {
+		if childInfo.Type == fs.TypeDirectory {
+			if err := copyTree(ctx, fsys, from, to); err != nil {
 				return err
 			}
 			continue
 		}
-		if !childEntry.Regular {
+		if childInfo.Type != fs.TypeFile {
 			// 设备、套接字、FIFO：一份预设目录里没有它们的位置，复制过去只会
 			// 在副本里留下一件读者解释不了的东西。
 			continue
 		}
-		content, err := store.ReadFile(ctx, from)
+		content, err := readFile(ctx, fsys, from)
 		if err != nil {
 			return err
 		}
-		if err := store.WriteFile(ctx, to, content, childEntry.Executable); err != nil {
+		if err := writeFile(ctx, fsys, to, content); err != nil {
 			return err
 		}
 	}
@@ -194,13 +197,13 @@ func copyTree(ctx context.Context, store Store, source, target string) error {
 //
 // name 传空串表示不给名字，回落到显示 id。
 //
-// 新增: DSH 那次元数据写用的是 dsh-atomic-write。这里是一次普通的 [Store.WriteFile]
-// ——它落在一个**刚刚才建出来、失败就整个 [Store.RemoveTree] 掉**的目录里，写一半的
-// 风险已经由外面那层全有或全无兜住了，再套一层临时文件加改名只是多一道看不出效果
-// 的动作。
+// 新增: DSH 那次元数据写用的是 dsh-atomic-write。这里是一次普通的
+// [fs.FileSystem.WriteBytes]——它本身就是原子发布的，而且落在一个**刚刚才建出来、
+// 失败就整棵 [fs.FileSystem.RemoveTree] 掉**的目录里，写一半的风险已经由外面那层
+// 全有或全无兜住了，再套一层临时文件加改名只是多一道看不出效果的动作。
 func CopyComposition(
 	ctx context.Context,
-	store Store,
+	fsys fs.FileSystem,
 	roots []Root,
 	source Preset,
 	id string,
@@ -216,33 +219,35 @@ func CopyComposition(
 	dir := path.Join(root, id)
 	// 上游名册那道检查只看得见被发现出来的预设；一个没有组合文件的目录仍旧占着
 	// 这个名字，它值得一句读得懂的拒绝，而不是一个存储层的错误码。
-	if occupied(ctx, store, dir) {
+	if occupied(ctx, fsys, dir) {
 		return "", &PresetExistsError{PresetID: id}
 	}
-	if err := copyAndStampMetadata(ctx, store, dir, source, name); err != nil {
+	if err := copyAndStampMetadata(ctx, fsys, dir, source, name); err != nil {
 		// 一个复制到一半的目录，好一点是发现看不见它，坏一点是一份装得起来却
 		// 不完整的预设；一次失败的复制什么都不留下。撤销不带调用方的取消：
 		// ctx 已经废了也得把写下去的收回来。
-		_ = store.RemoveTree(context.WithoutCancel(ctx), dir)
+		_ = removeTree(context.WithoutCancel(ctx), fsys, dir)
 		return "", err
 	}
 	return dir, nil
 }
 
 // copyAndStampMetadata 是 [CopyComposition] 里那段「失败就整个撤掉」的正文。
-func copyAndStampMetadata(ctx context.Context, store Store, dir string, source Preset, name string) error {
-	if err := copyTree(ctx, store, path.Dir(source.Path), dir); err != nil {
+func copyAndStampMetadata(
+	ctx context.Context, fsys fs.FileSystem, dir string, source Preset, name string,
+) error {
+	if err := copyTree(ctx, fsys, path.Dir(source.Path), dir); err != nil {
 		return fmt.Errorf("agent-presets: 复制 %s 失败：%w", source.ID, err)
 	}
 	rendered, hasContent := RenderMetadata(Metadata{Name: name, Description: source.Description})
 	metadataPath := path.Join(dir, MetadataFile)
 	if !hasContent {
-		if err := store.Remove(ctx, metadataPath); err != nil {
+		if err := removePath(ctx, fsys, metadataPath); err != nil {
 			return fmt.Errorf("agent-presets: 删不掉复制过来的展示文字：%w", err)
 		}
 		return nil
 	}
-	if err := store.WriteFile(ctx, metadataPath, []byte(rendered), false); err != nil {
+	if err := writeFile(ctx, fsys, metadataPath, []byte(rendered)); err != nil {
 		return fmt.Errorf("agent-presets: 写不了展示文字：%w", err)
 	}
 	return nil
@@ -254,7 +259,7 @@ func copyAndStampMetadata(ctx context.Context, store Store, dir string, source P
 //
 // 随部署发出去的那一份被拒：它属于部署。一份**正有活会话装着**的预设**不拒**——
 // 那份组合在建会话时就读完了、此后不再重读，所以那个会话照原样接着跑。
-func DeleteComposition(ctx context.Context, store Store, roots []Root, preset Preset) error {
+func DeleteComposition(ctx context.Context, fsys fs.FileSystem, roots []Root, preset Preset) error {
 	if preset.Trust != TrustUser {
 		return &PresetNotWritableError{PresetID: preset.ID, Reason: "it ships with the deployment"}
 	}
@@ -268,7 +273,8 @@ func DeleteComposition(ctx context.Context, store Store, roots []Root, preset Pr
 	//
 	// 新增: 上游那一支是 `isAbsolute` 加一次前缀比较。前缀比较在这里换成逐字相等，
 	// 因为发现拼出来的就是这一条（见 [ScanRoot]）：一个前缀判据会让 `<root>/名字备份`
-	// 通过 `<root>/名字` 那道检查，而这道检查守的正是一次 [Store.RemoveTree] 的落点。
+	// 通过 `<root>/名字` 那道检查，而这道检查守的正是一次 [fs.FileSystem.RemoveTree]
+	// 的落点。
 	// 「是不是绝对路径」这一问随之去掉——这道缝上的路径对本包不透明，只有实现方
 	// 知道自己那份介质上什么叫绝对。
 	if path.Clean(preset.Path) != path.Join(dir, CompositionFile) {
@@ -277,7 +283,7 @@ func DeleteComposition(ctx context.Context, store Store, roots []Root, preset Pr
 			Reason:   "it does not live under the writable preset root",
 		}
 	}
-	if err := store.RemoveTree(ctx, dir); err != nil {
+	if err := removeTree(ctx, fsys, dir); err != nil {
 		return fmt.Errorf("agent-presets: 删不掉 %s：%w", preset.ID, err)
 	}
 	return nil

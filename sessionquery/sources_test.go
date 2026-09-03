@@ -14,7 +14,7 @@ func TestAssertHeadersCompatibleComparesTheIdentityFields(t *testing.T) {
 	t.Parallel()
 
 	base := session.SessionHeader{
-		Version: 1, ID: "s1", CreatedAt: 100, Cwd: "/work",
+		Version: 1, ID: "s1", CreatedAt: 100, WorkspaceID: "ws-1",
 		ParentSession: "p1", SeedLength: 2, DelegationDepth: 1,
 	}
 
@@ -28,7 +28,7 @@ func TestAssertHeadersCompatibleComparesTheIdentityFields(t *testing.T) {
 		"格式版本不同":     {mutate: func(h *session.SessionHeader) { h.Version = 2 }},
 		"id 不同":      {mutate: func(h *session.SessionHeader) { h.ID = "s2" }},
 		"建会话时间不同":    {mutate: func(h *session.SessionHeader) { h.CreatedAt = 101 }},
-		"工作目录不同":     {mutate: func(h *session.SessionHeader) { h.Cwd = "/别处" }},
+		"工作区不同":      {mutate: func(h *session.SessionHeader) { h.WorkspaceID = "ws-2" }},
 		"父会话不同":      {mutate: func(h *session.SessionHeader) { h.ParentSession = "p2" }},
 		"seed 长度不同":  {mutate: func(h *session.SessionHeader) { h.SeedLength = 3 }},
 		"派发深度不同":     {mutate: func(h *session.SessionHeader) { h.DelegationDepth = 2 }},

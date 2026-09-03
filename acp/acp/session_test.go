@@ -81,9 +81,9 @@ func TestListSessionsPutsTheNewestFirstAndBreaksTiesByIdentity(t *testing.T) {
 	t.Parallel()
 	// 这条序必须是全序：两条分不出先后的记录会让翻页漏掉一条或者交出两次。
 	catalog := newCatalog()
-	catalog.put(archived("b", 200, absolutePath))
-	catalog.put(archived("a", 200, absolutePath))
-	catalog.put(archived("c", 300, absolutePath))
+	catalog.put(archived("b", 200, testWorkspaceID))
+	catalog.put(archived("a", 200, testWorkspaceID))
+	catalog.put(archived("c", 300, testWorkspaceID))
 	f := archivedFixture(t, catalog, nil)
 
 	response, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{})
@@ -102,9 +102,9 @@ func TestListSessionsPutsTheNewestFirstAndBreaksTiesByIdentity(t *testing.T) {
 func TestListSessionsPagesWithAnOpaqueCursor(t *testing.T) {
 	t.Parallel()
 	catalog := newCatalog()
-	catalog.put(archived("a", 300, absolutePath))
-	catalog.put(archived("b", 200, absolutePath))
-	catalog.put(archived("c", 100, absolutePath))
+	catalog.put(archived("a", 300, testWorkspaceID))
+	catalog.put(archived("b", 200, testWorkspaceID))
+	catalog.put(archived("c", 100, testWorkspaceID))
 	f := archivedFixture(t, catalog, func(config *Config) { config.SessionListPageSize = 2 })
 
 	first, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{})
@@ -134,7 +134,7 @@ func TestListSessionsRefusesACursorItDidNotIssue(t *testing.T) {
 	t.Parallel()
 	// 游标是这一端自己发出去的东西。收一个改过的游标，等于让对面自己挑从哪条开始翻。
 	catalog := newCatalog()
-	catalog.put(archived("a", 100, absolutePath))
+	catalog.put(archived("a", 100, testWorkspaceID))
 	f := archivedFixture(t, catalog, nil)
 
 	for name, cursor := range map[string]string{
@@ -152,16 +152,19 @@ func TestListSessionsRefusesACursorItDidNotIssue(t *testing.T) {
 	}
 }
 
+// 新增: 原来这里还有两条会被筛掉的存档：一条「相对工作目录」的，和一条「没有工作目录」
+// 的。两条现在都不筛了。前者是因为那次 [path/filepath.IsAbs] 跟着读日志的这台机器走，
+// 服务端没有立场判一条客户端路径绝不绝对；后者是因为「不属于任何工作区」已经是一个
+// 合法取值，把它筛掉等于让这批会话再也续不回来（那一格改由
+// [TestListSessionsMatchesSessionsWithNoWorkspace] 正面钉住）。
 func TestListSessionsHidesEverythingThatCannotBeResumed(t *testing.T) {
 	t.Parallel()
 	catalog := newCatalog()
-	catalog.put(archived("ok", 500, absolutePath))
-	catalog.put(archived("无工作目录", 400, ""))
-	catalog.put(archived("相对工作目录", 300, "relative/path"))
-	subagent := archived("子 agent", 200, absolutePath)
+	catalog.put(archived("ok", 500, testWorkspaceID))
+	subagent := archived("子 agent", 200, testWorkspaceID)
 	subagent.Origin = sessionlog.OriginSubagent
 	catalog.put(subagent)
-	parented := archived("有父会话", 100, absolutePath)
+	parented := archived("有父会话", 100, testWorkspaceID)
 	parented.ParentSession = "别人"
 	catalog.put(parented)
 	f := archivedFixture(t, catalog, nil)
@@ -182,7 +185,7 @@ func TestListSessionsHidesTheOnesThisBridgeIsAlreadyHolding(t *testing.T) {
 	catalog := newCatalog()
 	f := archivedFixture(t, catalog, nil)
 	id := f.newSession(t)
-	catalog.put(archived(sessionlog.SessionID(id), 100, absolutePath))
+	catalog.put(archived(sessionlog.SessionID(id), 100, testWorkspaceID))
 
 	response, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{})
 	if err != nil {
@@ -193,15 +196,18 @@ func TestListSessionsHidesTheOnesThisBridgeIsAlreadyHolding(t *testing.T) {
 	}
 }
 
-func TestListSessionsFiltersByWorkingDirectory(t *testing.T) {
+func TestListSessionsFiltersByWorkspace(t *testing.T) {
 	t.Parallel()
-	other := absolutePath + "-别处"
+	// 新增: 这一筛原先比的是两条路径，还附带一条「相对 cwd 报 -32602」的断言。现在
+	// 请求里那条 cwd 先换成一个工作区标识（见 [WorkspaceResolver]），筛的是标识；
+	// cwd 长什么样不再是服务端的事，那条断言随之去掉。
 	catalog := newCatalog()
-	catalog.put(archived("这里", 200, absolutePath))
-	catalog.put(archived("别处", 100, other))
+	catalog.put(archived("这里", 200, testWorkspaceID))
+	catalog.put(archived("别处", 100, otherWorkspaceID))
+	catalog.put(archived("没有工作区", 50, ""))
 	f := archivedFixture(t, catalog, nil)
 
-	cwd := other
+	cwd := otherCwd
 	response, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{Cwd: &cwd})
 	if err != nil {
 		t.Fatalf("翻存档不该失败：%v", err)
@@ -209,10 +215,84 @@ func TestListSessionsFiltersByWorkingDirectory(t *testing.T) {
 	if got := listedIDs(response); strings.Join(got, ",") != "别处" {
 		t.Fatalf("只有那一条该露面，实际 %v", got)
 	}
+	// 报出去那条 cwd 走的是反向换算：它是登记册给的展示路径，不是请求里那条。
+	if got := response.Sessions[0].Cwd; got != otherDisplay {
+		t.Fatalf("报出去的该是展示路径 %q，实际 %q", otherDisplay, got)
+	}
+}
 
-	relative := "relative/path"
-	_, err = f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{Cwd: &relative})
-	assertRequestError(t, err, -32602)
+func TestListSessionsMatchesSessionsWithNoWorkspace(t *testing.T) {
+	t.Parallel()
+	// 「不属于任何工作区」是一个合法取值，不是一条筛掉的理由：一条 cwd 换不出工作区时
+	// 两边都是空串，这次比较照样成立。原先这里先把没有工作目录的会话整批筛掉，于是
+	// 它们在 `session/list` 上永远看不见，也就永远续不回来。
+	catalog := newCatalog()
+	catalog.put(archived("没有工作区", 200, ""))
+	catalog.put(archived("有工作区", 100, testWorkspaceID))
+	f := archivedFixture(t, catalog, nil)
+
+	cwd := "/登记册里没有这一条"
+	response, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{Cwd: &cwd})
+	if err != nil {
+		t.Fatalf("翻存档不该失败：%v", err)
+	}
+	if got := listedIDs(response); strings.Join(got, ",") != "没有工作区" {
+		t.Fatalf("只有那一条该露面，实际 %v", got)
+	}
+	if got := response.Sessions[0].Cwd; got != "" {
+		t.Fatalf("不属于任何工作区就报空串，实际 %q", got)
+	}
+}
+
+func TestListSessionsReportsAnEmptyCwdWhenTheWorkspaceIsGone(t *testing.T) {
+	t.Parallel()
+	// 展示路径查不回来只影响这一项怎么显示，不该把整页翻不动：登记册里那条记录被删了，
+	// 存档里的会话还在，客户端至少该看得见它们的标识。
+	catalog := newCatalog()
+	catalog.put(archived("存着的", 100, testWorkspaceID))
+	f := archivedFixture(t, catalog, nil)
+	delete(f.workspaces.display, testWorkspaceID)
+
+	response, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{})
+	if err != nil {
+		t.Fatalf("翻存档不该失败：%v", err)
+	}
+	if len(response.Sessions) != 1 || response.Sessions[0].Cwd != "" {
+		t.Fatalf("该照旧列出来、cwd 报空串，实际 %+v", response.Sessions)
+	}
+}
+
+func TestListSessionsWithoutAWorkspaceRegistryTreatsEveryCwdAsNoWorkspace(t *testing.T) {
+	t.Parallel()
+	// [Config.Workspaces] 可以为 nil。那时每一条 cwd 都换到空工作区，于是这一页只剩
+	// 那些同样不属于任何工作区的会话——两边都是空串，比较仍然成立。
+	catalog := newCatalog()
+	catalog.put(archived("没有工作区", 200, ""))
+	catalog.put(archived("有工作区", 100, testWorkspaceID))
+	f := archivedFixture(t, catalog, func(config *Config) { config.Workspaces = nil })
+
+	cwd := clientCwd
+	response, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{Cwd: &cwd})
+	if err != nil {
+		t.Fatalf("翻存档不该失败：%v", err)
+	}
+	if got := listedIDs(response); strings.Join(got, ",") != "没有工作区" {
+		t.Fatalf("只有那一条该露面，实际 %v", got)
+	}
+}
+
+func TestListSessionsReportsAWorkspaceRegistryItCannotRead(t *testing.T) {
+	t.Parallel()
+	// 「这条 cwd 没有对应的工作区」和「登记册读不动」是两件事。后者压成前者的话，
+	// 登记册出故障期间这一页会安静地筛成另一批会话，而不是报出去。
+	catalog := newCatalog()
+	catalog.put(archived("存着的", 100, testWorkspaceID))
+	f := archivedFixture(t, catalog, nil)
+	f.workspaces.resolveFail = errors.New("登记册读不动")
+
+	cwd := clientCwd
+	_, err := f.bridge.ListSessions(t.Context(), wire.ListSessionsRequest{Cwd: &cwd})
+	assertRequestError(t, err, -32603)
 }
 
 func TestListSessionsReportsAnArchiveItCannotRead(t *testing.T) {
@@ -239,11 +319,11 @@ func listedIDs(response wire.ListSessionsResponse) []string {
 func TestResumeSessionBringsAnArchivedSessionBack(t *testing.T) {
 	t.Parallel()
 	catalog := newCatalog()
-	catalog.put(archived("存着的", 100, absolutePath))
+	catalog.put(archived("存着的", 100, testWorkspaceID))
 	f := archivedFixture(t, catalog, nil)
 
 	response, err := f.bridge.ResumeSession(t.Context(), wire.ResumeSessionRequest{
-		SessionId: "存着的", Cwd: absolutePath,
+		SessionId: "存着的", Cwd: clientCwd,
 	})
 	if err != nil {
 		t.Fatalf("续跑不该失败：%v", err)
@@ -267,13 +347,13 @@ func TestResumeSessionAdoptsTheRouteRecordedInTheLog(t *testing.T) {
 	// 一条会话上次用的是哪条路由记在它自己的日志里。续跑之后摆给对面看的当前值必须是
 	// 那一份，而不是这条线的部署默认——否则对面看到的是一个它从来没点过的模型。
 	catalog := newCatalog()
-	catalog.put(archived("存着的", 100, absolutePath), requestHeaderEvent(t, llm.CallConfig{
+	catalog.put(archived("存着的", 100, testWorkspaceID), requestHeaderEvent(t, llm.CallConfig{
 		Provider: "acme", Model: "slow", ReasoningEffort: "high",
 	}, llm.CallConfigAdapterDefaults{}))
 	f := archivedFixture(t, catalog, func(config *Config) { config.Models = catalogModels() })
 
 	if _, err := f.bridge.ResumeSession(t.Context(), wire.ResumeSessionRequest{
-		SessionId: "存着的", Cwd: absolutePath,
+		SessionId: "存着的", Cwd: clientCwd,
 	}); err != nil {
 		t.Fatalf("续跑不该失败：%v", err)
 	}
@@ -292,13 +372,13 @@ func TestResumeSessionDropsAnAdapterSuppliedReasoningEffort(t *testing.T) {
 	// 一个适配器补出来的档位不是这条会话选的。把它按成一次显式选择，对面就再也回不到
 	// 「交给提供方」那一档了。
 	catalog := newCatalog()
-	catalog.put(archived("存着的", 100, absolutePath), requestHeaderEvent(t, llm.CallConfig{
+	catalog.put(archived("存着的", 100, testWorkspaceID), requestHeaderEvent(t, llm.CallConfig{
 		Provider: "acme", Model: "slow", ReasoningEffort: "high",
 	}, llm.CallConfigAdapterDefaults{ReasoningEffort: true}))
 	f := archivedFixture(t, catalog, func(config *Config) { config.Models = catalogModels() })
 
 	if _, err := f.bridge.ResumeSession(t.Context(), wire.ResumeSessionRequest{
-		SessionId: "存着的", Cwd: absolutePath,
+		SessionId: "存着的", Cwd: clientCwd,
 	}); err != nil {
 		t.Fatalf("续跑不该失败：%v", err)
 	}
@@ -311,22 +391,24 @@ func TestResumeSessionDropsAnAdapterSuppliedReasoningEffort(t *testing.T) {
 func TestResumeSessionRefusesWhatItMustNotReopen(t *testing.T) {
 	t.Parallel()
 	catalog := newCatalog()
-	catalog.put(archived("存着的", 100, absolutePath))
-	subagent := archived("子 agent", 100, absolutePath)
+	catalog.put(archived("存着的", 100, testWorkspaceID))
+	subagent := archived("子 agent", 100, testWorkspaceID)
 	subagent.Origin = sessionlog.OriginSubagent
 	catalog.put(subagent)
 	f := archivedFixture(t, catalog, nil)
 	open := f.newSession(t)
 
+	// 新增: 这张表原先还有一格「相对工作目录」。cwd 的形状不再由服务端管
+	// （见 [validateWorkspaceParams]），那一格去掉；「工作区对不上」改成报另一台
+	// 客户端的 cwd——它换出来的是另一个工作区标识。
 	cases := map[string]wire.ResumeSessionRequest{
-		"存档里没有":   {SessionId: "没见过", Cwd: absolutePath},
-		"子 agent": {SessionId: "子 agent", Cwd: absolutePath},
-		"工作目录对不上": {SessionId: "存着的", Cwd: absolutePath + "-别处"},
-		"相对工作目录":  {SessionId: "存着的", Cwd: "relative/path"},
+		"存档里没有":   {SessionId: "没见过", Cwd: clientCwd},
+		"子 agent": {SessionId: "子 agent", Cwd: clientCwd},
+		"工作区对不上":  {SessionId: "存着的", Cwd: otherCwd},
 		"额外目录": {
-			SessionId: "存着的", Cwd: absolutePath, AdditionalDirectories: []string{absolutePath},
+			SessionId: "存着的", Cwd: clientCwd, AdditionalDirectories: []string{clientCwd},
 		},
-		"已经开着": {SessionId: open, Cwd: absolutePath},
+		"已经开着": {SessionId: open, Cwd: clientCwd},
 	}
 	for name, params := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -342,14 +424,14 @@ func TestResumeSessionLetsGoOfTheSlotWhenItFails(t *testing.T) {
 	// 占位那张表是给「同时来两次续跑」用的。一次失败的续跑不放手，这条会话就永远
 	// 续不动了。
 	catalog := newCatalog()
-	catalog.put(archived("存着的", 100, absolutePath))
+	catalog.put(archived("存着的", 100, testWorkspaceID))
 	f := archivedFixture(t, catalog, nil)
 	f.factory.mutex.Lock()
 	f.factory.resumeFail = errors.New("续不起来")
 	f.factory.mutex.Unlock()
 
 	_, err := f.bridge.ResumeSession(t.Context(), wire.ResumeSessionRequest{
-		SessionId: "存着的", Cwd: absolutePath,
+		SessionId: "存着的", Cwd: clientCwd,
 	})
 	assertRequestError(t, err, -32603)
 	f.bridge.mutex.Lock()

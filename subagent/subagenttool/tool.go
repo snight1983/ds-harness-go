@@ -205,7 +205,7 @@ func (c *Controller) delegate(
 	case background && c.continuable:
 		return c.startContinuable(ctx, args.Description, request)
 	case background:
-		return c.startBackgroundJob(args.Description, parent, request)
+		return c.startBackgroundJob(ctx, args.Description, parent, request)
 	default:
 		return c.runForeground(ctx, request)
 	}
@@ -237,7 +237,13 @@ func (c *Controller) startContinuable(
 // 新增: DSH 的 done 是一个 Promise，Go 这边 [github.com/snight1983/ds-harness-go/jobs/jobs.Hooks.Done]
 // 是一条 channel，所以结清那件事挪进一条协程；它必须**恰好**送一个值，作业注册表
 // 那条契约就是这么定的。
+//
+// 新增: ctx 只管**登记**这一步（账本可能在库里，见
+// [github.com/snight1983/ds-harness-go/jobs/jobs.Registry]）。底下 Run 里那个
+// runCtx 仍旧从 [context.Background] 派生，理由见那一句注释：一件后台作业活得比
+// 起它的那次调用长。这两个 ctx 是两码事，不许把 ctx 传进去当那个取消口。
 func (c *Controller) startBackgroundJob(
+	ctx context.Context,
 	label string,
 	parent agent.Agent,
 	request subagent.StartRequest,
@@ -248,7 +254,7 @@ func (c *Controller) startBackgroundJob(
 			"background jobs unavailable: load @deepseek-ai/dsh-jobs and @deepseek-ai/dsh-tool-jobs")
 	}
 	subagents := c.subagents()
-	id, err := registry.Start(jobs.Start{
+	id, err := registry.Start(ctx, jobs.Start{
 		Kind:  jobs.KindSubagent,
 		Label: label,
 		Owner: parent,

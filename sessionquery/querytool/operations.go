@@ -29,10 +29,10 @@ func (c *Controller) executeSessionSearch(
 	if err != nil {
 		return "", err
 	}
-	// 跨会话检索的整个边界就是调用方的工作目录。没有工作目录时不存在「同一个
-	// 工作区」这回事，于是这件工具对这个调用方根本不可用——而不是退化成
+	// 跨会话检索的整个边界就是调用方的归属工作区。不属于任何工作区时不存在
+	// 「同一个工作区」这回事，于是这件工具对这个调用方根本不可用——而不是退化成
 	// 一次无边界的全库检索。
-	if from.header.Cwd == "" {
+	if from.header.WorkspaceID == "" {
 		return "", fail(CodeUnauthorized,
 			"cross-session search is unavailable because the caller session has no workspace")
 	}
@@ -87,7 +87,7 @@ func (c *Controller) executeSessionSearch(
 		}
 		sessionFilters = append(sessionFilters, sessionquery.ParentFilter{Values: parentValues})
 	}
-	sessionFilters = append(sessionFilters, sessionquery.CwdFilter{Values: []string{from.header.Cwd}})
+	sessionFilters = append(sessionFilters, sessionquery.WorkspaceFilter{Values: []session.WorkspaceID{from.header.WorkspaceID}})
 
 	collected, err := collectPages(ctx, c.maxSearchResults,
 		func(cursor sessionquery.SearchCursor) ([]sessionquery.SearchHit, sessionquery.SearchCursor, error) {

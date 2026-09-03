@@ -11,8 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -29,9 +27,72 @@ import (
 	sessionlog "github.com/snight1983/ds-harness-go/session"
 )
 
-// absolutePath 是一条在本机上确实绝对的路径；写死哪一边的字面量都会让另一个平台上的
-// 用例变成假通过。
-var absolutePath = filepath.Join(os.TempDir(), "ds-harness-go-acp")
+// ---- 工作区 ----
+//
+// 新增: 这里原先是一条路径和它折进执行世界之后的样子，两者由本包的一个纯函数相互换算，
+// 于是整套用例只跑在同一个宇宙里。会话头现在记的是一个不透明的工作区标识（见
+// [sessionlog.SessionHeader.WorkspaceID]），线上那条 cwd 则是**客户端那台机器**上的
+// 写法，两者之间隔着一个装配方给的 [WorkspaceResolver]。所以下面这几样刻意不共用
+// 任何字面量：共用的话，「桥那次换算接错了」这类故障在夹具里永远现不出形。
+var (
+	// clientCwd 是客户端在线上报的那条工作目录。
+	clientCwd = "/客户端那台机器/项目"
+	// otherCwd 是另一台客户端报的另一条，用来摆「不是同一个工作区」。
+	otherCwd = "C:\\另一台机器\\别的项目"
+	// testWorkspaceID 是 clientCwd 换出来的那个工作区标识：一个标识，不是路径。
+	testWorkspaceID = sessionlog.WorkspaceID("ws-acp")
+	// otherWorkspaceID 是 otherCwd 换出来的那个。
+	otherWorkspaceID = sessionlog.WorkspaceID("ws-acp-别的")
+	// workspaceDisplay 是 testWorkspaceID 拿给客户端看的那条路径。它和 clientCwd
+	// 不是同一个串：`session/list` 报出去的 cwd 走的是反向换算，两者相等的话那一步
+	// 做没做就分不出来了。
+	workspaceDisplay = "/登记册里/项目"
+	// otherDisplay 是 otherWorkspaceID 的展示路径。
+	otherDisplay = "/登记册里/别的项目"
+)
+
+// fakeWorkspaces 是一小块假的工作区登记册。
+//
+// 两张表故意分开填：一条 cwd 换得出标识，不等于那个标识换得回展示路径——
+// 「登记册里已经没有这个工作区了」正是这么摆出来的。
+type fakeWorkspaces struct {
+	byCwd   map[string]sessionlog.WorkspaceID
+	display map[sessionlog.WorkspaceID]string
+	// resolveFail 非 nil 时 WorkspaceOf 报这个错。
+	resolveFail error
+	// displayFail 非 nil 时 WorkspaceDisplay 报这个错。
+	displayFail error
+}
+
+// newFakeWorkspaces 造一册装着上面那两个工作区的登记册。
+func newFakeWorkspaces() *fakeWorkspaces {
+	return &fakeWorkspaces{
+		byCwd: map[string]sessionlog.WorkspaceID{
+			clientCwd: testWorkspaceID,
+			otherCwd:  otherWorkspaceID,
+		},
+		display: map[sessionlog.WorkspaceID]string{
+			testWorkspaceID:  workspaceDisplay,
+			otherWorkspaceID: otherDisplay,
+		},
+	}
+}
+
+func (w *fakeWorkspaces) WorkspaceOf(_ context.Context, cwd string) (sessionlog.WorkspaceID, bool, error) {
+	if w.resolveFail != nil {
+		return "", false, w.resolveFail
+	}
+	found, ok := w.byCwd[cwd]
+	return found, ok, nil
+}
+
+func (w *fakeWorkspaces) WorkspaceDisplay(_ context.Context, id sessionlog.WorkspaceID) (string, bool, error) {
+	if w.displayFail != nil {
+		return "", false, w.displayFail
+	}
+	found, ok := w.display[id]
+	return found, ok, nil
+}
 
 // quietLogger 是一个什么都不记的 logger：这一包好几条路**本来就**要记警告，
 // 让它们打到测试输出里只会淹掉真正的失败。
@@ -485,12 +546,12 @@ func (c *fakeCatalog) List(context.Context) ([]sessionlog.SessionHeader, error) 
 }
 
 // archived 造一条落了档的会话头。
-func archived(id sessionlog.SessionID, createdAt int64, cwd string) sessionlog.SessionHeader {
+func archived(id sessionlog.SessionID, createdAt int64, workspace sessionlog.WorkspaceID) sessionlog.SessionHeader {
 	return sessionlog.SessionHeader{
-		Version:   sessionlog.FormatVersion,
-		ID:        id,
-		CreatedAt: createdAt,
-		Cwd:       cwd,
+		Version:     sessionlog.FormatVersion,
+		ID:          id,
+		CreatedAt:   createdAt,
+		WorkspaceID: workspace,
 	}
 }
 
@@ -577,7 +638,7 @@ func (f *scriptedFactory) CreateAgent(
 		return agent.Handle{}, err
 	}
 	live, err := f.sessions.Create(ctx, agentScope, options.SessionID, coresession.CreateOptions{
-		Cwd:           options.Cwd,
+		WorkspaceID:   options.WorkspaceID,
 		ParentSession: options.ParentSession,
 		SeedLength:    options.SeedLength,
 	})
@@ -721,8 +782,11 @@ type fixture struct {
 	sessions *coresession.Store
 	factory  *scriptedFactory
 	store    *fakeStore
-	owner    *scope.Scope
-	config   Config
+	// workspaces 是 [newFixture] 默认装上去的那册登记；换掉了 Config.Workspaces 的
+	// 用例不该再看它。
+	workspaces *fakeWorkspaces
+	owner      *scope.Scope
+	config     Config
 }
 
 // newFixture 装一座桥：真的 agent 注册表、真的会话存储，假的只有那条通道、那台附件
@@ -755,6 +819,7 @@ func newFixture(t *testing.T, mutate func(*Config)) *fixture {
 	}
 
 	store := &fakeStore{}
+	workspaces := newFakeWorkspaces()
 	config := Config{
 		Agents:      agents,
 		Sessions:    sessions,
@@ -763,6 +828,7 @@ func newFixture(t *testing.T, mutate func(*Config)) *fixture {
 		Prompts:     prompts,
 		Provider:    "p",
 		Model:       "m",
+		Workspaces:  workspaces,
 		Logger:      quiet,
 	}
 	if mutate != nil {
@@ -781,14 +847,15 @@ func newFixture(t *testing.T, mutate func(*Config)) *fixture {
 	t.Cleanup(func() { _ = quiesce(context.Background()) })
 
 	return &fixture{
-		bridge:   bridge,
-		peer:     peer,
-		agents:   agents,
-		sessions: sessions,
-		factory:  factory,
-		store:    store,
-		owner:    owner,
-		config:   config,
+		bridge:     bridge,
+		peer:       peer,
+		agents:     agents,
+		sessions:   sessions,
+		factory:    factory,
+		store:      store,
+		workspaces: workspaces,
+		owner:      owner,
+		config:     config,
 	}
 }
 
@@ -807,7 +874,7 @@ func (f *fixture) handshake(t *testing.T) wire.InitializeResponse {
 // newSession 开一个会话并交出它的标识。
 func (f *fixture) newSession(t *testing.T) wire.SessionId {
 	t.Helper()
-	response, err := f.bridge.NewSession(t.Context(), wire.NewSessionRequest{Cwd: absolutePath})
+	response, err := f.bridge.NewSession(t.Context(), wire.NewSessionRequest{Cwd: clientCwd})
 	if err != nil {
 		t.Fatalf("开会话不该失败：%v", err)
 	}
@@ -897,7 +964,7 @@ func base64Of(data []byte) string { return base64.StdEncoding.EncodeToString(dat
 func freeAgent(t *testing.T, provider, model string) *scriptedAgent {
 	t.Helper()
 	id := sessionlog.SessionID("free")
-	header := sessionlog.SessionHeader{ID: id, Cwd: absolutePath}
+	header := sessionlog.SessionHeader{ID: id, WorkspaceID: testWorkspaceID}
 	live, err := coresession.NewSession(id, coresession.Options{Header: &header, Now: tickingClock()})
 	if err != nil {
 		t.Fatalf("造游离会话失败：%v", err)

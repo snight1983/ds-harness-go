@@ -19,8 +19,8 @@ const DefaultMaxSourceBytes = 1 << 20 // 1_048_576
 // DefaultMaxTotalSourceBytes 是一次装载读进内存的总字节上限。
 //
 // 新增: 上游只有每个文件的上限。每个文件一兆是够用的，但一次发现能扫出**多少**
-// 个文件取决于 cwd 到项目根之间有多少层目录、每层有多少个候选名在场——那个数
-// 由工作区的形状决定，不由配置决定。八份一兆的文件各自都在上限之内，加起来
+// 个文件取决于工作目录到项目根之间有多少层目录、每层有多少个候选名在场——那个
+// 数由工作区的形状决定，不由配置决定。八份一兆的文件各自都在上限之内，加起来
 // 却是八兆，而这八兆会被完整拿在手上直到渲染那一步才裁掉。
 //
 // 十六兆：按缺省的每文件一兆算，等于允许十六份满额文件。真实工作区里
@@ -60,7 +60,7 @@ type Config struct {
 	// 这一层**，发现阶段直接跳过它，而不是去探一个猜出来的路径。
 	UserGlobalRoot string
 
-	// ProjectRootMarkers 是从 cwd 往上走时用来认项目根的那些子项名字。
+	// ProjectRootMarkers 是从 workspaceRoot 往上走时用来认项目根的那些子项名字。
 	//
 	// 留 nil 用默认的 `.git`。这里认的是「子项在场」而不是「子项是目录」，
 	// 因为 `.git` 在工作树里是目录、在 worktree 里是文件。
@@ -183,15 +183,15 @@ func resolveCandidates(candidates []string, fallback []string) []string {
 //
 // 源: packages/context/agent-instructions/src/config.ts:62-82
 //
-// 项目根记的是**相对 cwd 的位置**而不是绝对路径：同一个仓库被挂在不同的
-// 绝对路径下仍然是同一份基线，而根相对 cwd 挪了一层就不是了。
+// 项目根记的是**相对 workspaceRoot 的位置**而不是绝对路径：同一个仓库被挂在不同的
+// 绝对路径下仍然是同一份基线，而根相对 workspaceRoot 挪了一层就不是了。
 //
 // 新增: [ResolvedConfig.MaxTotalSourceBytes] **故意**不在这份载荷里。这里编的是
 // 「这份基线是按什么口径产出的」——发现范围、优先级、预算。总量上限不是口径，
 // 它是一道资源闸：正常路径上碰不到，碰到了那一次装载会直接失败，不会悄悄产出
 // 一份少了几个文件的基线。把它编进去只会让「运维调了一下这个数」变成
 // 「所有在途会话的基线全部判成不兼容」。
-func WorkspaceBaselineIdentity(config ResolvedConfig, cwd string, projectRoot string) string {
+func WorkspaceBaselineIdentity(config ResolvedConfig, workspaceRoot string, projectRoot string) string {
 	// 字段顺序就是 DSH 那个对象字面量的顺序，encoding/json 按结构体字段序输出。
 	// 顺序变了串就变了，而串一变所有在途会话的基线都会被判成不兼容。
 	payload := struct {
@@ -202,7 +202,7 @@ func WorkspaceBaselineIdentity(config ResolvedConfig, cwd string, projectRoot st
 		InstructionFileCandidates      []string `json:"instructionFileCandidates"`
 		LocalInstructionFileCandidates []string `json:"localInstructionFileCandidates"`
 	}{
-		ProjectRoot:                    RelativeDisplay(cwd, projectRoot),
+		ProjectRoot:                    RelativeDisplay(workspaceRoot, projectRoot),
 		ProjectRootMarkers:             config.ProjectRootMarkers,
 		MaxBytes:                       config.MaxBytes,
 		MaxSourceBytes:                 config.MaxSourceBytes,

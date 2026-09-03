@@ -100,7 +100,7 @@ type Subagents interface {
 // **只生产不消费**：收结果那件事归 job_output，不归它。
 type Jobs interface {
 	// Start 登记一件作业并交回它的 id。
-	Start(spec jobs.Start) (jobs.JobID, error)
+	Start(ctx context.Context, spec jobs.Start) (jobs.JobID, error)
 }
 
 // Config 是这件工具的装配面。

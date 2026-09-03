@@ -17,7 +17,7 @@ import (
 func agentAtDepth(t *testing.T, id string, depth int) *fakeAgent {
 	t.Helper()
 	sessionID := session.SessionID(id)
-	header := session.SessionHeader{ID: sessionID, Cwd: testAbsolutePath, DelegationDepth: depth}
+	header := session.SessionHeader{ID: sessionID, WorkspaceID: testWorkspaceID, DelegationDepth: depth}
 	live, err := coresession.NewSession(sessionID, coresession.Options{Header: &header, Now: fixedClock()})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)

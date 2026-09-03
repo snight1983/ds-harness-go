@@ -221,7 +221,7 @@ type stubJobs struct {
 	hookErr error
 }
 
-func (j *stubJobs) Start(spec jobs.Start) (jobs.JobID, error) {
+func (j *stubJobs) Start(_ context.Context, spec jobs.Start) (jobs.JobID, error) {
 	j.spec = spec
 	if j.err != nil {
 		return "", j.err

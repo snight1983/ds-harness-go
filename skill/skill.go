@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // namePattern 是技能名的公开文法：小写字母数字，用单个短横连起来。
@@ -241,8 +242,12 @@ type Registration struct {
 //
 // 新增: DSH 这里还有一个 signal，Go 里那是第一个参数上的 [context.Context]。
 type LookupOptions struct {
-	// Cwd 选的是这次查找算哪个工作区，空串表示不挑。
-	Cwd string
+	// WorkspaceID 选的是这次查找算哪个工作区，空串表示不挑。
+	//
+	// 新增: DSH 这个字段叫 `cwd`，装的是一条宿主机工作目录。本仓库喂进来的是
+	// [github.com/snight1983/ds-harness-go/session.SessionHeader.WorkspaceID]，
+	// 一个不透明的归属标识，字段名跟着改。提供方只许拿它比相等，不许解析。
+	WorkspaceID session.WorkspaceID
 }
 
 // ViewOptions 是读注册表时的选项：提供方那份查找上下文，加上看的人是谁。

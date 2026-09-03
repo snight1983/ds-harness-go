@@ -7,8 +7,6 @@ import (
 	"context"
 	"errors"
 	"iter"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -81,8 +79,12 @@ func textStream(text string) *scriptedStream {
 	}}
 }
 
-// summarizeCwd 是这些用例里那个会话的工作目录，必须是绝对路径。
-var summarizeCwd = filepath.Join(os.TempDir(), "ds-harness-go-compaction-basic")
+// summarizeWorkspaceID 是这些用例里那个会话归属的工作区登记。
+//
+// 新增: 原来这里是 filepath.Join(os.TempDir(), …)，为的是「在本机上确实绝对」。
+// 会话头改用世界路径之后那条理由没有了：绝对性由纯 POSIX 的 [path.IsAbs] 判，
+// 不跟着本机平台走，所以一个字面量在哪台机器上读都一样。
+var summarizeWorkspaceID = session.WorkspaceID("ws-compaction-basic")
 
 // liveSession 造一段游离会话；headers 里每一条都排一次请求头快照。
 func liveSession(t *testing.T, id string, headers ...llm.CallConfig) *coresession.Session {
@@ -90,7 +92,7 @@ func liveSession(t *testing.T, id string, headers ...llm.CallConfig) *coresessio
 
 	sid := session.SessionID(id)
 	live, err := coresession.NewSession(sid, coresession.Options{
-		Header: &session.SessionHeader{ID: sid, Cwd: summarizeCwd},
+		Header: &session.SessionHeader{ID: sid, WorkspaceID: summarizeWorkspaceID},
 	})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)

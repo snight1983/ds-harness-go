@@ -1,9 +1,10 @@
-// 本文件验这个包自己那条运行期不变量：三条检查各自会在什么时候响。
+// 本文件验这个包自己那条运行期不变量：四条检查各自会在什么时候响。
 //
 // 源: packages/storage/storage-domain/src/invariant.ts:12-67
 //
-// 三条查的都是「事件说的话和此刻的状态对不对得上」，而正常代码路径永远不会让它们
-// 对不上——那正是这条不变量存在的意义（次序被换成「先发事件再改内存」时它当场抓到）。
+// 四条查的都是「这条事件自身说得通吗」——它指的域开着吗、指的表声明过吗、
+// 它带的东西和它宣称的动作配吗。正常代码路径永远不会让它们说不通，那正是这条
+// 不变量存在的意义（次序被换成「先发事件再落盘」时，第 3 条当场抓到）。
 // 所以用例是直接调 [Facility.emit] 发一条**捏造的**通知，而不是绕一次真的写。
 // 这是白盒手法，同包测试拿得到，也只有这里拿得到。
 
@@ -154,125 +155,114 @@ func TestANotificationForAClosedDomainIsAViolation(t *testing.T) {
 	})
 }
 
-// TestAPutEventCarryingTheWrongValueIsAViolation 钉住第 2 条。
+// TestAPutEventWithoutAReceiptIsAViolation 钉住第 3 条，也是这条不变量最要紧的一支。
 //
 // 源: packages/storage/storage-domain/src/invariant.ts:47-53
 //
-// 事件和状态分了叉，收到通知的那一方会照着事件里的值走——两边从此各说各话，
-// 且谁都不会发现。这一条是「先落盘、再改内存、再发事件」在运行期的证据。
-func TestAPutEventCarryingTheWrongValueIsAViolation(t *testing.T) {
-	t.Parallel()
-
-	_, facility := boot(t)
-	arm(t, facility)
-	domain := open(t, facility, notesSpec())
-
-	if err := entries(t, domain).Put(t.Context(), "a", note{Title: "内存里的"}); err != nil {
-		t.Fatalf("写不该失败：%v", err)
-	}
-
-	expectViolation(t, "对不上", func() {
-		facility.emit(Changed{
-			Domain: "notes", Table: "entries", Key: "a",
-			Operation: OperationPut,
-			Value:     []byte(`{"title":"事件里的","count":0}`),
-		})
-	})
-}
-
-// TestAPutEventForAnAbsentRecordIsAViolation 钉住第 2 条里「内存里根本没有它」那一支。
+// 修订标识只可能来自后端确认落盘之后的那个返回值（见 [Table.store]），凑不出来。
+// 一条没带它的写入事件，只能是发在落盘之前——而那意味着订阅者会看见一次
+// 可能根本没成功的写。
 //
-// 源: packages/storage/storage-domain/src/invariant.ts:47-53
-func TestAPutEventForAnAbsentRecordIsAViolation(t *testing.T) {
+// 新增: DSH 那一条查的是「事件里的值等于此刻内存里那一份」。内存权威态删掉之后
+// 那个比法没了对象，换成读介质又会误报（理由见 [RegisterInvariants]），
+// 于是判据换成了这张收据。
+func TestAPutEventWithoutAReceiptIsAViolation(t *testing.T) {
 	t.Parallel()
 
 	_, facility := boot(t)
 	arm(t, facility)
 	open(t, facility, notesSpec())
 
-	expectViolation(t, "内存里没有它", func() {
+	expectViolation(t, "发在后端确认落盘之前", func() {
 		facility.emit(Changed{
-			Domain: "notes", Table: "entries", Key: "从来没写过",
+			Domain: "notes", Table: "entries", Key: "a",
 			Operation: OperationPut,
-			Value:     []byte(`{"title":"凭空","count":0}`),
+			Value:     []byte(`{"title":"没收据","count":0}`),
 		})
 	})
 }
 
-// TestADeleteEventForALivingRecordIsAViolation 钉住第 3 条。
+// TestAPutEventWithoutAValueIsAViolation 钉住第 3 条的另一半。
 //
-// 源: packages/storage/storage-domain/src/invariant.ts:39-45
+// 源: packages/storage/storage-domain/src/invariant.ts:47-53
 //
-// 一条还在的记录被宣布删除，会让订阅者据此丢掉自己那份缓存，而下一次读又把它读回来。
-func TestADeleteEventForALivingRecordIsAViolation(t *testing.T) {
+// 一条不带值的写入事件，订阅者没法据它做任何事——它连「写进去的是什么」都说不出来。
+func TestAPutEventWithoutAValueIsAViolation(t *testing.T) {
 	t.Parallel()
 
 	_, facility := boot(t)
 	arm(t, facility)
-	domain := open(t, facility, notesSpec())
+	open(t, facility, notesSpec())
 
-	if err := entries(t, domain).Put(t.Context(), "a", note{Title: "还活着"}); err != nil {
-		t.Fatalf("写不该失败：%v", err)
-	}
-
-	expectViolation(t, "还在内存里", func() {
+	expectViolation(t, "没带值", func() {
 		facility.emit(Changed{
 			Domain: "notes", Table: "entries", Key: "a",
-			Operation: OperationDeleted,
+			Operation: OperationPut, Revision: "7",
 		})
 	})
 }
 
-// TestAGlobalEventCarryingTheWrongValueIsAViolation 钉住全局槽那一路。
+// TestADeleteEventCarryingAValueIsAViolation 钉住第 4 条的前半：墓碑不带值。
+//
+// 源: packages/storage/storage-domain/src/invariant.ts:39-45
+func TestADeleteEventCarryingAValueIsAViolation(t *testing.T) {
+	t.Parallel()
+
+	_, facility := boot(t)
+	arm(t, facility)
+	open(t, facility, notesSpec())
+
+	expectViolation(t, "墓碑不带值", func() {
+		facility.emit(Changed{
+			Domain: "notes", Table: "entries", Key: "a",
+			Operation: OperationDeleted,
+			Value:     []byte(`{"title":"删了还带值","count":0}`),
+		})
+	})
+}
+
+// TestADeleteEventCarryingAReceiptIsAViolation 钉住第 4 条的后半：删除不产生新的一版。
+//
+// 一条删除事件带着修订标识，说明发它的那条路把删当成了一次写——而删掉的记录
+// 没有「这一版」可言，那个号只能是从别处抄来的。
+func TestADeleteEventCarryingAReceiptIsAViolation(t *testing.T) {
+	t.Parallel()
+
+	_, facility := boot(t)
+	arm(t, facility)
+	open(t, facility, notesSpec())
+
+	expectViolation(t, "删除不产生新的一版", func() {
+		facility.emit(Changed{
+			Domain: "notes", Table: "entries", Key: "a",
+			Operation: OperationDeleted, Revision: "7",
+		})
+	})
+}
+
+// TestAGlobalDeleteEventIsAViolation 钉住全局槽那一路。
 //
 // 源: packages/storage/storage-domain/src/invariant.ts:30-35
 //
 // 全局槽用空表名表示，和 [Changed] 与 [RecordSlot] 是同一套约定。
-func TestAGlobalEventCarryingTheWrongValueIsAViolation(t *testing.T) {
+// [Global] 上根本没有删除这个操作，所以这样一条事件只可能是程序写错了。
+func TestAGlobalDeleteEventIsAViolation(t *testing.T) {
 	t.Parallel()
 
 	_, facility := boot(t)
 	arm(t, facility)
-	domain := open(t, facility, notesSpec())
+	open(t, facility, notesSpec())
 
-	if err := prefs(t, domain).Set(t.Context(), preference{Theme: "dark"}); err != nil {
-		t.Fatalf("写全局不该失败：%v", err)
-	}
-
-	expectViolation(t, "对不上", func() {
-		facility.emit(Changed{
-			Domain: "notes", Operation: OperationPut,
-			Value: []byte(`{"theme":"light"}`),
-		})
+	expectViolation(t, "全局槽根本删不掉", func() {
+		facility.emit(Changed{Domain: "notes", Operation: OperationDeleted})
 	})
 }
 
-// TestAGlobalEventOnADomainWithoutAGlobalSlotIsAViolation 钉住读不到当前值那一支。
-//
-// 源: packages/storage/storage-domain/src/invariant.ts:30-35
-//
-// 一条声称写了全局值的通知，发自一个根本没有全局槽的域——这只可能是程序写错了。
-//
-// 新增: DSH 那边 `domain.global.get()` 在没有全局槽时是取一个 never 类型的句柄，
-// 编译期就过不去；Go 的 [Domain.RawGlobal] 返回 error，于是这一支在运行期才现形。
-func TestAGlobalEventOnADomainWithoutAGlobalSlotIsAViolation(t *testing.T) {
-	t.Parallel()
-
-	_, facility := boot(t)
-	arm(t, facility)
-
-	spec := notesSpec()
-	spec.Global = nil
-	open(t, facility, spec)
-
-	expectViolation(t, "读不到当前值", func() {
-		facility.emit(Changed{Domain: "notes", Operation: OperationPut, Value: []byte(`{}`)})
-	})
-}
-
-// TestARecordEventOnAnUndeclaredTableIsAViolation 钉住记录那一路读不到当前值的情况。
+// TestARecordEventOnAnUndeclaredTableIsAViolation 钉住第 2 条。
 //
 // 源: packages/storage/storage-domain/src/invariant.ts:37-37
+//
+// 指到一张这个域没声明过的表，按表名分派的订阅者会静静地丢掉它。
 func TestARecordEventOnAnUndeclaredTableIsAViolation(t *testing.T) {
 	t.Parallel()
 
@@ -280,10 +270,10 @@ func TestARecordEventOnAnUndeclaredTableIsAViolation(t *testing.T) {
 	arm(t, facility)
 	open(t, facility, notesSpec())
 
-	expectViolation(t, "读不到当前值", func() {
+	expectViolation(t, "没有声明过它", func() {
 		facility.emit(Changed{
 			Domain: "notes", Table: "没声明过的表", Key: "a",
-			Operation: OperationPut, Value: []byte(`{}`),
+			Operation: OperationPut, Revision: "7", Value: []byte(`{}`),
 		})
 	})
 }

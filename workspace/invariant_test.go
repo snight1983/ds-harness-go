@@ -1,8 +1,14 @@
-// 本文件的作用：「实体缓存就是落盘表的镜像」这条检查——它拦得住什么、
+// 本文件的作用：「workspaces 表只由登记册来写」这条检查——它拦得住什么、
 // 什么时候不该拦、以及注销之后订阅确实跟着摘掉了。
 //
 // 这条检查的观察点在域的写路径上，而 [invariants.Fail] 是 panic，
 // 所以这里的用例都要在 [domain.Table.Put] / [domain.Table.Delete] 外面接住那次 panic。
+//
+// 新增: 这一整个文件原来压的是「实体缓存就是落盘表的镜像」。缓存删掉之后
+// （见 [Registry]）那个比法没了对象，判据换成了「这次写有没有被
+// [Registry.beginWrite] 记过一笔」（理由见 [RegisterInvariants]）。用例的**动作**
+// 一个字没变——绕过登记册直接写那张表，本来就既不在缓存里也不在记账里——
+// 变的是它们各自在说的那句话。
 
 package workspace
 
@@ -107,8 +113,9 @@ func newInvariantHarness(t *testing.T, ctx context.Context) *invariantHarness {
 
 	// 直接拿登记册手里那张表来写，绕开它的公开面——这就是这条检查要抓的那条路径。
 	//
-	// 一个域只能打开一次，所以扮不了「另一个持有者」；但那本来也不是重点：
-	// 这条检查看的是**表被写了而缓存没跟上**，谁写的无所谓。
+	// 一个域只能打开一次，所以扮不了「另一个持有者」；而那正好也是这条检查的边界：
+	// 它只认**本进程内**没经过登记册的写（见 [RegisterInvariants]），
+	// 别的副本绕过去写这张表，这里一条事件都收不到。
 	fixture := &invariantHarness{h: h, registry: registry, table: registry.workspace, live: true}
 	unregister, err := RegisterInvariants(
 		ctx,
@@ -133,7 +140,7 @@ func TestRegisterInvariants绕过登记册写记录时抓住(t *testing.T) {
 		_ = fixture.table.Put(ctx, "谁写的", goodRecord())
 	})
 	if violation == nil {
-		t.Fatal("缓存里没有这个实体，这一次写该被拦住")
+		t.Fatal("这一次写没经过登记册，该被拦住")
 	}
 	if violation.PackageName != PackageName {
 		t.Fatalf("归属该是 %q，拿到 %q", PackageName, violation.PackageName)
@@ -148,13 +155,13 @@ func TestRegisterInvariants绕过登记册删记录时抓住(t *testing.T) {
 	fixture := newInvariantHarness(t, ctx)
 	created := mustCreate(t, ctx, fixture.registry, "/a", "")
 
-	// 经登记册建出来的那一条，缓存里有、表里也有。直接从表上删掉它：
-	// 记录没了而缓存还在发布它，这就是分叉。
+	// 删也一样要盯：一条经登记册建出来的记录，被人从表上直接抹掉之后，
+	// 登记册次序里还点着它，而没有任何一步会报错。
 	violation := catchViolation(t, func() {
 		_, _ = fixture.table.Delete(ctx, string(created.ID()))
 	})
 	if violation == nil {
-		t.Fatal("缓存里还留着这个实体，这一次删该被拦住")
+		t.Fatal("这一次删没经过登记册，该被拦住")
 	}
 	if !strings.Contains(violation.Message, string(created.ID())) {
 		t.Fatalf("这句话该点出是哪条记录，拿到 %q", violation.Message)
@@ -165,7 +172,11 @@ func TestRegisterInvariants走登记册的写不触发(t *testing.T) {
 	ctx := t.Context()
 	fixture := newInvariantHarness(t, ctx)
 
-	// 建、改、删走的都是登记册自己的写路径，次序上缓存和表始终对得上。
+	// 建、改、删走的都是登记册自己的写路径，每一次都记了账，所以一次都不该抛。
+	//
+	// 这一条同时钉住了那条时序：域的变更通知发在写链的槽位里，所以事件到达时
+	// [Registry.beginWrite] 那笔记账必然还举着（见 [RegisterInvariants]）。
+	// 要是通知改成异步的，这条用例就会红。
 	violation := catchViolation(t, func() {
 		created := mustCreate(t, ctx, fixture.registry, "/a", "甲")
 		if err := created.SetTitle(ctx, "乙"); err != nil {

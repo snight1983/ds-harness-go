@@ -19,22 +19,43 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/snight1983/ds-harness-go/storage"
 )
+
+// mediumSequence 给每一份介质发一个进程内唯一的编号。
+//
+// 修订标识里拌进它，两份各自独立的介质就永远发不出相等的令牌——契约要求
+// 一个「从 A 读、拿去 B 写」的调用方撞上的是「对不上」，而不是一次静默的成功。
+// 这和 [github.com/snight1983/ds-harness-go/datastore] 里那份实现同源同形。
+var mediumSequence atomic.Int64
+
+// globalSlot 是全局槽在令牌里占的那一段。
+//
+// 它故意不合 [storage.ValidUnitName]，所以永远不会和某张真表的那一段撞上。
+const globalSlot = "@global"
 
 // MemoryMedium 是一份介质，对应磁盘上的那棵文件树或那个数据库文件。
 //
 // 它的生命周期比后端长：后端 Close 之后它原样还在，重新开一个后端就能读回去。
 type MemoryMedium struct {
+	// instance 是这份介质的编号，只进修订标识，不对外露出。
+	instance string
+
 	mutex sync.Mutex
 	units map[string]*memoryUnitData
 }
 
 // NewMemoryMedium 建一份空介质。
 func NewMemoryMedium() *MemoryMedium {
-	return &MemoryMedium{units: map[string]*memoryUnitData{}}
+	return &MemoryMedium{
+		instance: strconv.FormatInt(mediumSequence.Add(1), 10),
+		units:    map[string]*memoryUnitData{},
+	}
 }
 
 // memoryUnitData 是介质上一个单元的全部内容，包括盖在上面的版本号。
@@ -45,8 +66,19 @@ func NewMemoryMedium() *MemoryMedium {
 type memoryUnitData struct {
 	mutex   sync.Mutex
 	version int
-	tables  map[string]map[string]json.RawMessage
-	global  json.RawMessage
+	tables  map[string]map[string]memoryRecord
+	// global 是全局槽。nil 表示从没写过——那和「写过一段 JSON null」是两件事。
+	global *memoryRecord
+}
+
+// memoryRecord 是介质上的一条记录：值，加上它此刻的计数。
+//
+// 计数从 1 起数，每一次成功的写加一，**即使写进去的值和原来一模一样**。
+// 不加的话，一个「读到某一版、写了个相同的值」的序列会让下一次条件写误判成
+// 「没人动过」。
+type memoryRecord struct {
+	value   json.RawMessage
+	counter int64
 }
 
 // unit 取出介质上的单元，还没有就按描述符建一个。
@@ -69,11 +101,11 @@ func (m *MemoryMedium) unit(descriptor storage.KVUnitDescriptor) (*memoryUnitDat
 
 	data := &memoryUnitData{
 		version: descriptor.Version,
-		tables:  map[string]map[string]json.RawMessage{},
+		tables:  map[string]map[string]memoryRecord{},
 	}
 	// 声明过的表一律先建成空 map：契约要求它们**在场且为空**，而不是缺席。
 	for _, table := range descriptor.Tables {
-		data.tables[table] = map[string]json.RawMessage{}
+		data.tables[table] = map[string]memoryRecord{}
 	}
 	m.units[descriptor.Name] = data
 	return data, nil
@@ -101,8 +133,8 @@ func (m *MemoryMedium) Table(unit, table string) map[string]json.RawMessage {
 		return nil
 	}
 	copied := make(map[string]json.RawMessage, len(records))
-	for key, value := range records {
-		copied[key] = append(json.RawMessage(nil), value...)
+	for key, record := range records {
+		copied[key] = append(json.RawMessage(nil), record.value...)
 	}
 	return copied
 }
@@ -123,7 +155,7 @@ func (m *MemoryMedium) Global(unit string) json.RawMessage {
 	if data.global == nil {
 		return nil
 	}
-	return append(json.RawMessage(nil), data.global...)
+	return append(json.RawMessage(nil), data.global.value...)
 }
 
 // MemoryBackend 是开在一份介质上的后端。同一份介质可以先后开好几个（模拟进程重启）。
@@ -230,66 +262,137 @@ func (u *memoryUnit) LoadAll(context.Context) (storage.Snapshot, error) {
 	tables := make(map[string]map[string]json.RawMessage, len(u.data.tables))
 	for table, records := range u.data.tables {
 		copied := make(map[string]json.RawMessage, len(records))
-		for key, value := range records {
-			copied[key] = append(json.RawMessage(nil), value...)
+		for key, record := range records {
+			copied[key] = append(json.RawMessage(nil), record.value...)
 		}
 		tables[table] = copied
 	}
 
 	var global json.RawMessage
 	if u.data.global != nil {
-		global = append(json.RawMessage(nil), u.data.global...)
+		global = append(json.RawMessage(nil), u.data.global.value...)
 	}
 	return storage.Snapshot{Tables: tables, Global: global}, nil
 }
 
-func (u *memoryUnit) PutRecord(_ context.Context, table, key string, value json.RawMessage) error {
+func (u *memoryUnit) LoadTable(_ context.Context, table string) (map[string]json.RawMessage, error) {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
 
 	if u.closed {
-		return u.errClosed()
+		return nil, u.errClosed()
 	}
 
 	u.data.mutex.Lock()
 	defer u.data.mutex.Unlock()
 
-	records, declared := u.data.tables[table]
-	if !declared {
+	// 没声明过的表和空表交出的是同一样东西：一张空 map。理由见 [storage.KVUnit]。
+	copied := map[string]json.RawMessage{}
+	for key, record := range u.data.tables[table] {
+		copied[key] = append(json.RawMessage(nil), record.value...)
+	}
+	return copied, nil
+}
+
+// revisionOf 把一条记录的计数折成对外的修订标识。
+func (u *memoryUnit) revisionOf(slot string, counter int64) storage.Revision {
+	return storage.Revision(u.backend.medium.instance + ":" + u.descriptor.Name + ":" + slot +
+		":" + strconv.FormatInt(counter, 10))
+}
+
+// counterOf 把一个修订标识折回计数。第二个返回值为 false 表示它不是这个槽发出来的。
+//
+// 别处发的令牌**当作对不上处理，不当作格式错误**：一个拿着 A 介质的令牌去 B 介质写的
+// 调用方，它真正的问题是「我以为我读过这条记录」，而那正是前置条件要拦的事。
+func (u *memoryUnit) counterOf(slot string, revision storage.Revision) (int64, bool) {
+	rest, ok := strings.CutPrefix(string(revision),
+		u.backend.medium.instance+":"+u.descriptor.Name+":"+slot+":")
+	if !ok {
+		return 0, false
+	}
+	counter, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return counter, true
+}
+
+func (u *memoryUnit) errStale(slot, key string) error {
+	if key == "" {
 		return &storage.Error{
-			Code:    storage.CodeMalformedMedium,
-			Message: fmt.Sprintf("单元 %q 没有声明过表 %q", u.descriptor.Name, table),
+			Code:    storage.CodeStaleRevision,
+			Message: fmt.Sprintf("单元 %q 的 %s 上的前置条件不成立", u.descriptor.Name, slot),
 		}
 	}
-	records[key] = append(json.RawMessage(nil), value...)
-	return nil
+	return &storage.Error{
+		Code: storage.CodeStaleRevision,
+		Message: fmt.Sprintf("单元 %q 的表 %q 的键 %q 上的前置条件不成立",
+			u.descriptor.Name, slot, key),
+	}
 }
 
-func (u *memoryUnit) DeleteRecord(_ context.Context, table, key string) error {
+// checkIntent 判一次写的前置条件成不成立。current 为 nil 表示这一行此刻不存在。
+//
+// 这里判完就地写，中间不放锁——契约要求「不存在才写」在介质上是一次原子操作。
+func (u *memoryUnit) checkIntent(
+	slot, key string, current *memoryRecord, expected storage.WriteIntent,
+) error {
+	switch typed := expected.(type) {
+	case nil:
+		return nil
+	case storage.CreateIfAbsent:
+		if current != nil {
+			return u.errStale(slot, key)
+		}
+		return nil
+	case storage.ReplaceIfRevision:
+		if current == nil {
+			return u.errStale(slot, key)
+		}
+		counter, ok := u.counterOf(slot, typed.Revision)
+		if !ok || counter != current.counter {
+			return u.errStale(slot, key)
+		}
+		return nil
+	default:
+		// WriteIntent 是封闭的：这一支只可能是 storage 自己将来加了成员却忘了在这里判。
+		return &storage.Error{
+			Code:    storage.CodeMalformedMedium,
+			Message: fmt.Sprintf("认不出的写前置条件 %T", expected),
+		}
+	}
+}
+
+func (u *memoryUnit) ReadRecord(
+	_ context.Context, table, key string,
+) (json.RawMessage, storage.Revision, bool, error) {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
 
 	if u.closed {
-		return u.errClosed()
+		return nil, "", false, u.errClosed()
 	}
 
 	u.data.mutex.Lock()
 	defer u.data.mutex.Unlock()
 
-	// 表没声明过时不报错：删是幂等的，而「删一个不存在的东西」就是什么也不做。
-	delete(u.data.tables[table], key)
-	return nil
+	// 没声明过的表在这里同样是「不在」，不是错误——这个方法问的就是「在不在」。
+	record, found := u.data.tables[table][key]
+	if !found {
+		return nil, "", false, nil
+	}
+	return append(json.RawMessage(nil), record.value...), u.revisionOf(table, record.counter), true, nil
 }
 
-func (u *memoryUnit) SetGlobal(_ context.Context, value json.RawMessage) error {
+func (u *memoryUnit) ReadGlobal(context.Context) (json.RawMessage, storage.Revision, error) {
 	u.mutex.Lock()
 	defer u.mutex.Unlock()
 
 	if u.closed {
-		return u.errClosed()
+		return nil, "", u.errClosed()
 	}
 	if !u.descriptor.HasGlobal {
-		return &storage.Error{
+		return nil, "", &storage.Error{
 			Code:    storage.CodeMalformedMedium,
 			Message: fmt.Sprintf("单元 %q 没有声明全局槽", u.descriptor.Name),
 		}
@@ -298,8 +401,111 @@ func (u *memoryUnit) SetGlobal(_ context.Context, value json.RawMessage) error {
 	u.data.mutex.Lock()
 	defer u.data.mutex.Unlock()
 
-	u.data.global = append(json.RawMessage(nil), value...)
-	return nil
+	if u.data.global == nil {
+		// 声明了槽但一次都没写过——全新单元的正常状态，不是介质坏了。
+		return nil, "", nil
+	}
+	return append(json.RawMessage(nil), u.data.global.value...),
+		u.revisionOf(globalSlot, u.data.global.counter), nil
+}
+
+func (u *memoryUnit) PutRecord(
+	_ context.Context, table, key string, value json.RawMessage, expected storage.WriteIntent,
+) (storage.Revision, error) {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+
+	if u.closed {
+		return "", u.errClosed()
+	}
+
+	u.data.mutex.Lock()
+	defer u.data.mutex.Unlock()
+
+	records, declared := u.data.tables[table]
+	if !declared {
+		return "", &storage.Error{
+			Code:    storage.CodeMalformedMedium,
+			Message: fmt.Sprintf("单元 %q 没有声明过表 %q", u.descriptor.Name, table),
+		}
+	}
+
+	var current *memoryRecord
+	if existing, found := records[key]; found {
+		current = &existing
+	}
+	if err := u.checkIntent(table, key, current, expected); err != nil {
+		return "", err
+	}
+
+	counter := int64(1)
+	if current != nil {
+		counter = current.counter + 1
+	}
+	records[key] = memoryRecord{value: append(json.RawMessage(nil), value...), counter: counter}
+	return u.revisionOf(table, counter), nil
+}
+
+func (u *memoryUnit) DeleteRecord(
+	_ context.Context, table, key string, expected *storage.ReplaceIfRevision,
+) (bool, error) {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+
+	if u.closed {
+		return false, u.errClosed()
+	}
+
+	u.data.mutex.Lock()
+	defer u.data.mutex.Unlock()
+
+	// 表没声明过时不报错：删是幂等的，而「删一个不存在的东西」就是什么也不做。
+	record, found := u.data.tables[table][key]
+	if expected != nil {
+		var current *memoryRecord
+		if found {
+			current = &record
+		}
+		if err := u.checkIntent(table, key, current, *expected); err != nil {
+			return false, err
+		}
+	}
+	if !found {
+		return false, nil
+	}
+	delete(u.data.tables[table], key)
+	return true, nil
+}
+
+func (u *memoryUnit) SetGlobal(
+	_ context.Context, value json.RawMessage, expected storage.WriteIntent,
+) (storage.Revision, error) {
+	u.mutex.Lock()
+	defer u.mutex.Unlock()
+
+	if u.closed {
+		return "", u.errClosed()
+	}
+	if !u.descriptor.HasGlobal {
+		return "", &storage.Error{
+			Code:    storage.CodeMalformedMedium,
+			Message: fmt.Sprintf("单元 %q 没有声明全局槽", u.descriptor.Name),
+		}
+	}
+
+	u.data.mutex.Lock()
+	defer u.data.mutex.Unlock()
+
+	if err := u.checkIntent(globalSlot, "", u.data.global, expected); err != nil {
+		return "", err
+	}
+
+	counter := int64(1)
+	if u.data.global != nil {
+		counter = u.data.global.counter + 1
+	}
+	u.data.global = &memoryRecord{value: append(json.RawMessage(nil), value...), counter: counter}
+	return u.revisionOf(globalSlot, counter), nil
 }
 
 // Close 释放这个单元。**幂等**，且把它从后端那张「已打开」表里摘掉，

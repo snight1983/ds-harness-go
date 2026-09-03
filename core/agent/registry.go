@@ -56,8 +56,11 @@ type CreateOptions struct {
 	// SessionID 是 agent 和会话共用的那个活身份，必填。
 	SessionID sessionlog.SessionID
 
-	// Cwd 是这个会话的工作目录，必须是本机上的绝对路径。
-	Cwd string
+	// WorkspaceID 是这个会话归属的工作区登记；空串表示不属于任何工作区。
+	//
+	// 新增: DSH 这里是 `cwd`，一条宿主机路径。换成一个不透明归属标识的理由见
+	// [github.com/snight1983/ds-harness-go/session.SessionHeader.WorkspaceID]。
+	WorkspaceID sessionlog.WorkspaceID
 	// ParentSession 是分叉来源的标识。
 	ParentSession sessionlog.SessionID
 	// SeedLength 是耐久的分叉血统边界。

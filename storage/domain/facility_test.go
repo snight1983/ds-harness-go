@@ -345,7 +345,7 @@ func TestAFailedOpenReleasesTheUnitAndTheName(t *testing.T) {
 	// 把坏记录清掉，同一个名字能重新开起来——这同时证明后端那个单元已经释放了。
 	repairRecord(t, medium, "notes", "entries", "bad")
 	again := open(t, facility, notesSpec())
-	if got, ok, err := again.RawRecord("entries", "good"); err != nil || !ok || len(got) == 0 {
+	if got, _, ok, err := again.RawRecord(t.Context(), "entries", "good"); err != nil || !ok || len(got) == 0 {
 		t.Fatalf("重开之后好的那条该还在：%v %v", ok, err)
 	}
 }
@@ -654,7 +654,7 @@ func corruptRecord(t *testing.T, medium *storagetest.MemoryMedium, unit, table, 
 	t.Helper()
 
 	withUnit(t, medium, unit, func(opened storage.KVUnit) {
-		if err := opened.PutRecord(t.Context(), table, key, json.RawMessage(raw)); err != nil {
+		if _, err := opened.PutRecord(t.Context(), table, key, json.RawMessage(raw), nil); err != nil {
 			t.Fatalf("塞坏记录不该失败：%v", err)
 		}
 	})
@@ -665,7 +665,7 @@ func corruptGlobal(t *testing.T, medium *storagetest.MemoryMedium, unit, raw str
 	t.Helper()
 
 	withUnit(t, medium, unit, func(opened storage.KVUnit) {
-		if err := opened.SetGlobal(t.Context(), json.RawMessage(raw)); err != nil {
+		if _, err := opened.SetGlobal(t.Context(), json.RawMessage(raw), nil); err != nil {
 			t.Fatalf("塞坏的全局值不该失败：%v", err)
 		}
 	})
@@ -676,7 +676,7 @@ func repairRecord(t *testing.T, medium *storagetest.MemoryMedium, unit, table, k
 	t.Helper()
 
 	withUnit(t, medium, unit, func(opened storage.KVUnit) {
-		if err := opened.DeleteRecord(t.Context(), table, key); err != nil {
+		if _, err := opened.DeleteRecord(t.Context(), table, key, nil); err != nil {
 			t.Fatalf("删坏记录不该失败：%v", err)
 		}
 	})

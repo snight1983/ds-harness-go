@@ -277,7 +277,7 @@ func TestCreateAndResumeDelegate(t *testing.T) {
 		t.Fatalf("登记造法失败：%v", err)
 	}
 
-	handle, err := registry.Create(ctx, owner, CreateOptions{SessionID: "made", Cwd: testAbsolutePath})
+	handle, err := registry.Create(ctx, owner, CreateOptions{SessionID: "made", WorkspaceID: testWorkspaceID})
 	if err != nil {
 		t.Fatalf("造 agent 失败：%v", err)
 	}

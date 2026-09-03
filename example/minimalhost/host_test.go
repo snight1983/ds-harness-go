@@ -101,7 +101,7 @@ func (w *world) runTurn(t *testing.T, text string) []sessionlog.Event {
 
 	handle, err := w.host.Agents.Create(t.Context(), w.host.Scope, agent.CreateOptions{
 		SessionID:    "一次装配",
-		Cwd:          t.TempDir(),
+		WorkspaceID:  "ws-一次装配",
 		AgentOptions: agent.Options{Provider: "甲", Model: "m-1"},
 	})
 	if err != nil {

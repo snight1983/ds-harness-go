@@ -253,7 +253,7 @@ func (f *fakeFactory) CreateAgent(
 	}
 	return f.publish(ctx, owner, options.SessionID, coresession.CreateOptions{
 		Seed:            options.Seed,
-		Cwd:             options.Cwd,
+		WorkspaceID:     options.WorkspaceID,
 		ParentSession:   options.ParentSession,
 		SeedLength:      options.SeedLength,
 		Origin:          options.Origin,
@@ -283,7 +283,7 @@ func (f *fakeFactory) Resume(
 	// 全长；而那条耐久血统边界原样从存档那份头里带回来。
 	return f.publish(ctx, owner, options.ResumeSessionID, coresession.CreateOptions{
 		Seed:            loaded.Events,
-		Cwd:             loaded.Meta.Cwd,
+		WorkspaceID:     loaded.Meta.WorkspaceID,
 		ParentSession:   loaded.Meta.ParentSession,
 		SeedLength:      loaded.Meta.SeedLength,
 		Origin:          loaded.Meta.Origin,
@@ -462,7 +462,7 @@ func (f *continuationFixture) spawnParent(t *testing.T, id session.SessionID, pa
 	t.Helper()
 	agentScope := keyedScope(t, string(id), f.owner.Key())
 	live, err := f.sessions.Create(t.Context(), agentScope, id, coresession.CreateOptions{
-		Cwd:           testAbsolutePath,
+		WorkspaceID:   testWorkspaceID,
 		ParentSession: parent,
 	})
 	if err != nil {

@@ -417,7 +417,7 @@ func TestColdResumeSurfacesAnUnreadableDescriptorRecord(t *testing.T) {
 	fixture.store.put(session.SessionHeader{
 		Version:         session.FormatVersion,
 		ID:              "child",
-		Cwd:             testAbsolutePath,
+		WorkspaceID:     testWorkspaceID,
 		ParentSession:   "parent",
 		Origin:          session.OriginSubagent,
 		DelegationDepth: 1,

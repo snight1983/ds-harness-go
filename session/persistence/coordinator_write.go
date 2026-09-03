@@ -173,7 +173,7 @@ func (c *Coordinator) reconcileTracked(live *coresession.Session, seed []session
 	}
 
 	c.mutex.Lock()
-	owner, trackedCwd, materialized := tracked.owner, tracked.meta.Cwd, tracked.materialized
+	owner, trackedWorkspace, materialized := tracked.owner, tracked.meta.WorkspaceID, tracked.materialized
 	nextSeq, started := tracked.nextSeq, tracked.started
 	c.mutex.Unlock()
 
@@ -183,14 +183,14 @@ func (c *Coordinator) reconcileTracked(live *coresession.Session, seed []session
 	}
 	if owner == nil {
 		// 一份没主的状态，来自公开的 Create／Load。**第一个**活会话可以认领它,
-		// 但工作目录和 seed 两样都得对上。工作目录不同是撞号不是认领——认下来
-		// 就等于拿存档头里那个工作目录去写这个活会话的事件。seed 那道则保证
+		// 但归属工作区和 seed 两样都得对上。工作区不同是撞号不是认领——认下来
+		// 就等于拿存档头里那个归属去写这个活会话的事件。seed 那道则保证
 		// 活会话的事件真的复现得出已经落盘的那段前缀；否则一个重用了同一个
 		// 身份的新会话，它开头那几条事件会被当成「已经写过了」滤掉。
-		if trackedCwd != live.Header().Cwd {
+		if trackedWorkspace != live.Header().WorkspaceID {
 			return true, fmt.Errorf(
-				"session/persistence: 会话 %q 已经存在于另一个工作目录下（存档：%q，活的：%q），撞号了",
-				string(id), trackedCwd, live.Header().Cwd)
+				"session/persistence: 会话 %q 已经归在另一个工作区下（存档：%q，活的：%q），撞号了",
+				string(id), trackedWorkspace, live.Header().WorkspaceID)
 		}
 		matches, err := c.seedMatchesPersisted(id, seed, nextSeq, started)
 		if err != nil {
@@ -257,10 +257,10 @@ func (c *Coordinator) adoptLivePrefix(
 	if err := CheckStoredIdentity(id, stored.Meta); err != nil {
 		return err
 	}
-	if stored.Meta.Cwd != live.Header().Cwd {
+	if stored.Meta.WorkspaceID != live.Header().WorkspaceID {
 		return fmt.Errorf(
-			"session/persistence: 会话 %q 已经存在于另一个工作目录下（存档：%q，活的：%q），撞号了",
-			string(id), stored.Meta.Cwd, live.Header().Cwd)
+			"session/persistence: 会话 %q 已经归在另一个工作区下（存档：%q，活的：%q），撞号了",
+			string(id), stored.Meta.WorkspaceID, live.Header().WorkspaceID)
 	}
 	if err := CheckStoredVersion(stored.Meta); err != nil {
 		return locateRefusal(c.backend, stored.Meta, err)
@@ -304,7 +304,7 @@ func (c *Coordinator) adoptLivePrefix(
 }
 
 // seedMatchesPersisted 问一个活会话的 seed 复不复现得出已经落盘的那一段
-//（也就是 seq 小于 nextSeq 的那些事件）。
+// （也就是 seq 小于 nextSeq 的那些事件）。
 //
 // 源: packages/session/session-persistence/src/coordinator.ts:1215-1222
 //

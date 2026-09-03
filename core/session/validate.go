@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 
 	"github.com/snight1983/ds-harness-go/llm"
 	sessionlog "github.com/snight1983/ds-harness-go/session"
@@ -99,17 +98,11 @@ func validateSessionHeader(id sessionlog.SessionID, header sessionlog.SessionHea
 	if header.CreatedAt < 0 {
 		return fmt.Errorf("%w: session header createdAt must be a non-negative safe integer", ErrInvalidHeader)
 	}
-	if header.Cwd != "" && !filepath.IsAbs(header.Cwd) {
-		// 新增: DSH 用的是 node 的 path.isAbsolute，那是一个**跟着平台走**的判断
-		//（Windows 上认 `C:\x` 和 `\x`，POSIX 上认 `/x`）。filepath.IsAbs 是它逐条
-		// 对应的那一个；path.IsAbs 只认 POSIX，在 Windows 上会把每一条真实的
-		// 工作目录都判成非绝对。这条路径的用途是给存储后端拿去做目录键，
-		// 也就是说它一定要在**本机**上成立，所以跟着平台走是对的。
-		return fmt.Errorf(
-			"%w: session header cwd must be an absolute path, got %q",
-			ErrInvalidHeader, header.Cwd,
-		)
-	}
+	// 新增: DSH 在这里校验 `cwd` 是不是一条绝对路径（node 的 path.isAbsolute）。
+	// 本仓库这一项是 [sessionlog.SessionHeader.WorkspaceID]，一个不透明标识，
+	// 没有「绝对性」这种可校验的形状——它合不合法只有一个意思：工作区登记册里认不认得
+	// 这一行。那件事在挂载的那一刻由 workspace 包判（一次相等），不在这里判，
+	// 也判不了：本包不认识工作区登记册。
 	if header.SeedLength < 0 {
 		return fmt.Errorf("%w: session header seedLength must be a non-negative safe integer", ErrInvalidHeader)
 	}

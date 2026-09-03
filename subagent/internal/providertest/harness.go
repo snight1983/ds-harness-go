@@ -33,8 +33,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -50,10 +48,11 @@ import (
 	"github.com/snight1983/ds-harness-go/subagent/subagent"
 )
 
-// absolutePath 是一条在本机上确实绝对的路径。
+// workspaceID 是父会话头里那个归属工作区。
 //
-// 写死哪一边的字面量都会让另一个平台上的测试变成假通过。
-var absolutePath = filepath.Join(os.TempDir(), "ds-harness-go-providertest")
+// 新增: 它是一个字面量标识，和文件系统里有什么东西**没有任何关系**——这正是
+// [session.SessionHeader.WorkspaceID] 换掉那条路径之后的样子，见它自己的注释。
+var workspaceID = session.WorkspaceID("providertest-workspace")
 
 // tickingClock 是一个走得可预测的时钟：每读一次加一毫秒。
 func tickingClock() func() int64 {
@@ -180,7 +179,7 @@ func (f *recordingFactory) CreateAgent(
 	}
 	live, err := f.sessions.Create(ctx, agentScope, options.SessionID, coresession.CreateOptions{
 		Seed:            options.Seed,
-		Cwd:             options.Cwd,
+		WorkspaceID:     options.WorkspaceID,
 		ParentSession:   options.ParentSession,
 		SeedLength:      options.SeedLength,
 		Origin:          options.Origin,
@@ -271,7 +270,7 @@ func New(t *testing.T) *Harness {
 	}
 
 	parentID := session.SessionID("parent")
-	header := session.SessionHeader{ID: parentID, Cwd: absolutePath}
+	header := session.SessionHeader{ID: parentID, WorkspaceID: workspaceID}
 	parentSession, err := coresession.NewSession(parentID, coresession.Options{Header: &header, Now: tickingClock()})
 	if err != nil {
 		t.Fatalf("造父会话失败：%v", err)

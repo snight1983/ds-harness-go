@@ -33,6 +33,18 @@ const (
 // 接口，装配方把实现直接交给需要它的那几个包（成例见
 // [github.com/snight1983/ds-harness-go/subagent/reporttool.Service]）。DSH 那道
 // `new.target === JobRegistry` 的守卫因此没有对应物：接口实例化不了。
+//
+// # 为什么每个方法都收 ctx、都可能失败
+//
+// 新增: DSH 那五个方法一个 ctx 都不收，除 [Registry.Start] 外也都不会失败——
+// 它那台注册表是**进程内的一张 map**，读它既不会往返也没什么可取消的。
+// 本仓库要多副本部署，账本因此在库里（见
+// [github.com/snight1983/ds-harness-go/jobs/domainjobs]），一次 List 是一趟
+// 数据库往返：会超时、会被取消、会失败。接口上没有 ctx 和 error 就没地方说这件事，
+// 而把它藏起来（吞掉错误交一份空列表）等于让「后端坏了」冒充「一件作业都没有」。
+//
+// 进程内那台实现（[github.com/snight1983/ds-harness-go/jobs/localjobs]）照旧
+// 收下 ctx 不用、error 恒 nil。
 type Registry interface {
 	// Start 先把访问、校验、属主清理和实现方自己那道准入过一遍，然后起活儿并
 	// 原子地登记它。预检拒掉的话不会留下任何作业 id 或者执行资源；[Start.Run]
@@ -40,31 +52,44 @@ type Registry interface {
 	// 结局、通知监听器、放开等待者。
 	//
 	// 源: packages/jobs/jobs/src/index.ts:82
-	Start(spec Start) (JobID, error)
+	//
+	// 新增: 收 ctx，理由见 [Registry] 头上那一段。
+	Start(ctx context.Context, spec Start) (JobID, error)
 
 	// List 按登记顺序列出调用方自己的和无主的那些作业，不外露别的会话那些标签。
 	// caller 为 nil 的调用方只看得见无主作业。
 	//
 	// 源: packages/jobs/jobs/src/index.ts:90
-	List(caller agent.Agent) []Snapshot
+	//
+	// 新增: 收 ctx 且可能失败，理由见 [Registry] 头上那一段。
+	List(ctx context.Context, caller agent.Agent) ([]Snapshot, error)
 
 	// Get 交回一份不消费的快照，既不动它的读游标也不动它的通知状态。
 	// 认不得的 id 和别人的作业都报错。
 	//
 	// 源: packages/jobs/jobs/src/index.ts:99
-	Get(id JobID, caller agent.Agent) (Snapshot, error)
+	//
+	// 新增: 收 ctx，理由见 [Registry] 头上那一段。
+	Get(ctx context.Context, id JobID, caller agent.Agent) (Snapshot, error)
 
 	// Read 读下一段流式增量，或者结算之后那份幂等的最终输出。一次终态读会把这件
 	// 作业标成已汇报。认不得的 id 和别人的作业都报错。
 	//
 	// 源: packages/jobs/jobs/src/index.ts:109
-	Read(id JobID, caller agent.Agent) (Read, error)
+	//
+	// 新增: 收 ctx，理由见 [Registry] 头上那一段。一件跑在别的副本上的作业还活着
+	// 的时候，实时输出只有那个副本手里有，这里必须报错而不是交一段空文本——
+	// 见 [Snapshot.Runner]。
+	Read(ctx context.Context, id JobID, caller agent.Agent) (Read, error)
 
 	// Kill 请求取消，然后把作业标成 stopping 和已汇报。生产方出错要原样传上去，
 	// 且不改作业状态。认不得的 id 和别人的作业都报错。reason 空串表示没给理由。
 	//
 	// 源: packages/jobs/jobs/src/index.ts:120
-	Kill(id JobID, caller agent.Agent, reason string) (KillResult, error)
+	//
+	// 新增: 收 ctx，理由见 [Registry] 头上那一段。取消得了一件作业的只有握着它
+	// 执行资源的那个副本，别的副本必须报错而不是假装成功——见 [Snapshot.Runner]。
+	Kill(ctx context.Context, id JobID, caller agent.Agent, reason string) (KillResult, error)
 
 	// Wait 等到结算或者超时，不取消这件作业。调用方主动取消只在作业还活着的
 	// 时候生效；落定之后终态快照赢，这样一份为这个等待者压掉的通知仍旧发得出去。

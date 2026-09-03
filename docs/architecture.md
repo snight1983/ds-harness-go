@@ -169,12 +169,13 @@ flowchart LR
 
 | 文档模块 | 覆盖的主要包 |
 |---|---|
-| [Agent](modules/agent.md) | `core/agent`、`core/scope`、`core/agentdefaultmodel` |
+| [Agent 控制面](modules/agent.md) | `core/agent` |
 | [Agent Loop](modules/agentloop.md) | `core/agentloop`、上下文组装、压缩与外置接线 |
 | [Session](modules/session.md) | `session`、`core/session`、`session/*`、`sessionquery` |
 | [LLM](modules/llm.md) | `llm`、`llm/*` |
-| [Tools](modules/tools.md) | `core/tools`、`guard/*`、`interaction/*`、`mcp`、`todo`、`plan` |
-| [Skill](modules/skill.md) | `skill`、`preset/*`、`context/*`、`core/systemprompt` |
+| [Tools](modules/tools.md) | `core/tools` |
+| [系统提示词装配](modules/systemprompt.md) | `core/systemprompt` |
+| [Skill](modules/skill.md) | `skill`、`skill/skilltool` |
 | [Subagent](modules/subagent.md) | `subagent/*` |
 | [Storage](modules/storage.md) | `storage/*`、`session/persistence`、`fs/*`、`attachment`、`credentials` |
 | [持久化抽象层](modules/datastore.md) | `datastore`、`datastore/kvstore`、`datastore/sessionstore` |

@@ -104,6 +104,7 @@ func Test词汇按分类翻过来(t *testing.T) {
 	}{
 		{datastore.ErrVersionMismatch, storage.CodeVersionMismatch},
 		{datastore.ErrClosed, storage.CodeClosed},
+		{datastore.ErrStaleRevision, storage.CodeStaleRevision},
 		{datastore.ErrMalformedName, storage.CodeMalformedMedium},
 		{datastore.ErrMalformedMedium, storage.CodeMalformedMedium},
 		{datastore.ErrAlreadyOpen, storage.CodeMalformedMedium},
@@ -156,7 +157,7 @@ func Test没声明全局槽就写全局槽会被拒(t *testing.T) {
 	if err != nil {
 		t.Fatalf("打开单元失败：%v", err)
 	}
-	if err := unit.SetGlobal(ctx, json.RawMessage(`{"x":1}`)); !hasCode(err, storage.CodeMalformedMedium) {
+	if _, err := unit.SetGlobal(ctx, json.RawMessage(`{"x":1}`), nil); !hasCode(err, storage.CodeMalformedMedium) {
 		t.Fatalf("想要 %v，拿到 %v", storage.CodeMalformedMedium, err)
 	}
 }
@@ -214,7 +215,7 @@ func Test介质上的值不是合法JSON时报坏介质(t *testing.T) {
 	if err != nil {
 		t.Fatalf("打开单元失败：%v", err)
 	}
-	if err := unit.PutRecord(ctx, "records", "k", json.RawMessage(`{"ok":true}`)); err != nil {
+	if _, err := unit.PutRecord(ctx, "records", "k", json.RawMessage(`{"ok":true}`), nil); err != nil {
 		t.Fatalf("写记录失败：%v", err)
 	}
 
@@ -259,7 +260,7 @@ func Test带NUL的值存得下也读得回(t *testing.T) {
 	if err != nil {
 		t.Fatalf("编码失败：%v", err)
 	}
-	if err := unit.PutRecord(ctx, "records", "k", encoded); err != nil {
+	if _, err := unit.PutRecord(ctx, "records", "k", encoded, nil); err != nil {
 		t.Fatalf("写带 NUL 的值失败：%v", err)
 	}
 

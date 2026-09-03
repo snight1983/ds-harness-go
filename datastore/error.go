@@ -39,6 +39,12 @@ var (
 	// ErrClosed 是「这份介质或这个单元已经关掉了」。
 	ErrClosed = errors.New("datastore: 已经关闭")
 
+	// ErrStaleRevision 是「一次带前置条件的写，条件不成立」。见 [RecordGuard]。
+	//
+	// 这是**正常控制流**，不是介质坏了：多副本部署下，两个副本同时读-改-写同一条
+	// 记录，本来就该有一个失败重来。放过它等于把后写的那一版静默丢掉。
+	ErrStaleRevision = errors.New("datastore: 写的前置条件不成立")
+
 	// ErrAlreadyOpen 是「同一个单元名没关就开了第二次」。
 	//
 	// 这必须响：放过的话两个句柄各自持有一份状态，后写的把先写的覆盖掉，

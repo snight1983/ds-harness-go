@@ -4,7 +4,7 @@
 
 ## 定位
 
-Skill 是模型阅读后遵循的任务说明，不是可调用函数。工具回答“模型能执行什么”，Skill 回答“这类任务应该怎么做”。本页覆盖 `skill`、`skill/skilltool`、`core/systemprompt`、`preset/*` 和 `context/*`。
+Skill 是模型阅读后遵循的任务说明，不是可调用函数。工具回答“模型能执行什么”，Skill 回答“这类任务应该怎么做”。本页覆盖 `skill`、`skill/skilltool`，并串起它们与 `core/systemprompt`、`preset/*`、`context/*` 的关系；这三处各有各的文档。
 
 ## 架构
 
@@ -12,13 +12,16 @@ Skill 是模型阅读后遵循的任务说明，不是可调用函数。工具�
 flowchart LR
     Providers["Skill Provider"] --> SkillRegistry["skill.Registry"]
     Presets["Agent Preset / Persona"] --> Scope["作用域注册"]
-    Context["工作区指令 / 时间 / 会话引用"] --> Prompt["core/systemprompt"]
     SkillRegistry --> SkillTool["skill 工具与目录"]
-    Scope --> Prompt
+    Scope --> Prompt["core/systemprompt"]
     SkillTool --> Prompt
     Prompt --> Assembly["步骤提示词与工具清单"]
     Assembly --> Model["模型请求"]
+    Context["工作区指令 / 时间 / 会话引用"] --> PreStep["agent.OnPreStep"]
+    PreStep --> Model
 ```
+
+`context/*` 那三个包不经过 `core/systemprompt`：它们挂的是 `agent.OnPreStep`，直接往那一步的消息里塞。
 
 所有贡献都显式挂在作用域上。全局能力位于外层，预设和 Agent 能力位于内层；同名能力由更近的一层覆盖，同层重名直接报错。
 
@@ -44,16 +47,9 @@ flowchart LR
 
 ## 系统提示词
 
-`core/systemprompt.Registry` 组合四类内容：
+`core/systemprompt.Registry` 组合四类登记——段落、动态上下文、变量、工具提供方——装配成模型这一步的全部输入。Persona 占用固定段落 `deployment:persona`；预设里的 Persona 遮蔽掉部署方那份，不改变部署全局身份。
 
-| 内容 | 作用 |
-|---|---|
-| Section | 按顺序拼接的稳定提示词段落 |
-| Context | 可单独形成上下文快照的运行时段落 |
-| Variable | 为模板插值提供动态值 |
-| Tool Provider | 提供当前步骤可见工具及其顺序 |
-
-装配按作用域解析后再调用 Provider，最后经过有序规则链。规则可以改写或终止装配，但不能绕过注册表的同名、排序和作用域规则。Persona 占用固定段落；预设中的 Persona 只覆盖该预设下的 Agent，不改变部署全局身份。
+细节见[系统提示词装配](systemprompt.md)。
 
 ## Agent 预设
 

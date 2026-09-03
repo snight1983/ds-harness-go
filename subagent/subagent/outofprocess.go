@@ -1,7 +1,6 @@
 // 本文件的作用：**跨进程**子 agent 后端那一侧的词汇——围着一个在别的进程里的孩子、
 // 把这条接缝自己那些契约守住的那几件东西：那份「一样能力都没有」的申报、时限参数
-// 的校验、孩子工作目录的解算（配置覆盖，否则用发起派发的那个父会话的工作区）、
-// 那次绝不报错的结果结清，以及标准的运行句柄发布。
+// 的校验、那次绝不报错的结果结清，以及标准的运行句柄发布。
 //
 // 源: packages/subagent/subagent/src/out-of-process.ts
 //
@@ -13,8 +12,6 @@ package subagent
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -78,90 +75,12 @@ func AssertPositiveTimeout(prefix, name string, value time.Duration) error {
 	return nil
 }
 
-// isEnterableDirectory 判断一个路径是不是一个宿主**进得去**的现存目录。
-//
-// 源: packages/subagent/subagent/src/out-of-process.ts:75-86
-//
-// 那道「进得去」的探测很要紧：一个 mode-600 的目录 IsDir() 照样为真，而一个子进程
-// 的 cwd 要的是执行（搜索）权限，否则起进程直接 EACCES。
-//
-// 新增: DSH 用 accessSync(path, X_OK) 探这一下。Go 的标准库没有 access(2)，
-// golang.org/x/sys/unix 有、但只在 Unix 上有，而本仓库还要交叉编到 Windows。
-// 这里改探 `path/.`：解析路径里的 `.` 这一段本身就要求对 path 有搜索权限，
-// 所以一个 mode-600 的目录在这一步就会 EACCES。[os.Stat] 不 Clean 路径、
-// 原样交给系统调用，这个技巧才成立——所以这里**有意**不用 [filepath.Join]，
-// 它会把那个 `.` 消掉，探测也就退回成一次普通的 stat。
-func isEnterableDirectory(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || !info.IsDir() {
-		return false
-	}
-	// stat/access 在这里只会报文件系统访问类的错（ENOENT/EACCES/ENOTDIR/…），
-	// 而它们每一个都意味着这个路径当不了孩子的 cwd。
-	_, err = os.Stat(path + string(filepath.Separator) + ".")
-	return err == nil
-}
-
-// AssertUsableCwd 判定一个 cwd 真的托得住这个孩子：是绝对路径（它同时是孩子的
-// 工作区身份，一个相对路径会被重新锚到服务进程自己的启动目录上），而且是一个
-// 现存的目录（在进程边界**之前**就失败，而不是变成一次含糊的 spawn ENOENT）。
-//
-// 源: packages/subagent/subagent/src/out-of-process.ts:98-106
-func AssertUsableCwd(prefix, label, cwd string) error {
-	if !filepath.IsAbs(cwd) {
-		return fmt.Errorf("%s：%s 必须是绝对路径：%s", prefix, label, cwd)
-	}
-	if !isEnterableDirectory(cwd) {
-		return fmt.Errorf("%s：%s 不是一个进得去的目录：%s", prefix, label, cwd)
-	}
-	return nil
-}
-
-// ValidateConfiguredCwd 在插件装载时把配置里那个 cwd 覆盖**验一次**：相对路径按
-// 宿主的启动目录解释，而且必须是一个进得去的目录。空串表示配置里没给这一项，
-// 那就交回空串。
-//
-// 源: packages/subagent/subagent/src/out-of-process.ts:118-124
-//
-// 新增: DSH 要把「没给」（undefined）和「给了个空串」分开，并且对空串**报错**——
-// 因为 path.resolve 收到空串时会悄悄给出进程的 cwd，正好把这次解算要铲掉的那条
-// 「退回启动目录」的兜底又请回来。Go 这边空串就是本仓库通行的「没给」，
-// [filepath.Abs] 那一步压根走不到，那条错误也就没有对应物。
-func ValidateConfiguredCwd(prefix, cwd string) (string, error) {
-	if cwd == "" {
-		return "", nil
-	}
-	absolute, err := filepath.Abs(cwd)
-	if err != nil {
-		// 走不到：上面那道空串检查过了之后，filepath.Abs 只在 os.Getwd 失败时
-		// 才失败——那是进程自己的工作目录被摘掉了，测里造不出来。
-		return "", fmt.Errorf("%s：配置里的 cwd 解不成绝对路径：%w", prefix, err)
-	}
-	if err := AssertUsableCwd(prefix, "配置里的 cwd", absolute); err != nil {
-		return "", err
-	}
-	return absolute, nil
-}
-
-// ResolveChildCwd 在开工那一刻解算孩子的工作目录：配了覆盖就用它（装载时已经验过），
-// 否则用父会话那个工作区 cwd（在这里验，那是它最早解得出来的地方）。
-//
-// 源: packages/subagent/subagent/src/out-of-process.ts:139-145
-//
-// 两样都没有时大声失败：退回宿主进程的 cwd 会把孩子悄悄绑在服务的启动目录上，
-// 而不是发起派发的那个会话的工作区——一个服务进程服务很多会话，每个都有自己的 cwd。
-func ResolveChildCwd(prefix, configured, parentCwd string) (string, error) {
-	if configured != "" {
-		return configured, nil
-	}
-	if parentCwd == "" {
-		return "", fmt.Errorf("%s：这个孩子没有工作目录——配一个 cwd，或者从一个有 cwd 的父会话派发", prefix)
-	}
-	if err := AssertUsableCwd(prefix, "父会话的 cwd", parentCwd); err != nil {
-		return "", err
-	}
-	return parentCwd, nil
-}
+// 新增: DSH 这里还有 isEnterableDirectory／assertUsableCwd／validateConfiguredCwd／
+// resolveChildCwd 四件东西：验一个宿主机目录当不当得了孩子进程的 cwd，验不过就在
+// 起进程之前失败。本仓库整簇删掉了——服务端没有可用硬盘（见
+// [session.SessionHeader.WorkspaceID]），一个孩子进程的宿主工作目录不是这条接缝
+// 答得出来的事。真要起本机进程的后端自己知道该在本机的哪里落脚，那是它和
+// subprocess 那条接缝之间的事，不该由一个跑在无盘服务上的通用词汇表来规定。
 
 // RunResultSettlement 是 [SettleRunResult] 的那几样输入。
 //

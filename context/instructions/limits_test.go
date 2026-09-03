@@ -124,7 +124,7 @@ func TestReconcile总量超了就整次失败(t *testing.T) {
 	fixture.config = Config{MaxBytes: 1 << 20, MaxSourceBytes: 1000, MaxTotalSourceBytes: 600}.Resolve()
 
 	_, ok, err := Reconcile(t.Context(), fixture.fsys, fixture.config, ReconcileRequest{
-		Cwd:                   "/repo",
+		WorkspaceRoot:         "/repo",
 		ProjectRoot:           "/repo",
 		Versions:              fixture.versions,
 		TouchedPaths:          []string{"/repo/sub/file.go"},
@@ -154,7 +154,7 @@ func TestReconcile缓存命中的那份不占总量额度(t *testing.T) {
 	fixture.config = Config{MaxBytes: 1 << 20, MaxSourceBytes: 1000, MaxTotalSourceBytes: 100}.Resolve()
 
 	result, ok, err := Reconcile(t.Context(), fixture.fsys, fixture.config, ReconcileRequest{
-		Cwd:                   "/repo",
+		WorkspaceRoot:         "/repo",
 		ProjectRoot:           "/repo",
 		Versions:              fixture.versions,
 		Effective:             []Change{previous},

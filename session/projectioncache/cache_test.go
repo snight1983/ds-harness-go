@@ -174,7 +174,7 @@ func TestCachedSnapshotServesNothingWhenThereIsNoUsableRecord(t *testing.T) {
 			f := newFixture(t, 1, time.Second)
 			meta := item.arrange(t, f)
 
-			snapshot, err := f.cache.CachedSnapshot(meta)
+			snapshot, err := f.cache.CachedSnapshot(t.Context(), meta)
 			if err != nil {
 				t.Fatalf("不该报错：%v", err)
 			}
@@ -205,7 +205,7 @@ func TestCachedSnapshotTakesTheLowestWatermarkAmongTheRowsItServes(t *testing.T)
 		t.Fatalf("摆记录不该失败：%v", err)
 	}
 
-	snapshot, err := f.cache.CachedSnapshot(meta)
+	snapshot, err := f.cache.CachedSnapshot(t.Context(), meta)
 	if err != nil {
 		t.Fatalf("不该报错：%v", err)
 	}
@@ -235,7 +235,7 @@ func TestCachedSnapshotSkipsRowsWhoseStateVersionMovedOn(t *testing.T) {
 		t.Fatalf("摆记录不该失败：%v", err)
 	}
 
-	snapshot, err := f.cache.CachedSnapshot(meta)
+	snapshot, err := f.cache.CachedSnapshot(t.Context(), meta)
 	if err != nil {
 		t.Fatalf("不该报错：%v", err)
 	}
@@ -252,7 +252,7 @@ func TestCachedSnapshotSurfacesAStorageFailure(t *testing.T) {
 	f := newFixture(t, 1, time.Second)
 	closeFixtureDomain(t, f)
 
-	if _, err := f.cache.CachedSnapshot(session.SessionHeader{ID: "s1", CreatedAt: 7}); err == nil {
+	if _, err := f.cache.CachedSnapshot(t.Context(), session.SessionHeader{ID: "s1", CreatedAt: 7}); err == nil {
 		t.Fatalf("该把读失败报上来")
 	}
 }
@@ -594,7 +594,7 @@ func TestWriteFlushesTheLogBeforeItWritesTheRecord(t *testing.T) {
 
 	sawRecord := true
 	f.onFlush(func(LiveSession) error {
-		_, ok, err := f.table.Get("s1")
+		_, ok, err := f.table.Get(t.Context(), "s1")
 		if err != nil {
 			t.Errorf("探针读不该失败：%v", err)
 		}
@@ -648,7 +648,7 @@ func TestWriteStopsAtTheFirstFailureWithoutTouchingTheMedium(t *testing.T) {
 			if err := f.cache.Write(context.Background(), newLive("s1", 7, userEvent(0))); err == nil {
 				t.Fatalf("该报上来")
 			}
-			if _, ok, err := f.table.Get("s1"); err != nil || ok {
+			if _, ok, err := f.table.Get(t.Context(), "s1"); err != nil || ok {
 				t.Fatalf("介质上不该留下记录：%v %v", ok, err)
 			}
 			if got := len(f.flushes()); got != item.wantFlush {
@@ -682,7 +682,7 @@ func TestObserveWritesAtTheEndOfEveryTurn(t *testing.T) {
 	live := newLive("s1", 7, userEvent(0), turnEndEvent(1))
 	f.cache.Observe(live, live.events[1])
 
-	waitFor(t, "回合结束触发的那次写", func() bool { return f.stored("s1") })
+	waitFor(t, "回合结束触发的那次写", func() bool { return f.stored(t.Context(), "s1") })
 	if flushes := f.flushes(); len(flushes) != 1 || flushes[0] != "s1" {
 		t.Fatalf("屏障该正好被调一次：%v", flushes)
 	}
@@ -702,12 +702,12 @@ func TestObserveThrottlesMidTurnEventsByCount(t *testing.T) {
 	f.cache.Observe(live, live.events[0])
 	f.cache.Observe(live, live.events[1])
 
-	if _, ok, err := f.table.Get("s1"); err != nil || ok {
+	if _, ok, err := f.table.Get(t.Context(), "s1"); err != nil || ok {
 		t.Fatalf("攒够之前不该写：%v %v", ok, err)
 	}
 
 	f.cache.Observe(live, live.events[2])
-	waitFor(t, "攒够事件触发的那次写", func() bool { return f.stored("s1") })
+	waitFor(t, "攒够事件触发的那次写", func() bool { return f.stored(t.Context(), "s1") })
 
 	// 写完记账清零，所以下一条又从头攒。
 	f.cache.Observe(live, live.events[0])
@@ -727,7 +727,7 @@ func TestObserveThrottlesMidTurnEventsByInterval(t *testing.T) {
 	live := newLive("s1", 7, userEvent(0))
 	f.cache.Observe(live, live.events[0])
 
-	waitFor(t, "间隔到点触发的那次写", func() bool { return f.stored("s1") })
+	waitFor(t, "间隔到点触发的那次写", func() bool { return f.stored(t.Context(), "s1") })
 	if row := f.record(t, "s1").Rows["count"]; row.Seq != 0 {
 		t.Fatalf("写下去的该是这一刻的切面：%#v", row)
 	}
@@ -796,7 +796,7 @@ func TestObserveSwallowsAFailedWriteButLeavesATrace(t *testing.T) {
 	if trigger := f.sink.attr(0, "trigger"); trigger != "回合结束" {
 		t.Fatalf("痕迹里该写清是哪个触发点：%q", trigger)
 	}
-	if _, ok, err := f.table.Get("s1"); err != nil || ok {
+	if _, ok, err := f.table.Get(t.Context(), "s1"); err != nil || ok {
 		t.Fatalf("介质上该留在旧位置：%v %v", ok, err)
 	}
 }
@@ -929,7 +929,7 @@ func TestCloseDoesNotCloseTheDomain(t *testing.T) {
 
 	f.cache.Close()
 
-	if _, _, err := f.table.Get("s1"); err != nil {
+	if _, _, err := f.table.Get(t.Context(), "s1"); err != nil {
 		t.Fatalf("域该还开着：%v", err)
 	}
 }

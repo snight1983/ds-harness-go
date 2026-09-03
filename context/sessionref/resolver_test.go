@@ -42,14 +42,14 @@ func TestResolverConfig交出补完默认值的那份(t *testing.T) {
 	}
 }
 
-func TestListCandidates按工作目录的亲疏排序(t *testing.T) {
+func TestListCandidates按工作区的亲疏排序(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("别处", "/other", 1, nil)
-	sessions.put("没记目录", "", 2, nil)
-	sessions.put("同目录", "/work", 3, nil)
+	sessions.put("别处", "ws-2", 1, nil)
+	sessions.put("没记工作区", "", 2, nil)
+	sessions.put("同工作区", "ws-1", 3, nil)
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
-	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", Cwd: "/work"}, "", 10)
+	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", WorkspaceID: "ws-1"}, "", 10)
 	if err != nil {
 		t.Fatalf("列举失败：%v", err)
 	}
@@ -57,9 +57,12 @@ func TestListCandidates按工作目录的亲疏排序(t *testing.T) {
 	for _, candidate := range candidates {
 		got = append(got, candidate.SessionID)
 	}
-	// 同目录 0、没记目录 1、别的目录 2：一个没记目录的会话有可能就是这个目录里的，
-	// 而一个明确记着别的目录的会话确定不是。
-	if len(got) != 3 || got[0] != "同目录" || got[1] != "没记目录" || got[2] != "别处" {
+	// 同工作区 0、没记工作区 1、别的工作区 2：一个没记工作区的会话有可能就是这里的，
+	// 而一个明确记着别的工作区的会话确定不是。
+	//
+	// 新增: 这三档原先比的是两条路径规范化之后的串，现在比的是两个不透明的工作区标识
+	// （见 [session.SessionHeader.WorkspaceID]），三档的语义一字不变。
+	if len(got) != 3 || got[0] != "同工作区" || got[1] != "没记工作区" || got[2] != "别处" {
 		t.Fatalf("排序不对：%v", got)
 	}
 }
@@ -67,14 +70,14 @@ func TestListCandidates按工作目录的亲疏排序(t *testing.T) {
 func TestListCandidates同一档里保持列出来的先后(t *testing.T) {
 	sessions := newFakeSessions()
 	for _, id := range []session.SessionID{"甲", "乙", "丙", "丁"} {
-		sessions.put(id, "/work", 1, nil)
+		sessions.put(id, "ws-1", 1, nil)
 	}
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
 	// 稳定排序不是可有可无的：主机的自动补全就长在这个列表上，
 	// 同样一次输入两次调用必须给出同一份列表。
 	for range 3 {
-		candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", Cwd: "/work"}, "", 10)
+		candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", WorkspaceID: "ws-1"}, "", 10)
 		if err != nil {
 			t.Fatalf("列举失败：%v", err)
 		}
@@ -90,11 +93,11 @@ func TestListCandidates同一档里保持列出来的先后(t *testing.T) {
 
 func TestListCandidates不把当前会话列进去(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("自己", "/work", 1, nil)
-	sessions.put("别人", "/work", 2, nil)
+	sessions.put("自己", "ws-1", 1, nil)
+	sessions.put("别人", "ws-1", 2, nil)
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
-	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", Cwd: "/work"}, "", 10)
+	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", WorkspaceID: "ws-1"}, "", 10)
 	if err != nil {
 		t.Fatalf("列举失败：%v", err)
 	}
@@ -106,15 +109,15 @@ func TestListCandidates不把当前会话列进去(t *testing.T) {
 func TestListCandidates按关键词搜得到没进前几名的那个(t *testing.T) {
 	sessions := newFakeSessions()
 	for _, id := range []session.SessionID{"a", "b", "c"} {
-		sessions.put(id, "/work", 1, nil)
+		sessions.put(id, "ws-1", 1, nil)
 	}
-	sessions.put("要找的", "/elsewhere", 2, nil)
+	sessions.put("要找的", "ws-2", 2, nil)
 	titles := &fakeTitles{titles: map[session.SessionID]string{"要找的": "上个月的调研"}}
 	resolver := newTestResolver(t, sessions, titles, Config{})
 
 	// query 非空时得先把所有会话的标题都读出来，否则按标题搜就搜不到
 	// 排在同目录那几条后面的这一个。
-	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", Cwd: "/work"}, "调研", 2)
+	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", WorkspaceID: "ws-1"}, "调研", 2)
 	if err != nil {
 		t.Fatalf("列举失败：%v", err)
 	}
@@ -123,15 +126,15 @@ func TestListCandidates按关键词搜得到没进前几名的那个(t *testing.
 	}
 }
 
-func TestListCandidates按会话id和工作目录也搜得到(t *testing.T) {
+func TestListCandidates按会话id和工作区也搜得到(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("独一无二的id", "/work", 1, nil)
-	sessions.put("别的", "/独特目录", 2, nil)
+	sessions.put("独一无二的id", "ws-1", 1, nil)
+	sessions.put("别的", "ws-独特工作区", 2, nil)
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
 	for needle, want := range map[string]session.SessionID{
-		"独一无二": "独一无二的id",
-		"独特目录": "别的",
+		"独一无二":  "独一无二的id",
+		"独特工作区": "别的",
 	} {
 		candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己"}, needle, 10)
 		if err != nil {
@@ -145,7 +148,7 @@ func TestListCandidates按会话id和工作目录也搜得到(t *testing.T) {
 
 func TestListCandidates关键词大小写不敏感(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("Alpha", "/work", 1, nil)
+	sessions.put("Alpha", "ws-1", 1, nil)
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
 	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己"}, "ALPHA", 10)
@@ -160,11 +163,11 @@ func TestListCandidates关键词大小写不敏感(t *testing.T) {
 func TestListCandidates截到上限(t *testing.T) {
 	sessions := newFakeSessions()
 	for _, id := range []session.SessionID{"a", "b", "c", "d"} {
-		sessions.put(id, "/work", 1, nil)
+		sessions.put(id, "ws-1", 1, nil)
 	}
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
-	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", Cwd: "/work"}, "", 2)
+	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己", WorkspaceID: "ws-1"}, "", 2)
 	if err != nil {
 		t.Fatalf("列举失败：%v", err)
 	}
@@ -182,7 +185,7 @@ func TestListCandidates的上限必须是正数(t *testing.T) {
 
 func TestListCandidates没有标题读取方时显示名退回会话id(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("s1", "/work", 1, nil)
+	sessions.put("s1", "ws-1", 1, nil)
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
 	candidates, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己"}, "", 10)
@@ -196,8 +199,8 @@ func TestListCandidates没有标题读取方时显示名退回会话id(t *testin
 
 func TestListCandidates标题为空时也退回会话id(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("s1", "/work", 1, nil)
-	sessions.put("s2", "/work", 2, nil)
+	sessions.put("s1", "ws-1", 1, nil)
+	sessions.put("s2", "ws-1", 2, nil)
 	titles := &fakeTitles{titles: map[session.SessionID]string{"s2": "有标题的"}}
 	resolver := newTestResolver(t, sessions, titles, Config{})
 
@@ -216,7 +219,7 @@ func TestListCandidates标题为空时也退回会话id(t *testing.T) {
 
 func TestListCandidates标题条数对不上就报出来(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("s1", "/work", 1, nil)
+	sessions.put("s1", "ws-1", 1, nil)
 	resolver := newTestResolver(t, sessions, &fakeTitles{short: true}, Config{})
 
 	_, err := resolver.ListCandidates(t.Context(), Target{SessionID: "自己"}, "", 10)
@@ -227,7 +230,7 @@ func TestListCandidates标题条数对不上就报出来(t *testing.T) {
 
 func TestListCandidates把列举和读标题的失败一路带上来(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("s1", "/work", 1, nil)
+	sessions.put("s1", "ws-1", 1, nil)
 
 	listBroken := newFakeSessions()
 	listBroken.listErr = errNotFound
@@ -258,7 +261,7 @@ func TestListCandidates在已取消的ctx上直接停(t *testing.T) {
 
 func TestMentionCandidates每条都带上规范提及(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("s1", "/work", 1, nil)
+	sessions.put("s1", "ws-1", 1, nil)
 	titles := &fakeTitles{titles: map[session.SessionID]string{"s1": "上一次调研"}}
 	resolver := newTestResolver(t, sessions, titles, Config{})
 
@@ -308,8 +311,8 @@ func TestPrepare没有引用时只把正文原样交回(t *testing.T) {
 
 func TestPrepare把全部引用聚成一条不可信上下文(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("s1", "/work", 1, []session.Event{userEvent(t, 1, "甲说的")})
-	sessions.put("s2", "/work", 2, []session.Event{assistantEvent(t, 1, llm.TextBlock{Text: "乙答的"})})
+	sessions.put("s1", "ws-1", 1, []session.Event{userEvent(t, 1, "甲说的")})
+	sessions.put("s2", "ws-1", 2, []session.Event{assistantEvent(t, 1, llm.TextBlock{Text: "乙答的"})})
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
 	prepared, err := resolver.Prepare(t.Context(), Target{SessionID: "自己"}, llm.Content{llm.TextBlock{Text: "正文"}},
@@ -364,8 +367,8 @@ func TestPrepare被引用的内容拼不出一个闭标签(t *testing.T) {
 
 func TestPrepare把这次引用了谁记进持久来源(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("s1", "/work", 1, []session.Event{userEvent(t, 5, "甲说的")})
-	sessions.put("s2", "/work", 2, []session.Event{userEvent(t, 9, "乙说的")})
+	sessions.put("s1", "ws-1", 1, []session.Event{userEvent(t, 5, "甲说的")})
+	sessions.put("s2", "ws-1", 2, []session.Event{userEvent(t, 9, "乙说的")})
 	resolver := newTestResolver(t, sessions, nil, Config{})
 
 	prepared, err := resolver.Prepare(t.Context(), Target{SessionID: "自己"}, nil,
@@ -535,7 +538,7 @@ func TestPrepare坏掉的来源日志一路报上来(t *testing.T) {
 
 func TestPrepare预算装不下时报预算超了(t *testing.T) {
 	sessions := newFakeSessions()
-	sessions.put("很长的会话名字很长的会话名字", "/一个很长的工作目录", 1,
+	sessions.put("很长的会话名字很长的会话名字", "ws-一个很长的工作区标识", 1,
 		[]session.Event{userEvent(t, 1, strings.Repeat("长", 100))})
 	resolver := newTestResolver(t, sessions, nil, Config{MaxReferenceBytes: 8})
 
@@ -564,13 +567,13 @@ func TestPrepare不动调用方那份正文(t *testing.T) {
 
 func TestCandidateRank把三档分清楚(t *testing.T) {
 	for name, item := range map[string]struct {
-		candidate, target string
+		candidate, target session.WorkspaceID
 		want              int
 	}{
-		"同目录":      {"/work", "/work", 0},
-		"候选没记目录":   {"", "/work", 1},
-		"别的目录":     {"/other", "/work", 2},
-		"当前会话没有目录": {"/other", "", 2},
+		"同一个工作区":       {"ws-1", "ws-1", 0},
+		"候选不属于任何工作区":   {"", "ws-1", 1},
+		"别的工作区":        {"ws-2", "ws-1", 2},
+		"当前会话不属于任何工作区": {"ws-2", "", 2},
 	} {
 		if got := candidateRank(item.candidate, item.target); got != item.want {
 			t.Fatalf("%s：档是 %d，要的是 %d", name, got, item.want)

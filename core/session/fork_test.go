@@ -106,7 +106,7 @@ func TestForkCopiesThePrefixAndTheLineage(t *testing.T) {
 	owner := rootScope(t)
 	ctx := context.Background()
 
-	source := liveSession(t, store, owner, "a", CreateOptions{Cwd: testAbsolutePath})
+	source := liveSession(t, store, owner, "a", CreateOptions{WorkspaceID: testWorkspaceID})
 	for _, event := range []sessionlog.Event{
 		turnStart(1), userEvent(t, "你好"), assistantEvent(t, 1, 1, "在"), turnEnd(1),
 	} {
@@ -125,7 +125,7 @@ func TestForkCopiesThePrefixAndTheLineage(t *testing.T) {
 		t.Fatalf("子会话的日志是 %#v", events)
 	}
 	header := child.Header()
-	if header.ParentSession != "a" || header.SeedLength != 4 || header.Cwd != testAbsolutePath {
+	if header.ParentSession != "a" || header.SeedLength != 4 || header.WorkspaceID != testWorkspaceID {
 		t.Fatalf("子会话的头是 %#v", header)
 	}
 	if child.FirstLiveSeq() != 4 {

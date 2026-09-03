@@ -13,14 +13,15 @@
 | 模块 | 内容 |
 |---|---|
 | [作用域](modules/core-scope.md) | 身份、父子链、事件准入方向、所有权边界和分层注册表骨架 |
-| [Agent](modules/agent.md) | 活 Agent 契约、Registry、Inbox、作用域、生命周期和默认模型 |
-| [Agent Loop](modules/agentloop.md) | 回合、步骤、模型请求、工具循环、取消和维护任务 |
+| [Agent 控制面](modules/agent.md) | `core/agent`：活 agent 契约、名册、三步生命周期、收件箱和 12 个挂钩点 |
+| [Agent Loop](modules/agentloop.md) | `core/agentloop`：回合与步骤两层循环、请求从日志推导、工具调度、取消与失败兜底 |
 | [Session](modules/session.md) | 事件日志、根据事件整理的当前状态、缓存、恢复和分叉 |
 | [会话日志与派生状态](modules/session-tree.md) | `session/` 一棵树：事件词汇、持久化、当前状态、缓存、统计和遥测 |
 | [活会话](modules/core-session.md) | 活 `Session` 与 `Store`：追加、四组观察者、三步生命周期和分叉 |
 | [LLM](modules/llm.md) | 模型值类型、适配器、流式响应、重试、计量和回放 |
-| [Tools](modules/tools.md) | 工具定义、Schema、执行管线、审批、Guard 和 MCP 工具 |
-| [Skill、提示词与预设](modules/skill.md) | Skill 发现、提示词装配、预设、Persona 和运行时上下文 |
+| [Tools](modules/tools.md) | `core/tools`：工具可见性、四段派发管线、受限 Schema 子集和呈现 |
+| [系统提示词装配](modules/systemprompt.md) | `core/systemprompt`：四类提示词登记、装配瀑布、变量插值和工具排序 |
+| [Skill、提示词与预设](modules/skill.md) | Skill 发现、预设、Persona 和运行时上下文 |
 | [多 Agent](modules/subagent.md) | Provider、进程内派生、续行、控制、结算和子树查询 |
 | [存储、文件与附件](modules/storage.md) | Backend、会话持久化、对象存储、附件和凭据 |
 | [持久化抽象层](modules/datastore.md) | `datastore/`：唯一挂驱动、唯一写 SQL 的地方，及两种方言的一致性 |
@@ -32,7 +33,7 @@
 | 领域 | 文档 |
 |---|---|
 | 上下文与压缩 | [运行时上下文](modules/context.md)、[上下文压缩](modules/compaction.md) |
-| 设置与组合 | [运行时设置](modules/settings.md)、[Agent 预设与 Persona](modules/presets.md) |
+| 设置与组合 | [运行时设置](modules/settings.md)、[部署级默认模型](modules/core-agentdefaultmodel.md)、[Agent 预设与 Persona](modules/presets.md) |
 | 计划与人工介入 | [计划与待办](modules/planning.md)、[用户交互](modules/interaction.md)、[运行时 Guard](modules/guards.md) |
 | 后台执行 | [后台作业](modules/jobs.md)、[长期目标](modules/goal.md)、[耐久提醒](modules/schedule.md)、[Ralph 工作流](modules/ralph.md) |
 | 会话读侧 | [Session 查询](modules/sessionquery.md)、[Workspace](modules/workspace.md) |

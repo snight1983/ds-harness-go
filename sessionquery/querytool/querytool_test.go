@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -36,24 +35,14 @@ import (
 	"github.com/snight1983/ds-harness-go/sessionquery/querytool"
 )
 
-// callerCwd 是这些用例里调用方那个工作目录。
+// callerWorkspace 是这些用例里调用方那个会话归属的工作区登记。
 //
-// 会话头要求工作目录是绝对路径，而「绝对」在 Windows 上要带盘符，所以这两个
-// 值现算，不写字面量——写死一个 /work/project 只在类 Unix 上过得去。
-var callerCwd = absDir("workspace-project")
+// 新增: 这两个值都是不透明标识，不是路径，也和文件系统里有什么东西没有关系，
+// 见 [session.SessionHeader.WorkspaceID]。本包只拿它们做相等判断。
+var callerWorkspace = session.WorkspaceID("ws-caller")
 
-// otherCwd 是边界另一侧那个工作目录。
-var otherCwd = absDir("workspace-elsewhere")
-
-// absDir 把一个名字变成当前平台上的绝对路径。这两个目录不需要真的存在：
-// 本包只拿工作目录做字符串比较。
-func absDir(name string) string {
-	path, err := filepath.Abs(name)
-	if err != nil {
-		panic(err)
-	}
-	return path
-}
+// otherWorkspace 是边界另一侧那个工作区登记。
+var otherWorkspace = session.WorkspaceID("ws-elsewhere")
 
 // stubAgent 是一个只把会话摆在那儿的假 agent。
 //
@@ -118,13 +107,13 @@ func (s *stubService) FilterSessions(
 ) ([]sessionquery.Record, error) {
 	s.filterCalls = append(s.filterCalls, filters)
 	var ids []session.SessionID
-	var cwds []string
+	var workspaces []session.WorkspaceID
 	for _, filter := range filters {
 		switch typed := filter.(type) {
 		case sessionquery.IDFilter:
 			ids = typed.Values
-		case sessionquery.CwdFilter:
-			cwds = typed.Values
+		case sessionquery.WorkspaceFilter:
+			workspaces = typed.Values
 		}
 	}
 	var matched []sessionquery.Record
@@ -133,8 +122,8 @@ func (s *stubService) FilterSessions(
 		if !ok {
 			continue
 		}
-		for _, cwd := range cwds {
-			if record.Header.Cwd == cwd {
+		for _, workspace := range workspaces {
+			if record.Header.WorkspaceID == workspace {
 				matched = append(matched, record)
 				break
 			}
@@ -266,7 +255,7 @@ type world struct {
 	prompts    *systemprompt.Registry
 }
 
-// newWorld 造一个调用方在 [callerCwd] 里的世界。
+// newWorld 造一个调用方归在 [callerWorkspace] 名下的世界。
 func newWorld(t *testing.T, service *stubService) *world {
 	t.Helper()
 	service.t = t
@@ -286,7 +275,7 @@ func newWorld(t *testing.T, service *stubService) *world {
 
 	const id session.SessionID = "caller"
 	sess, err := coresession.NewSession(id, coresession.Options{
-		Header: &session.SessionHeader{ID: id, Cwd: callerCwd},
+		Header: &session.SessionHeader{ID: id, WorkspaceID: callerWorkspace},
 	})
 	if err != nil {
 		t.Fatalf("造会话失败：%v", err)
@@ -385,9 +374,9 @@ func (w *world) appendEvent(kind session.EventType, payload any) {
 }
 
 // record 造一条会话记录。
-func record(id session.SessionID, cwd string, parent session.SessionID) sessionquery.Record {
+func record(id session.SessionID, workspace session.WorkspaceID, parent session.SessionID) sessionquery.Record {
 	return sessionquery.Record{
-		Header: session.SessionHeader{ID: id, Cwd: cwd, ParentSession: parent},
+		Header: session.SessionHeader{ID: id, WorkspaceID: workspace, ParentSession: parent},
 		Live:   true,
 	}
 }
@@ -411,8 +400,8 @@ func hit(record sessionquery.Record, seq int, snippet string) sessionquery.Searc
 // TestCrossSessionSearchKeepsTheWorkspaceBoundary 钉住那条边界：别的工作目录的
 // 会话即使被引擎交上来，也一个字都不许出现在结果里。
 func TestCrossSessionSearchKeepsTheWorkspaceBoundary(t *testing.T) {
-	inside := record("inside", callerCwd, "")
-	outside := record("outside", otherCwd, "")
+	inside := record("inside", callerWorkspace, "")
+	outside := record("outside", otherWorkspace, "")
 	service := &stubService{
 		sessions: map[session.SessionID]sessionquery.Record{"inside": inside, "outside": outside},
 		titles:   map[session.SessionID]string{"inside": "Inside work"},
@@ -436,23 +425,23 @@ func TestCrossSessionSearchKeepsTheWorkspaceBoundary(t *testing.T) {
 	}
 }
 
-// TestCrossSessionSearchNeedsACallerWorkspace 钉住那条前提：没有工作目录的
+// TestCrossSessionSearchNeedsACallerWorkspace 钉住那条前提：不属于任何工作区的
 // 调用方根本用不了这件工具，而不是退化成一次无边界的全库检索。
 func TestCrossSessionSearchNeedsACallerWorkspace(t *testing.T) {
 	service := &stubService{}
 	w := newWorld(t, service)
-	// 换一个没有工作目录的会话头。
+	// 换一个不属于任何工作区的会话头。
 	sess, err := coresession.NewSession("caller", coresession.Options{
 		Header: &session.SessionHeader{ID: "caller"},
 	})
 	if err != nil {
-		t.Fatalf("造无 cwd 会话失败：%v", err)
+		t.Fatalf("造无工作区会话失败：%v", err)
 	}
 	w.agent.sess = sess
 
 	_, err = w.call("session_search", map[string]any{"query": "alpha"})
 	if err == nil {
-		t.Fatal("一个没有工作目录的调用方竟然搜成了")
+		t.Fatal("一个不属于任何工作区的调用方竟然搜成了")
 	}
 	if !errors.Is(err, querytool.CodeUnauthorized) {
 		t.Fatalf("报的码不对：%v", err)
@@ -464,7 +453,7 @@ func TestCrossSessionSearchNeedsACallerWorkspace(t *testing.T) {
 
 // TestCrossSessionSearchExcludesTheCallerSession 钉住「当前会话不进结果」。
 func TestCrossSessionSearchExcludesTheCallerSession(t *testing.T) {
-	caller := record("caller", callerCwd, "")
+	caller := record("caller", callerWorkspace, "")
 	service := &stubService{
 		pages: []sessionquery.SearchPage[sessionquery.SearchHit]{{
 			Items: []sessionquery.SearchHit{hit(caller, 1, "self")},
@@ -483,8 +472,8 @@ func TestCrossSessionSearchExcludesTheCallerSession(t *testing.T) {
 // TestCrossSessionSearchHidesOutOfWorkspaceParents 钉住那条「父亲在界外」：
 // 它必须说出来，而不是画成「这是一个根会话」。
 func TestCrossSessionSearchHidesOutOfWorkspaceParents(t *testing.T) {
-	child := record("child", callerCwd, "hidden")
-	hidden := record("hidden", otherCwd, "")
+	child := record("child", callerWorkspace, "hidden")
+	hidden := record("hidden", otherWorkspace, "")
 	service := &stubService{
 		sessions: map[session.SessionID]sessionquery.Record{"child": child, "hidden": hidden},
 		titles:   map[session.SessionID]string{"child": "Child"},
@@ -507,8 +496,8 @@ func TestCrossSessionSearchHidesOutOfWorkspaceParents(t *testing.T) {
 
 // TestCrossSessionSearchStopsAtTheResultCap 钉住上限，以及撞上限时那句话。
 func TestCrossSessionSearchStopsAtTheResultCap(t *testing.T) {
-	first := record("one", callerCwd, "")
-	second := record("two", callerCwd, "")
+	first := record("one", callerWorkspace, "")
+	second := record("two", callerWorkspace, "")
 	service := &stubService{
 		sessions: map[session.SessionID]sessionquery.Record{"one": first, "two": second},
 		pages: []sessionquery.SearchPage[sessionquery.SearchHit]{{
@@ -631,7 +620,7 @@ func TestTargetingAnotherWorkspaceIsRefusedWithoutDisclosure(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			service := &stubService{
 				sessions: map[session.SessionID]sessionquery.Record{
-					"outside": record("outside", otherCwd, ""),
+					"outside": record("outside", otherWorkspace, ""),
 				},
 			}
 			w := newWorld(t, service)
@@ -643,8 +632,8 @@ func TestTargetingAnotherWorkspaceIsRefusedWithoutDisclosure(t *testing.T) {
 			if !errors.Is(err, querytool.CodeUnauthorized) {
 				t.Fatalf("报的码不对：%v", err)
 			}
-			if strings.Contains(err.Error(), otherCwd) {
-				t.Fatalf("别人的工作目录漏了出去：%v", err)
+			if strings.Contains(err.Error(), string(otherWorkspace)) {
+				t.Fatalf("别人的工作区漏了出去：%v", err)
 			}
 		})
 	}
@@ -655,7 +644,7 @@ func TestTargetingAnotherWorkspaceIsRefusedWithoutDisclosure(t *testing.T) {
 func TestAMissingSessionLooksExactlyLikeAnOutOfWorkspaceOne(t *testing.T) {
 	outside := &stubService{
 		sessions: map[session.SessionID]sessionquery.Record{
-			"target": record("target", otherCwd, ""),
+			"target": record("target", otherWorkspace, ""),
 		},
 	}
 	missing := &stubService{}
@@ -673,9 +662,9 @@ func TestAMissingSessionLooksExactlyLikeAnOutOfWorkspaceOne(t *testing.T) {
 // TestSessionTraceMarksTheAncestorBoundary 钉住那条「往上还有，但你看不见」：
 // 它和「这就是根」必须分开。
 func TestSessionTraceMarksTheAncestorBoundary(t *testing.T) {
-	target := record("target", callerCwd, "parent")
-	visible := record("parent", callerCwd, "hidden")
-	hiddenAncestor := record("hidden", otherCwd, "")
+	target := record("target", callerWorkspace, "parent")
+	visible := record("parent", callerWorkspace, "hidden")
+	hiddenAncestor := record("hidden", otherWorkspace, "")
 	trace := sessionquery.LineageTrace{
 		Target:    target,
 		Ancestors: []sessionquery.Record{visible, hiddenAncestor},
@@ -707,7 +696,7 @@ func TestSessionTraceMarksTheAncestorBoundary(t *testing.T) {
 // TestSessionTraceMarksAnIncompleteLineage 钉住第二种「往上还有」：引擎自己
 // 就没追到根。它同样不许被画成「这就是根」。
 func TestSessionTraceMarksAnIncompleteLineage(t *testing.T) {
-	target := record("target", callerCwd, "gone")
+	target := record("target", callerWorkspace, "gone")
 	trace := sessionquery.LineageTrace{
 		Target:             target,
 		Complete:           false,
@@ -734,16 +723,16 @@ func TestSessionTraceMarksAnIncompleteLineage(t *testing.T) {
 // TestSessionTracePrunesOutOfWorkspaceSubtrees 钉住那个 nil 占位：越界的一支
 // 要留一句「这里有东西，你看不到」，不能删掉。
 func TestSessionTracePrunesOutOfWorkspaceSubtrees(t *testing.T) {
-	target := record("target", callerCwd, "")
-	child := record("child", callerCwd, "target")
-	stranger := record("stranger", otherCwd, "target")
+	target := record("target", callerWorkspace, "")
+	child := record("child", callerWorkspace, "target")
+	stranger := record("stranger", otherWorkspace, "target")
 	trace := sessionquery.LineageTrace{
 		Target:   target,
 		Complete: true,
 		Root:     target,
 		Descendants: []sessionquery.LineageNode{
 			{Session: child},
-			{Session: stranger, Descendants: []sessionquery.LineageNode{{Session: record("grand", callerCwd, "stranger")}}},
+			{Session: stranger, Descendants: []sessionquery.LineageNode{{Session: record("grand", callerWorkspace, "stranger")}}},
 		},
 	}
 	service := &stubService{
@@ -772,7 +761,7 @@ func TestSessionTracePrunesOutOfWorkspaceSubtrees(t *testing.T) {
 // TestEventReadEmitsTheTargetVerbatim 钉住这件工具存在的全部理由：目标那条是
 // 原样的 JSON，任何摘要都会把模型想找的那个字段摘掉。
 func TestEventReadEmitsTheTargetVerbatim(t *testing.T) {
-	target := record("caller", callerCwd, "")
+	target := record("caller", callerWorkspace, "")
 	window := sessionquery.EventWindow{
 		Session: target.Header,
 		Target: session.Event{
@@ -844,7 +833,7 @@ func TestAnEmptyFilterListIsRejected(t *testing.T) {
 func TestUnauthorizedParentsCollapseToAnEmptyResult(t *testing.T) {
 	service := &stubService{
 		sessions: map[session.SessionID]sessionquery.Record{
-			"stranger": record("stranger", otherCwd, ""),
+			"stranger": record("stranger", otherWorkspace, ""),
 		},
 	}
 	w := newWorld(t, service)

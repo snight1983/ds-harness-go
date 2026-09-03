@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/session"
 )
 
 // ErrInvalidConfig 表示一份注册表配置本身就不成立。
@@ -622,7 +623,7 @@ func (r *Registry) probeCache(options ViewOptions) (
 	defer r.mutex.Unlock()
 
 	revision = r.revision
-	key = r.collectCacheKeyLocked(options.Cwd, chain, revision)
+	key = r.collectCacheKeyLocked(options.WorkspaceID, chain, revision)
 	cached, hit = r.collectCache[key]
 	return revision, key, cached, hit
 }
@@ -697,21 +698,21 @@ func (r *Registry) scopeIDLocked(key *scope.Key) int {
 	return id
 }
 
-// collectCacheKeyLocked 把「cwd + 作用域链 + revision」编成一个缓存键。
+// collectCacheKeyLocked 把「归属工作区 + 作用域链 + revision」编成一个缓存键。
 // 调用方必须已经持有 r.mutex。
 //
 // 源: packages/skill/skill/src/index.ts:644-646
 //
 // 新增: DSH 用 JSON.stringify。Go 这边手拼，因为这个键从不出本包、也从不落盘，
-// 排一遍 JSON 是白花的钱。cwd 带上长度前缀是为了不让分隔符在路径里出现时把
-// 两个不同的键拼成同一串。
-func (r *Registry) collectCacheKeyLocked(cwd string, chain []*scope.Key, revision int) string {
+// 排一遍 JSON 是白花的钱。工作区标识带上长度前缀是为了不让分隔符在它里面出现时
+// 把两个不同的键拼成同一串——标识是不透明的，本包不该假设它里面有什么字符。
+func (r *Registry) collectCacheKeyLocked(workspaceID session.WorkspaceID, chain []*scope.Key, revision int) string {
 	var builder strings.Builder
 	builder.WriteString(strconv.Itoa(revision))
 	builder.WriteByte('\x00')
-	builder.WriteString(strconv.Itoa(len(cwd)))
+	builder.WriteString(strconv.Itoa(len(workspaceID)))
 	builder.WriteByte(':')
-	builder.WriteString(cwd)
+	builder.WriteString(string(workspaceID))
 	for _, key := range chain {
 		builder.WriteByte('\x00')
 		builder.WriteString(strconv.Itoa(r.scopeIDLocked(key)))

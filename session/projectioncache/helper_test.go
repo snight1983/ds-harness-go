@@ -358,11 +358,16 @@ func (f ctxAwareFacet) Open(ctx context.Context, descriptor storage.KVUnitDescri
 
 type ctxAwareUnit struct{ storage.KVUnit }
 
-func (u ctxAwareUnit) PutRecord(ctx context.Context, table, key string, value json.RawMessage) error {
+func (u ctxAwareUnit) PutRecord(
+	ctx context.Context,
+	table, key string,
+	value json.RawMessage,
+	expected storage.WriteIntent,
+) (storage.Revision, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return "", err
 	}
-	return u.KVUnit.PutRecord(ctx, table, key, value)
+	return u.KVUnit.PutRecord(ctx, table, key, value, expected)
 }
 
 // fixture 是一次完整装配：缓存本身，加上能从外面观察到的那几个侧面。
@@ -479,7 +484,7 @@ func mustRegister[S any](t *testing.T, registry *projection.Registry, definition
 func (f *fixture) record(t *testing.T, id session.SessionID) Record {
 	t.Helper()
 
-	stored, ok, err := f.table.Get(string(id))
+	stored, ok, err := f.table.Get(t.Context(), string(id))
 	if err != nil {
 		t.Fatalf("读记录不该失败：%v", err)
 	}
@@ -494,8 +499,8 @@ func (f *fixture) record(t *testing.T, id session.SessionID) Record {
 // 它是给 [waitFor] 用的：落盘屏障记账排在 [Cache.put] **前面**，所以「屏障调过了」
 // 这个位比记录真的落下去早一步，等它等不到记录。读失败在这里当成「还没有」，
 // 用例随后那次 [fixture.record] 会把它报出来。
-func (f *fixture) stored(id session.SessionID) bool {
-	_, ok, _ := f.table.Get(string(id))
+func (f *fixture) stored(ctx context.Context, id session.SessionID) bool {
+	_, ok, _ := f.table.Get(ctx, string(id))
 	return ok
 }
 

@@ -65,19 +65,19 @@ func targetID(sessionID string, from caller) session.SessionID {
 // 自己读自己一律放行，连问都不问：调用方对自己那份日志本来就有全部权限，而且
 // 那一问会在一个还没落地的新会话上失败。
 //
-// 别人的会话要引擎点头：按 id 加 cwd 两条一起筛，回来的记录**恰好一条**才算数。
+// 别人的会话要引擎点头：按 id 加工作区两条一起筛，回来的记录**恰好一条**才算数。
 // 零条是「不在这个工作区、或者压根没有」，多条只可能是语料坏了；两种都拒。
 func (c *Controller) authorizeTarget(ctx context.Context, from caller, target session.SessionID) error {
 	if target == from.id {
 		return nil
 	}
-	if from.header.Cwd == "" {
+	if from.header.WorkspaceID == "" {
 		return unauthorizedTarget()
 	}
 	records, err := call(ctx, c, "target authorization", func() ([]sessionquery.Record, error) {
 		return c.service.FilterSessions(ctx, []sessionquery.SessionFilter{
 			sessionquery.IDFilter{Values: []session.SessionID{target}},
-			sessionquery.CwdFilter{Values: []string{from.header.Cwd}},
+			sessionquery.WorkspaceFilter{Values: []session.WorkspaceID{from.header.WorkspaceID}},
 		})
 	})
 	if err != nil {
@@ -100,14 +100,14 @@ func recordAuthorized(record sessionquery.Record, from caller) bool {
 //
 // 源: packages/session-query/tool-session-query/src/workspace-access.ts:94-97
 //
-// 两支分开写不是啰嗦：调用方自己那个会话即使**没有**工作目录也看得见自己
-// （两边都是空串，相等），而一个没有工作目录的调用方看不见任何别人——否则
-// 一个空 cwd 会和所有别的空 cwd 相等，等于把边界整个拆掉。
+// 两支分开写不是啰嗦：调用方自己那个会话即使**不属于**任何工作区也看得见自己
+// （两边都是空串，相等），而一个不属于任何工作区的调用方看不见任何别人——否则
+// 一个空工作区标识会和所有别的空标识相等，等于把边界整个拆掉。
 func headerAuthorized(header session.SessionHeader, from caller) bool {
 	if header.ID == from.id {
-		return header.Cwd == from.header.Cwd
+		return header.WorkspaceID == from.header.WorkspaceID
 	}
-	return from.header.Cwd != "" && header.Cwd == from.header.Cwd
+	return from.header.WorkspaceID != "" && header.WorkspaceID == from.header.WorkspaceID
 }
 
 // assertObservedTargetAuthorized 再查一遍引擎交回来的那份头。
@@ -115,7 +115,7 @@ func headerAuthorized(header session.SessionHeader, from caller) bool {
 // 源: packages/session-query/tool-session-query/src/workspace-access.ts:99-108
 //
 // 授权是在调用**之前**做的，交回来的那份观察必须自证它就是当初批准的那一个：
-// id 对不上说明引擎答非所问，cwd 变了说明这个会话在这中间被挪出了工作区。
+// id 对不上说明引擎答非所问，工作区标识变了说明这个会话在这中间被挪出了工作区。
 // 两种都当越界办。
 func assertObservedTargetAuthorized(from caller, target session.SessionID, observed session.SessionHeader) error {
 	if observed.ID != target || !headerAuthorized(observed, from) {
@@ -147,13 +147,13 @@ func (c *Controller) authorizeSessionIDs(
 		}
 		other = append(other, id)
 	}
-	if from.header.Cwd == "" || len(other) == 0 {
+	if from.header.WorkspaceID == "" || len(other) == 0 {
 		return authorized, nil
 	}
 	records, err := call(ctx, c, "session-id authorization", func() ([]sessionquery.Record, error) {
 		return c.service.FilterSessions(ctx, []sessionquery.SessionFilter{
 			sessionquery.IDFilter{Values: other},
-			sessionquery.CwdFilter{Values: []string{from.header.Cwd}},
+			sessionquery.WorkspaceFilter{Values: []session.WorkspaceID{from.header.WorkspaceID}},
 		})
 	})
 	if err != nil {
@@ -286,7 +286,7 @@ type authorizedDescendant struct {
 // 这个会话没有更多孩子。留一个占位，界面上画成「[outside workspace subtree]」，
 // 说的是「这里有东西，你看不到」。
 //
-// 越界的节点整支剪掉，不再往下走：它的孩子即使碰巧同 cwd 也不该露出来——那会
+// 越界的节点整支剪掉，不再往下走：它的孩子即使碰巧在同一个工作目录下也不该露出来——那会
 // 把那个不可见的父节点的存在反推出来。
 //
 // 新增: DSH 用一条显式的待办链把递归摊平（那边的血统可以很深，怕爆栈）。Go 的

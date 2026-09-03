@@ -123,8 +123,8 @@ type ConfiguredAgent struct {
 	ID string
 	// SessionID 是可选的稳定身份：重挂时读回它已经落地的历史，第一次用则新建它。
 	SessionID sessionlog.SessionID
-	// Cwd 是新建会话时的工作目录。
-	Cwd string
+	// WorkspaceID 是新建会话时归属的工作区登记；空串表示不属于任何工作区。
+	WorkspaceID sessionlog.WorkspaceID
 	// ResumeSessionID 是要续跑的那段持久化会话，给了就不新建。
 	ResumeSessionID sessionlog.SessionID
 	// Options 是这个 agent 自己的提供方路由与模型。
@@ -488,7 +488,7 @@ type AgentLoop struct {
 	// byScope 把一个作用域键映射回它那个活 agent。
 	//
 	// 新增: DSH 靠 cordis 从上下文上直接取 `ctx.agent`——那三个系统提示词变量
-	// （provider、model、cwd）读的是 `context.agent?...`，而 [Registry.Enter]
+	// （provider、model）读的是 `context.agent?...`，而 [Registry.Enter]
 	// 要的那个 owner 读的是 `ownerCtx.agent`。Go 里作用域上挂不了值，所以工厂
 	// 自己维护这张表：公布时填，拆除时清。查不到就是 DSH 那个 `?.` 的短路。
 	agentsMutex sync.Mutex
@@ -596,10 +596,14 @@ func New(ctx context.Context, deps Deps, owner *scope.Scope, config Config) (*Ag
 		return fail(fmt.Errorf("core/agentloop: 登记 agent 造法失败：%w", err))
 	}
 
+	// 新增: DSH 在这里还登记第三个变量 `cwd`，把宿主机工作目录摆给模型看。本仓库
+	// 没有这一项：服务端没有工作目录（见 [sessionlog.SessionHeader.WorkspaceID]），
+	// 告诉模型「你的工作目录是 /x」是一句谎话——它会照着去拼路径、去猜相对位置，
+	// 而那些路径在这套部署里指不到任何东西。换成工作区标识也不行：那是一个不透明
+	// 的 id，对模型只是噪音。
 	for name, read := range map[string]func(*ReactLoopAgent) string{
 		"provider": func(a *ReactLoopAgent) string { return a.Options().Provider },
 		"model":    func(a *ReactLoopAgent) string { return a.Options().Model },
-		"cwd":      func(a *ReactLoopAgent) string { return a.Session().Header().Cwd },
 	} {
 		if err := keep(deps.SystemPrompt.Variable(ctx, owner, name, loop.agentVariable(read))); err != nil {
 			return fail(fmt.Errorf("core/agentloop: 登记系统提示词变量 %q 失败：%w", name, err))
@@ -694,7 +698,7 @@ func (l *AgentLoop) startFreshConfigured(ctx context.Context, configured Configu
 	// 只有**配置里明确给了身份**的那些项才走持久化：一个现铸的随机身份不可能
 	// 已经落过地，去读它只会白等一次后端往返。
 	if configured.SessionID == "" || l.config.Persistence == nil {
-		if _, err := l.Create(ctx, configuredID, configured.Options, configured.Cwd); err != nil {
+		if _, err := l.Create(ctx, configuredID, configured.Options, configured.WorkspaceID); err != nil {
 			l.reportConfiguredStartupFailure(configured.ID, "restore", configuredID, err)
 		}
 		return
@@ -820,7 +824,7 @@ func (l *AgentLoop) restoreOrCreateConfigured(
 		}
 	}
 
-	_, err = l.Create(ctx, sessionID, configured.Options, configured.Cwd)
+	_, err = l.Create(ctx, sessionID, configured.Options, configured.WorkspaceID)
 	return err
 }
 
@@ -1076,7 +1080,7 @@ func (l *AgentLoop) prepare(
 			return agent.Handle{}, err
 		}
 		// 先记进这张表再公布：一个同步的创建观察者装系统提示词时就该看得见
-		// 这个 agent 的 provider／model／cwd。
+		// 这个 agent 的 provider／model。
 		l.rememberAgent(built)
 		if err := l.deps.Agents.Announce(publishCtx, built); err != nil {
 			return agent.Handle{}, err
@@ -1124,9 +1128,9 @@ func (l *AgentLoop) Create(
 	ctx context.Context,
 	id sessionlog.SessionID,
 	options agent.Options,
-	cwd string,
+	workspaceID sessionlog.WorkspaceID,
 ) (agent.Agent, error) {
-	live, err := l.deps.Sessions.Prepare(id, session.CreateOptions{Cwd: cwd})
+	live, err := l.deps.Sessions.Prepare(id, session.CreateOptions{WorkspaceID: workspaceID})
 	if err != nil {
 		return nil, err
 	}
@@ -1154,7 +1158,7 @@ func (l *AgentLoop) CreateAgent(
 	}
 	live, err := l.deps.Sessions.Prepare(options.SessionID, session.CreateOptions{
 		Seed:            options.Seed,
-		Cwd:             options.Cwd,
+		WorkspaceID:     options.WorkspaceID,
 		ParentSession:   options.ParentSession,
 		SeedLength:      options.SeedLength,
 		Origin:          options.Origin,

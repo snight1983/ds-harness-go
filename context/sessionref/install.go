@@ -133,7 +133,7 @@ func (i *installer) prepareDirect(
 	live agent.Agent,
 	messages []llm.Message,
 ) ([]llm.Message, error) {
-	target := Target{SessionID: live.Session().ID(), Cwd: live.Session().Header().Cwd}
+	target := Target{SessionID: live.Session().ID(), WorkspaceID: live.Session().Header().WorkspaceID}
 	prepared := make([]llm.Message, 0, len(messages))
 	for _, message := range messages {
 		// 只碰用户自己说的话。别的层注入进来的东西里出现一段规范 URI，

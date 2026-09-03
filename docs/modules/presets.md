@@ -2,7 +2,7 @@
 
 ## 定位
 
-`preset/agentpresets` 发现能力组合，把静态链接的 Go 组装器挂到常驻作用域，并让 Agent 通过父作用域加入预设；`preset/presetstore/localdir` 是把这些内容落到本地目录的适配层；`preset/persona` 提供替换系统人设的组合项。
+`preset/agentpresets` 发现能力组合，把静态链接的 Go 组装器挂到常驻作用域，并让 Agent 通过父作用域加入预设；`preset/persona` 提供替换系统人设的组合项。
 
 ## 架构与预设结构
 
@@ -16,9 +16,9 @@
 
 ## 存储接缝
 
-`agentpresets` 自己不碰任何一种介质：它只对 `Config.Store` 这道窄接缝说话（`Stat`/`List`/`ReadFile`/`WriteFile`/`MakeDir`/`Remove`/`RemoveTree`）。接缝上的路径是斜杠分隔、对本包不透明的字符串，翻译成介质自己的形状是实现方的事。版本身份走 `Entry.Stamp` 这个不可解释的串——本地实现拼「修改时间 + 大小」，对象存储可以用 ETag，数据库可以用行版本；空串表示这份介质答不出身份，此时装载不换代。
+`agentpresets` 自己不碰任何一种介质：它只对 `Config.FileSystem`（即 `fs.FileSystem`）说话。接缝上的路径是斜杠分隔、对本包不透明的字符串，翻译成介质自己的形状是实现方的事。版本身份走 `fs.Info.Version` 这个不可解释的令牌——对象存储用 ETag，本地介质用 stat 身份；答不出身份时装载不换代。
 
-`preset/presetstore/localdir` 是随仓库发出的那一份实现，落在本地目录上。服务化部署换一份接到对象存储或表的实现即可，`agentpresets` 两种都不认识。
+这里原先另有一道 `Config.Store` 窄接缝（`Stat`/`List`/`ReadFile`/`WriteFile`/`MakeDir`/`Remove`/`RemoveTree`），和 `fs.FileSystem` 方法一一对应地重复，以及一个落在本地目录上的实现 `preset/presetstore/localdir`。两者都已删除：一棵内容树的读写在本仓库只剩 `fs.FileSystem` 一条缝，换介质是装配时挑一个后端，业务代码一行不动。`fs.FileSystem` 为此补上了这条缝原有而它缺的四个原语（`WriteBytes`/`MakeDir`/`Remove`/`RemoveTree`）；唯一没有跟过来的是 `WriteFile` 上那个 `executable` 位，理由见 `fs/fs.go` 上 `WriteBytes` 的文档。
 
 ## 静态组装
 
@@ -44,13 +44,13 @@ Go 不支持运行时 import npm 包，因此组合行通过 `ComposerSet` 查�
 
 - 预设只能调用宿主编译进来的 Composer，不能下载或动态执行任意代码。
 - 用户创作只允许从已有组合整目录复制到配置的可写根。
-- 预设根是宿主配置，不走模型执行世界的 `fs.FileSystem`。
+- 预设根是宿主配置：装配方把根路径填进 `Config.Roots`，本包只在这些根底下读写。走的是同一个 `fs.FileSystem` 接口，但接的是哪一个后端由装配决定。
 - Persona 只影响系统提示词，不授予工具或外部权限。
 
 ## 相关源码
 
 - `preset/agentpresets/`
-- `preset/presetstore/localdir/`
 - `preset/persona/`
+- `fs/`
 - `core/scope/`
 - `core/systemprompt/`

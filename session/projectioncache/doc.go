@@ -29,8 +29,8 @@
 // [projection.Registry.ViewCheckpoint] 零 I/O、[projection.Registry.Restore]
 // 冷读）接上，这一层给出的是带介质的那两级：
 //
-//   - [Cache.CachedSnapshot]：零 I/O。直接看已经读进内存的那条记录，不碰日志。
-//     列表页用它，代价是它可能停在上一次耐久检查点那一刻。
+//   - [Cache.CachedSnapshot]：读一条缓存记录，**不碰日志**。列表页用它，
+//     代价是它可能停在上一次耐久检查点那一刻。
 //   - [Cache.ColdSnapshot]：不读整份日志的冷读。缓存行 + 从恢复地板起的一截
 //     尾巴，折完再写回去，于是下一次冷读起点更近。缓存行被一份缩短了的日志
 //     （崩溃修复截过尾）作废时退化成一次从 seq 0 的整读——阶梯最慢的那一级，

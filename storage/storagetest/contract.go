@@ -86,6 +86,15 @@ func RunKVBackendContract(t *testing.T, label string, create func(t *testing.T) 
 		t.Run("同一个单元没关就开第二次被拒", func(t *testing.T) {
 			runRejectsDoubleOpen(t, create)
 		})
+		t.Run("单条读给出值和修订标识", func(t *testing.T) {
+			runReadsSingleRecordWithRevision(t, create)
+		})
+		t.Run("只许建不许覆盖", func(t *testing.T) {
+			runCreateIfAbsentRejectsExisting(t, create)
+		})
+		t.Run("拿过期修订标识写会被拒", func(t *testing.T) {
+			runReplaceIfRevisionRejectsStale(t, create)
+		})
 	})
 }
 
@@ -143,7 +152,7 @@ func runRoundTripsAcrossReopen(t *testing.T, create func(t *testing.T) Harness) 
 	putRecord(t, unit, "alpha", "k1", `{"n":1}`)
 	putRecord(t, unit, "alpha", "k2", `{"n":2}`)
 	putRecord(t, unit, "beta", weirdKey, `{"ok":true}`)
-	if err := unit.SetGlobal(ctx, json.RawMessage(`{"counter":7}`)); err != nil {
+	if _, err := unit.SetGlobal(ctx, json.RawMessage(`{"counter":7}`), nil); err != nil {
 		t.Fatalf("SetGlobal 意外失败：%v", err)
 	}
 	if err := harness.Backend.Close(ctx); err != nil {
@@ -189,9 +198,19 @@ func runPutOverwritesAndDeleteIsIdempotent(t *testing.T, create func(t *testing.
 	// 先确认覆盖是覆盖而不是追加——两条并存的话下面那次删除会「看起来成功」。
 	assertTable(t, snapshot, "alpha", map[string]string{"k": `{"v":"new"}`})
 
-	for _, key := range []string{"k", "k", "never-existed"} {
-		if err := unit.DeleteRecord(ctx, "alpha", key); err != nil {
-			t.Fatalf("删 %q 该是幂等的，实际失败：%v", key, err)
+	// 第一次删得掉，之后都是空操作——「删之前在不在」由后端的返回值回答，
+	// 而读穿到介质之后只有真正执行删除的那一步知道答案。
+	for _, expectation := range []struct {
+		key     string
+		existed bool
+	}{{"k", true}, {"k", false}, {"never-existed", false}} {
+		existed, err := unit.DeleteRecord(ctx, "alpha", expectation.key, nil)
+		if err != nil {
+			t.Fatalf("删 %q 该是幂等的，实际失败：%v", expectation.key, err)
+		}
+		if existed != expectation.existed {
+			t.Errorf("删 %q 该交回 existed=%v，实际 %v",
+				expectation.key, expectation.existed, existed)
 		}
 	}
 
@@ -263,10 +282,25 @@ func runRejectsAfterClose(t *testing.T, create func(t *testing.T) Harness) {
 	}
 
 	closedCalls := map[string]func() error{
-		"LoadAll":      func() error { _, err := unit.LoadAll(ctx); return err },
-		"PutRecord":    func() error { return unit.PutRecord(ctx, "alpha", "k", json.RawMessage(`{}`)) },
-		"DeleteRecord": func() error { return unit.DeleteRecord(ctx, "alpha", "k") },
-		"SetGlobal":    func() error { return unit.SetGlobal(ctx, json.RawMessage(`{}`)) },
+		"LoadAll":   func() error { _, err := unit.LoadAll(ctx); return err },
+		"LoadTable": func() error { _, err := unit.LoadTable(ctx, "alpha"); return err },
+		"ReadRecord": func() error {
+			_, _, _, err := unit.ReadRecord(ctx, "alpha", "k")
+			return err
+		},
+		"ReadGlobal": func() error { _, _, err := unit.ReadGlobal(ctx); return err },
+		"PutRecord": func() error {
+			_, err := unit.PutRecord(ctx, "alpha", "k", json.RawMessage(`{}`), nil)
+			return err
+		},
+		"DeleteRecord": func() error {
+			_, err := unit.DeleteRecord(ctx, "alpha", "k", nil)
+			return err
+		},
+		"SetGlobal": func() error {
+			_, err := unit.SetGlobal(ctx, json.RawMessage(`{}`), nil)
+			return err
+		},
 	}
 	for name, call := range closedCalls {
 		if err := call(); !hasCode(err, storage.CodeClosed) {
@@ -307,6 +341,188 @@ func runRejectsDoubleOpen(t *testing.T, create func(t *testing.T) Harness) {
 	}
 }
 
+// runReadsSingleRecordWithRevision 钉住单条读：值、修订标识、以及「不存在不是错误」。
+//
+// 新增: 整条用例是本仓库加的，DSH 那套契约里没有单条读——那边上面那一层把权威状态
+// 放在进程内存里，读根本不到这一层来。多副本部署下进程内存不再是权威，单条读是
+// 唯一读得到「别的副本刚写的那一版」的路。
+//
+// 同时压住修订标识必须**每次写都换**：不换的话，一个「读到某一版、写了个相同的值」
+// 的序列会让另一个副本的守卫把「改过了」误判成「没人动过」。
+func runReadsSingleRecordWithRevision(t *testing.T, create func(t *testing.T) Harness) {
+	t.Helper()
+	ctx := context.Background()
+
+	harness := create(t)
+	defer closeBackend(t, harness.Backend)
+
+	unit := openUnit(t, harness.Backend, contractDescriptor)
+
+	// 不存在不是错误——调用方问的就是「在不在」。
+	value, revision, found, err := unit.ReadRecord(ctx, "alpha", "k")
+	if err != nil || found || value != nil || revision != "" {
+		t.Fatalf("没写过的键该是不存在：value=%s revision=%q found=%v err=%v",
+			value, revision, found, err)
+	}
+	// 从没写过的全局槽同样是空的，不是介质坏了。
+	global, globalRevision, err := unit.ReadGlobal(ctx)
+	if err != nil || global != nil || globalRevision != "" {
+		t.Fatalf("没写过的全局槽该是空的：value=%s revision=%q err=%v",
+			global, globalRevision, err)
+	}
+
+	written := putRecord(t, unit, "alpha", "k", `{"n":1}`)
+	value, revision, found, err = unit.ReadRecord(ctx, "alpha", "k")
+	if err != nil {
+		t.Fatalf("单条读意外失败：%v", err)
+	}
+	if !found {
+		t.Fatal("刚写过的键该读得到")
+	}
+	assertJSONEqual(t, "alpha/k", value, `{"n":1}`)
+	// 写那一路交回的和读那一路交回的必须是同一个，否则拿写的结果去守卫下一次写
+	// 会当场判成「有人动过」。
+	if revision != written {
+		t.Errorf("写给的修订标识是 %q，读给的是 %q", written, revision)
+	}
+
+	// 覆盖之后必须换一个新的，**即使写进去的值一模一样**。
+	same := putRecord(t, unit, "alpha", "k", `{"n":1}`)
+	if same == written {
+		t.Errorf("覆盖之后修订标识没变，还是 %q", written)
+	}
+
+	// 全局槽走的是同一套。
+	firstGlobal, err := unit.SetGlobal(ctx, json.RawMessage(`{"c":1}`), nil)
+	if err != nil {
+		t.Fatalf("SetGlobal 意外失败：%v", err)
+	}
+	secondGlobal, err := unit.SetGlobal(ctx, json.RawMessage(`{"c":1}`), nil)
+	if err != nil {
+		t.Fatalf("重盖全局槽意外失败：%v", err)
+	}
+	if firstGlobal == "" || firstGlobal == secondGlobal {
+		t.Errorf("重盖全局槽之后修订标识该变：先是 %q，后是 %q", firstGlobal, secondGlobal)
+	}
+	global, globalRevision, err = unit.ReadGlobal(ctx)
+	if err != nil {
+		t.Fatalf("读全局槽意外失败：%v", err)
+	}
+	assertJSONEqual(t, "全局槽", global, `{"c":1}`)
+	if globalRevision != secondGlobal {
+		t.Errorf("写给的全局槽修订标识是 %q，读给的是 %q", secondGlobal, globalRevision)
+	}
+}
+
+// runCreateIfAbsentRejectsExisting 钉住 [storage.CreateIfAbsent]：已经在了就得拒，
+// 且介质上一个字都不许改。
+//
+// 新增: 整条用例是本仓库加的，理由同 runReadsSingleRecordWithRevision。
+//
+// 这条压的是「只许建一次」这类调用（登记一个新工作区、抢一次锁）：放过的话，
+// 两个副本会各自以为自己是那个建出来的人。
+func runCreateIfAbsentRejectsExisting(t *testing.T, create func(t *testing.T) Harness) {
+	t.Helper()
+	ctx := context.Background()
+
+	harness := create(t)
+	defer closeBackend(t, harness.Backend)
+
+	unit := openUnit(t, harness.Backend, contractDescriptor)
+
+	if _, err := unit.PutRecord(ctx, "alpha", "k", json.RawMessage(`{"v":1}`),
+		storage.CreateIfAbsent{}); err != nil {
+		t.Fatalf("第一次建意外失败：%v", err)
+	}
+	_, err := unit.PutRecord(ctx, "alpha", "k", json.RawMessage(`{"v":2}`), storage.CreateIfAbsent{})
+	if !hasCode(err, storage.CodeStaleRevision) {
+		t.Fatalf("第二次建该报 %s，实际 %v", storage.CodeStaleRevision, err)
+	}
+	// 被拒的那一次一个字都不许改。
+	value, _, _, err := unit.ReadRecord(ctx, "alpha", "k")
+	if err != nil {
+		t.Fatalf("单条读意外失败：%v", err)
+	}
+	assertJSONEqual(t, "alpha/k", value, `{"v":1}`)
+
+	// 全局槽走的是同一套。
+	if _, err := unit.SetGlobal(ctx, json.RawMessage(`{"c":1}`), storage.CreateIfAbsent{}); err != nil {
+		t.Fatalf("第一次建全局槽意外失败：%v", err)
+	}
+	_, err = unit.SetGlobal(ctx, json.RawMessage(`{"c":2}`), storage.CreateIfAbsent{})
+	if !hasCode(err, storage.CodeStaleRevision) {
+		t.Fatalf("重建全局槽该报 %s，实际 %v", storage.CodeStaleRevision, err)
+	}
+}
+
+// runReplaceIfRevisionRejectsStale 钉住 [storage.ReplaceIfRevision]：这是读-改-写唯一
+// 安全的收尾方式，而这条用例压的正是它拦不住时会发生的那件事——丢更新。
+//
+// 新增: 整条用例是本仓库加的，理由同 runReadsSingleRecordWithRevision。
+func runReplaceIfRevisionRejectsStale(t *testing.T, create func(t *testing.T) Harness) {
+	t.Helper()
+	ctx := context.Background()
+
+	harness := create(t)
+	defer closeBackend(t, harness.Backend)
+
+	unit := openUnit(t, harness.Backend, contractDescriptor)
+
+	stale := putRecord(t, unit, "alpha", "k", `{"v":1}`)
+	// 「别人」在这中间改了一次。
+	fresh, err := unit.PutRecord(ctx, "alpha", "k", json.RawMessage(`{"v":2}`),
+		storage.ReplaceIfRevision{Revision: stale})
+	if err != nil {
+		t.Fatalf("拿最新修订标识写该成功：%v", err)
+	}
+	_, err = unit.PutRecord(ctx, "alpha", "k", json.RawMessage(`{"v":3}`),
+		storage.ReplaceIfRevision{Revision: stale})
+	if !hasCode(err, storage.CodeStaleRevision) {
+		t.Fatalf("拿过期修订标识写该报 %s，实际 %v", storage.CodeStaleRevision, err)
+	}
+	value, _, _, err := unit.ReadRecord(ctx, "alpha", "k")
+	if err != nil {
+		t.Fatalf("单条读意外失败：%v", err)
+	}
+	assertJSONEqual(t, "alpha/k", value, `{"v":2}`)
+
+	// 别处发的修订标识当作**对不上**处理，不当作格式错误——调用方真正的问题是
+	// 「我以为我读过这条记录」。
+	_, err = unit.PutRecord(ctx, "alpha", "k", json.RawMessage(`{"v":4}`),
+		storage.ReplaceIfRevision{Revision: "别处发的"})
+	if !hasCode(err, storage.CodeStaleRevision) {
+		t.Fatalf("认不出的修订标识该报 %s，实际 %v", storage.CodeStaleRevision, err)
+	}
+
+	// 删也守得住：拿过期的删不掉，拿最新的删得掉，记录不在了之后那一版自然也守不住。
+	if _, err := unit.DeleteRecord(ctx, "alpha", "k",
+		&storage.ReplaceIfRevision{Revision: stale}); !hasCode(err, storage.CodeStaleRevision) {
+		t.Fatalf("拿过期修订标识删该报 %s，实际 %v", storage.CodeStaleRevision, err)
+	}
+	existed, err := unit.DeleteRecord(ctx, "alpha", "k", &storage.ReplaceIfRevision{Revision: fresh})
+	if err != nil || !existed {
+		t.Fatalf("拿最新修订标识删该成功：existed=%v err=%v", existed, err)
+	}
+	if _, err := unit.DeleteRecord(ctx, "alpha", "k",
+		&storage.ReplaceIfRevision{Revision: fresh}); !hasCode(err, storage.CodeStaleRevision) {
+		t.Fatalf("删一个已经不在的记录该报 %s，实际 %v", storage.CodeStaleRevision, err)
+	}
+
+	// 全局槽走的是同一套。
+	single, err := unit.SetGlobal(ctx, json.RawMessage(`{"c":1}`), nil)
+	if err != nil {
+		t.Fatalf("SetGlobal 意外失败：%v", err)
+	}
+	if _, err := unit.SetGlobal(ctx, json.RawMessage(`{"c":2}`),
+		storage.ReplaceIfRevision{Revision: single}); err != nil {
+		t.Fatalf("拿最新修订标识盖全局槽该成功：%v", err)
+	}
+	if _, err := unit.SetGlobal(ctx, json.RawMessage(`{"c":3}`),
+		storage.ReplaceIfRevision{Revision: single}); !hasCode(err, storage.CodeStaleRevision) {
+		t.Fatalf("拿过期修订标识盖全局槽该报 %s，实际 %v", storage.CodeStaleRevision, err)
+	}
+}
+
 // kvFacet 取出被测后端的键值操作组，取不到就让测试停下。
 func kvFacet(t *testing.T, backend storage.Backend) storage.KVFacet {
 	t.Helper()
@@ -329,13 +545,19 @@ func openUnit(t *testing.T, backend storage.Backend, descriptor storage.KVUnitDe
 	return unit
 }
 
-// putRecord 写一条记录，失败就让测试停下。
-func putRecord(t *testing.T, unit storage.KVUnit, table, key, value string) {
+// putRecord 无条件写一条记录，交回写完之后的修订标识。失败就让测试停下。
+func putRecord(t *testing.T, unit storage.KVUnit, table, key, value string) storage.Revision {
 	t.Helper()
 
-	if err := unit.PutRecord(context.Background(), table, key, json.RawMessage(value)); err != nil {
+	revision, err := unit.PutRecord(context.Background(), table, key, json.RawMessage(value), nil)
+	if err != nil {
 		t.Fatalf("往 %s/%s 写记录意外失败：%v", table, key, err)
 	}
+	if revision == "" {
+		// 空串在契约里的意思是「这条记录不存在」，而这次写刚刚成功了。
+		t.Fatalf("往 %s/%s 写成功之后该交回一个非空的修订标识", table, key)
+	}
+	return revision
 }
 
 // closeBackend 收尾关后端，失败只报不停——此时用例本身的断言已经跑完了。

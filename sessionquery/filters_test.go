@@ -16,8 +16,8 @@ func bound(value int64) *int64 { return &value }
 // 用于会话过滤的四条固定记录。
 func filterRecords() []Record {
 	return []Record{
-		{Header: session.SessionHeader{ID: "a", CreatedAt: 100, Cwd: "/x"}, Live: true},
-		{Header: session.SessionHeader{ID: "b", CreatedAt: 200, Cwd: "/y", ParentSession: "a"}, Persisted: true},
+		{Header: session.SessionHeader{ID: "a", CreatedAt: 100, WorkspaceID: "ws-x"}, Live: true},
+		{Header: session.SessionHeader{ID: "b", CreatedAt: 200, WorkspaceID: "ws-y", ParentSession: "a"}, Persisted: true},
 		{Header: session.SessionHeader{ID: "c", CreatedAt: 300}, Live: true, Persisted: true},
 	}
 }
@@ -32,11 +32,11 @@ func TestFilterSessionsAndsEveryClauseAndKeepsInputOrder(t *testing.T) {
 		"没有过滤器就全留下": {want: []session.SessionID{"a", "b", "c"}},
 		"按 id 取":    {filters: []SessionFilter{IDFilter{Values: []session.SessionID{"c", "a"}}}, want: []session.SessionID{"a", "c"}},
 		"按工作目录取": {
-			filters: []SessionFilter{CwdFilter{Values: []string{"/y"}}},
+			filters: []SessionFilter{WorkspaceFilter{Values: []session.WorkspaceID{"ws-y"}}},
 			want:    []session.SessionID{"b"},
 		},
 		"空串就是没有工作目录": {
-			filters: []SessionFilter{CwdFilter{Values: []string{""}}},
+			filters: []SessionFilter{WorkspaceFilter{Values: []session.WorkspaceID{""}}},
 			want:    []session.SessionID{"c"},
 		},
 		"按建会话时间取": {
@@ -222,12 +222,12 @@ func TestMaterializeSessionFiltersCopiesEveryClause(t *testing.T) {
 	t.Parallel()
 
 	ids := []session.SessionID{"a"}
-	cwds := []string{"/x"}
+	workspaces := []session.WorkspaceID{"ws-x"}
 	parents := []session.SessionID{"p"}
 	availability := []Availability{AvailabilityLive}
 	filters := []SessionFilter{
 		IDFilter{Values: ids},
-		CwdFilter{Values: cwds},
+		WorkspaceFilter{Values: workspaces},
 		CreatedAtFilter{Range: Range{From: bound(1), To: bound(2)}},
 		ParentFilter{Values: parents},
 		AvailabilityFilter{Values: availability},
@@ -237,13 +237,13 @@ func TestMaterializeSessionFiltersCopiesEveryClause(t *testing.T) {
 	if err != nil {
 		t.Fatalf("复制不了：%v", err)
 	}
-	ids[0], cwds[0], parents[0], availability[0] = "改掉了", "改掉了", "改掉了", "改掉了"
+	ids[0], workspaces[0], parents[0], availability[0] = "改掉了", "改掉了", "改掉了", "改掉了"
 
 	if owned[0].(IDFilter).Values[0] != "a" {
 		t.Fatal("id 那一列没有复制，调用方改自己的切片改到了验过的那一份")
 	}
-	if owned[1].(CwdFilter).Values[0] != "/x" {
-		t.Fatal("工作目录那一列没有复制")
+	if owned[1].(WorkspaceFilter).Values[0] != "ws-x" {
+		t.Fatal("工作区那一列没有复制")
 	}
 	if owned[3].(ParentFilter).Values[0] != "p" {
 		t.Fatal("父会话那一列没有复制")
