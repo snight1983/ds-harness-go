@@ -1,6 +1,6 @@
 # Agent 控制面
 
-对应包：`core/agent`
+对应包：`harness/agent`
 
 ## 一句话
 
@@ -12,7 +12,7 @@
 
 ## 为什么需要它
 
-一个 agent 真正跑起来是一件很重的事：拼提示词、发模型请求、解析工具调用、写会话日志、处理取消和重试。这些全在 `core/agentloop` 里。
+一个 agent 真正跑起来是一件很重的事：拼提示词、发模型请求、解析工具调用、写会话日志、处理取消和重试。这些全在 `harness/agentloop` 里。
 
 但要用 agent 的地方有十几处，它们关心的只有很少几件事：
 
@@ -23,8 +23,8 @@ flowchart LR
     D["子 agent"] --> C
     E["后台作业 · 长期目标 · 定时提醒"] --> C
     F["计划模式 · 上下文压缩"] --> C
-    C["core/agent<br/>只有契约和名册"]
-    C -.实现这份契约.- G["core/agentloop<br/>真正跑 ReAct 循环"]
+    C["harness/agent<br/>只有契约和名册"]
+    C -.实现这份契约.- G["harness/agentloop<br/>真正跑 ReAct 循环"]
 ```
 
 如果这十几处直接依赖循环那一层，循环内部改一次结构，十几处一起返工。所以把「一个 agent 对外长什么样」单独摘出来放在这里。
@@ -33,7 +33,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    P["core/agent"]
+    P["harness/agent"]
     P --> Q1["一个活 agent<br/>对外能做哪些事"]
     P --> Q2["它从生到死<br/>要经过哪几步"]
     P --> Q3["还没跑的活儿<br/>存在哪里 怎么记账"]
@@ -243,7 +243,7 @@ flowchart LR
     O3 -.结果往回传.-> O2 -.每层都能改.-> O1
 ```
 
-「先登记的在外层」和 `core/tools`、`core/systemprompt` 是同一条规矩。
+「先登记的在外层」和 `tools`、`harness/systemprompt` 是同一条规矩。
 
 三条瀑布各自决定一件事：
 
@@ -271,7 +271,7 @@ flowchart LR
 
 用显式的层替代隐式的全局插件状态，是为了让部署级能力、父 agent 的能力、单个 agent 的能力同时存在而互不串味。一个 agent 被拆除时，挂在它自己那层上的挂钩跟着散掉。
 
-层本身的规则见[作用域](core-scope.md)。
+层本身的规则见[作用域](scope.md)。
 
 ---
 
@@ -323,7 +323,7 @@ flowchart LR
     C --> D["锁外：一个个跑"]
 ```
 
-**挂钩永远在锁外跑。** 这样一个挂钩可以在回调里反过来查这个名册，不会自己把自己锁死。和 `core/session` 那边是同一条规矩。
+**挂钩永远在锁外跑。** 这样一个挂钩可以在回调里反过来查这个名册，不会自己把自己锁死。和 `harness/session` 那边是同一条规矩。
 
 **收件箱自己不加锁。** 它是单写者，改动过程中夹着会话追加和三条通知，加锁会把重入直接变成死锁。所以收件箱那一族改动方法只当只读投影用，任何一次改动都得走 agent 自己那把锁——这也是「放回队头」「按身份拿掉」「按身份换掉」这三条要出现在 agent 契约上的原因。
 
@@ -379,9 +379,9 @@ flowchart LR
 ## 这个包不做什么
 
 - **不造 agent。** 创建和恢复由外部装上来的工厂做。
-- **不跑回合、步骤和工具循环。** 那是 `core/agentloop`。
+- **不跑回合、步骤和工具循环。** 那是 `harness/agentloop`。
 - **不发模型请求，不定义工具，不拼提示词。**
-- **不持久化。** 只往活会话追加事件；事件怎么落盘是 `session/persistence` 的事。
+- **不持久化。** 只往活会话追加事件；事件怎么落盘是 `feature/persistence` 的事。
 - **不做模型路由，不管凭据。**
 - **不碰传输协议。**
 - **不提供一行接入的顶层装配器。** 各组件仍要显式装。
@@ -392,19 +392,19 @@ flowchart LR
 
 | 路径 | 内容 | 行数 |
 |---|---|---|
-| `core/agent/registry.go` | 名册、生命周期、12 个挂钩点的登记与派发 | 1079 |
-| `core/agent/inbox.go` | 两条队列的当前状态、认领与改动 | 371 |
-| `core/agent/observer.go` | 12 个挂钩点的签名与语义 | 237 |
-| `core/agent/runtime.go` | 活 agent 契约、状态、步骤与请求决策 | 236 |
-| `core/agent/modelselection.go` | 模型切换的快照与两处接线 | 215 |
-| `core/agent/types.go` | 收件箱改动记录的事件类型与编解码 | 150 |
-| `core/agent/consumedwork.go` | 从日志盘出已消费和被取消的活儿 | 137 |
-| `core/agent/doc.go` | 包说明与移植决定 | 99 |
-| `core/agent/initiator.go` | 调用链发起方 | 98 |
-| `core/agent/error.go` | 11 个错误值 | 83 |
+| `harness/agent/registry.go` | 名册、生命周期、12 个挂钩点的登记与派发 | 1079 |
+| `harness/agent/inbox.go` | 两条队列的当前状态、认领与改动 | 371 |
+| `harness/agent/observer.go` | 12 个挂钩点的签名与语义 | 237 |
+| `harness/agent/runtime.go` | 活 agent 契约、状态、步骤与请求决策 | 236 |
+| `harness/agent/modelselection.go` | 模型切换的快照与两处接线 | 215 |
+| `harness/agent/types.go` | 收件箱改动记录的事件类型与编解码 | 150 |
+| `harness/agent/consumedwork.go` | 从日志盘出已消费和被取消的活儿 | 137 |
+| `harness/agent/doc.go` | 包说明与移植决定 | 99 |
+| `harness/agent/initiator.go` | 调用链发起方 | 98 |
+| `harness/agent/error.go` | 11 个错误值 | 83 |
 
 ---
 
 ## 深入阅读
 
-[作用域](core-scope.md) · [Agent Loop](agentloop.md) · [活会话](core-session.md) · [系统提示词装配](systemprompt.md) · [运行时设置](settings.md) · [多 Agent](subagent.md)
+[作用域](scope.md) · [Agent Loop](agentloop.md) · [活会话](livesession.md) · [系统提示词装配](systemprompt.md) · [运行时设置](settings.md) · [多 Agent](subagent.md)

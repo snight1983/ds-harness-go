@@ -6,12 +6,12 @@
   - [Go 包文档映射](packages.md)
 
 - 核心运行时
-  - [作用域](modules/core-scope.md)
+  - [作用域](modules/scope.md)
   - [Agent 控制面](modules/agent.md)
   - [Agent Loop](modules/agentloop.md)
   - [Session](modules/session.md)
   - [会话日志与派生状态](modules/session-tree.md)
-  - [活会话](modules/core-session.md)
+  - [活会话](modules/livesession.md)
   - [LLM](modules/llm.md)
   - [Tools](modules/tools.md)
   - [系统提示词装配](modules/systemprompt.md)
@@ -28,7 +28,7 @@
   - [运行时上下文](modules/context.md)
   - [上下文压缩](modules/compaction.md)
   - [运行时设置](modules/settings.md)
-  - [部署级默认模型](modules/core-agentdefaultmodel.md)
+  - [部署级默认模型](modules/agentdefaultmodel.md)
   - [计划与待办](modules/planning.md)
   - [用户交互](modules/interaction.md)
   - [运行时 Guard](modules/guards.md)

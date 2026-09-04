@@ -19,16 +19,16 @@
 
 | 能力 | 主要组件 |
 |---|---|
-| 作用域和生命周期 | `core/scope` |
-| 活 Agent 管理 | `core/agent.Registry` |
-| 活会话管理 | `core/session.Store` |
-| Agent 循环 | `core/agentloop.AgentLoop` |
+| 作用域和生命周期 | `scope` |
+| 活 Agent 管理 | `harness/agent.Registry` |
+| 活会话管理 | `harness/session.Store` |
+| Agent 循环 | `harness/agentloop.AgentLoop` |
 | 模型路由 | `llm.Runtime` 与至少一个 `llm.Adapter` |
-| 提示词组装 | `core/systemprompt.Registry` |
-| 工具运行时 | `core/tools.Runtime` |
-| 会话事件词汇 | `session.Vocabulary` |
+| 提示词组装 | `harness/systemprompt.Registry` |
+| 工具运行时 | `tools.Runtime` |
+| 会话事件词汇 | `sessionlog.Vocabulary` |
 
-生产部署通常还会接入 `session/persistence`、`storage/domain`、状态缓存、附件、凭据、遥测和协议适配。会话日志 Store 与通用 KV Storage 是不同接口。
+生产部署通常还会接入 `feature/persistence`、`storage/domain`、状态缓存、附件、凭据、遥测和协议适配。会话日志 Store 与通用 KV Storage 是不同接口。
 
 ## 推荐装配顺序
 
@@ -62,12 +62,12 @@
 ## 模型接入
 
 1. 创建 `llm.Runtime`。
-2. 实现并注册 `llm.Adapter`，或使用 `llm/openaicompat`。
+2. 实现并注册 `llm.Adapter`，或使用 `adapter/openaicompat`。
 3. 为每个路由声明 Provider、Model、上下文窗口、最大输出和重试策略。
 4. 将 API Key 交给凭据服务或宿主配置，不要写进会话事件。
 5. 设置 Agent 默认模型，必要时安装动态模型选择。
 
-`llm/openaicompat` 面向 OpenAI Chat Completions 兼容服务，不等于支持所有 OpenAI、Anthropic 或 Responses API 特性。
+`adapter/openaicompat` 面向 OpenAI Chat Completions 兼容服务，不等于支持所有 OpenAI、Anthropic 或 Responses API 特性。
 
 ## 工具接入
 
@@ -96,7 +96,7 @@
 
 事件日志是权威事实。状态缓存只是加速恢复：缓存不可用时必须能够回退到事件重放。
 
-当前仓库提供 `session/persistence.Store` / `Backend`、`WriteBehind`、恢复原语和 `Coordinator`。宿主为 `Coordinator` 注入具体 `Backend` 与 `core/session.Store`，再调用 `Install` 接上创建、事件、Flush 和释放观察者。`Coordinator.Prepare` 返回带释放语义的 `core/session.Preparation`；接入 Agent Loop 时仍需由装配层把 Preparation 的发布/释放和后端 `List` 适配到消费方接口。
+当前仓库提供 `feature/persistence.Store` / `Backend`、`WriteBehind`、恢复原语和 `Coordinator`。宿主为 `Coordinator` 注入具体 `Backend` 与 `harness/session.Store`，再调用 `Install` 接上创建、事件、Flush 和释放观察者。`Coordinator.Prepare` 返回带释放语义的 `harness/session.Preparation`；接入 Agent Loop 时仍需由装配层把 Preparation 的发布/释放和后端 `List` 适配到消费方接口。
 
 宿主不要直接修改会话事件切片、Inbox 内部切片或状态缓存记录。
 
@@ -124,7 +124,7 @@
   -> 转换为宿主协议
 ```
 
-`sdk/sdkserver` 和 `acp/acp` 可以提供现成协议语义，但宿主仍决定网络监听、连接管理和认证方式。
+`protocol/sdk/sdkserver` 和 `protocol/acp` 可以提供现成协议语义，但宿主仍决定网络监听、连接管理和认证方式。
 
 ## 关闭顺序
 
@@ -159,4 +159,4 @@
 - 没有内置生产会话持久化 Backend；`Coordinator` 只负责编排，不决定介质。
 - 没有任意代码执行、Shell、本地终端或本地文件工具。
 - PostgreSQL 集成测试需要真实数据库连接。
-- `tools/portcheck` 仍可能报告尚未完成最终裁决的 DSH 能力。
+- `internal/devtools/portcheck` 仍可能报告尚未完成最终裁决的 DSH 能力。

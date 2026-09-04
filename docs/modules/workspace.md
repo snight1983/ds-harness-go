@@ -57,8 +57,8 @@ Workspace 实体 / 排序 / 归档会话
 
 ## 相关源码
 
-- `workspace/registry.go`
-- `workspace/entity.go`
-- `workspace/spec.go`
-- `workspace/types.go`
-- `workspace/invariant.go`
+- `feature/workspace/registry.go`
+- `feature/workspace/entity.go`
+- `feature/workspace/spec.go`
+- `feature/workspace/types.go`
+- `feature/workspace/invariant.go`

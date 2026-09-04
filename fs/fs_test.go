@@ -378,7 +378,7 @@ func TestListDirGivesChildTargetsInAStableOrderWithoutContent(t *testing.T) {
 	// 新增: 这里原先只列三份文件。假件从 fs/fake_test.go 提成
 	// [github.com/snight1983/ds-harness-go/fs/fstest] 时把子目录也交出来了，
 	// 而那才是这条接缝要的：一个子目录**就是**这一层的一个直接子项，
-	// 生产后端 [github.com/snight1983/ds-harness-go/fs/objectstore.Store] 一直是这么列的。
+	// 生产后端 [github.com/snight1983/ds-harness-go/adapter/objectstore.Store] 一直是这么列的。
 	if strings.Join(names, ",") != "alpha.md,beta.md,gamma.md,nested" {
 		t.Errorf("该按名字排好且只含直接子项，实际 %v", names)
 	}

@@ -7,8 +7,8 @@
 //
 // [Store] 上只有 [Store.SaveText]，别的一律不在这里：
 //
-//   - **留多少、留多久**是保留策略的事，在 util/outputretention。
-//   - **什么时候该外置、外置之后原地放什么话**是外置策略的事，在 spill/policy。
+//   - **留多少、留多久**是保留策略的事，在 feature/outputretention。
+//   - **什么时候该外置、外置之后原地放什么话**是外置策略的事，在 feature/spillpolicy。
 //   - **怎么把存进去的东西读回来**根本没有接口——句柄和取回说明由后端自己给，
 //     模型照着说明去调别的工具（读文件、查检索）取，而不是回头来问本包。
 //
@@ -46,7 +46,7 @@ import (
 	"context"
 
 	"github.com/snight1983/ds-harness-go/llm"
-	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionlog"
 )
 
 // Locator 是一份外置产物面向模型的不透明句柄。
@@ -68,7 +68,7 @@ type Locator string
 // 也不改归属；分叉之后新产生的外置才用子会话的 id。
 type Owner struct {
 	// SessionID 是产出这份产物的会话。
-	SessionID session.SessionID
+	SessionID sessionlog.SessionID
 }
 
 // Source 记下一份外置产物是哪件工具、哪一次调用产出的。

@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/llm"
-	"github.com/snight1983/ds-harness-go/session"
+	"github.com/snight1983/ds-harness-go/sessionlog"
 )
 
 // stubStore 是一个把请求原样记下来的最小实现，用来观察这条接缝的过手。
@@ -38,7 +38,7 @@ func (s *stubStore) SaveText(_ context.Context, input SaveText) (Ref, error) {
 // request 排一次典型的外置请求。
 func request(content string) SaveText {
 	return SaveText{
-		Owner:         Owner{SessionID: session.SessionID("s1")},
+		Owner:         Owner{SessionID: sessionlog.SessionID("s1")},
 		Source:        Source{ToolName: "web_fetch", CallID: llm.CallID("c1"), Label: "result"},
 		SuggestedName: "web_fetch.txt",
 		Content:       content,

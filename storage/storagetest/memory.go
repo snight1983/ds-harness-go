@@ -31,7 +31,7 @@ import (
 //
 // 修订标识里拌进它，两份各自独立的介质就永远发不出相等的令牌——契约要求
 // 一个「从 A 读、拿去 B 写」的调用方撞上的是「对不上」，而不是一次静默的成功。
-// 这和 [github.com/snight1983/ds-harness-go/datastore] 里那份实现同源同形。
+// 这和 [github.com/snight1983/ds-harness-go/adapter/datastore] 里那份实现同源同形。
 var mediumSequence atomic.Int64
 
 // globalSlot 是全局槽在令牌里占的那一段。

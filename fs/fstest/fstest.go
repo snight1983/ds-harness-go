@@ -23,7 +23,7 @@
 // # 这个假件模型的是一个有真目录的介质
 //
 // 新增: 它显式记着有哪些目录，于是一个空目录是存在的、列得出来的。生产后端
-// [github.com/snight1983/ds-harness-go/fs/objectstore.Store] 不是这样——那里键空间是平的，
+// [github.com/snight1983/ds-harness-go/adapter/objectstore.Store] 不是这样——那里键空间是平的，
 // 目录靠「有没有别的键以它加斜杠开头」推断，空目录压根不存在。
 //
 // 两者不一致是有意的：接缝上没有哪一句话要求空目录不存在，那是对象存储的局限而不是

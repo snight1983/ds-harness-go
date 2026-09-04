@@ -2,7 +2,7 @@
 
 ## 定位
 
-`guard/timeoutpolicy` 和 `guard/repeattoolreminder` 是工具执行管线上的两类保护：前者统一超时，后者识别机械重复调用并给模型加入提醒。它们通过 `core/tools.Runtime` 的扩展点安装，不修改具体工具实现。
+`guard/timeoutpolicy` 和 `guard/repeattoolreminder` 是工具执行管线上的两类保护：前者统一超时，后者识别机械重复调用并给模型加入提醒。它们通过 `tools.Runtime` 的扩展点安装，不修改具体工具实现。
 
 ## 架构
 
@@ -50,4 +50,4 @@ Tools Pipeline
 
 - `guard/timeoutpolicy/`
 - `guard/repeattoolreminder/`
-- `core/tools/pipeline.go`
+- `tools/pipeline.go`

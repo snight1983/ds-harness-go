@@ -2,7 +2,7 @@
 
 ## 定位
 
-`spill` 定义把大段文本写到外部存储并返回稳定引用的接缝；`spill/policy` 把这项能力接到工具结果终结阶段，在超过阈值时外置内容，控制模型上下文占用。
+`spill` 定义把大段文本写到外部存储并返回稳定引用的接缝；`feature/spillpolicy` 把这项能力接到工具结果终结阶段，在超过阈值时外置内容，控制模型上下文占用。
 
 ## 架构
 
@@ -69,5 +69,5 @@ spill.Store.SaveText -> spill.Ref
 
 - `spill/spill.go`
 - `spill/textstore/`
-- `spill/policy/`
-- `core/tools/pipeline.go`
+- `feature/spillpolicy/`
+- `tools/pipeline.go`

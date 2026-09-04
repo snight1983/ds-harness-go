@@ -2,18 +2,18 @@
 
 ## 定位
 
-`datastore` 是本仓库唯一操作数据库的地方：唯一 import `database/sql`、唯一挂驱动、唯一写 SQL。
+`adapter/datastore` 是本仓库唯一操作数据库的地方：唯一 import `database/sql`、唯一挂驱动、唯一写 SQL。
 
 在它之前，会话日志和键值中枢各自开连接池、各自建表、各自拼 SQL，两处形状抄来抄去（限定 schema、建表包在咨询锁里、值列用 TEXT、标识符长度上限 63）。抄出来的东西会分叉，而分叉只在换后端、换数据库、换部署时才露头。更要紧的是调用方：一个要存数据的模块凭什么知道后面挂的是 Postgres 还是 SQLite。
 
 所以依赖方向是反的——适配层认识业务接口，业务接口不认识适配层：
 
 ```text
-session/persistence.Backend   <- datastore/sessionstore
-storage.KVProvider            <- datastore/kvstore
+feature/persistence.Backend   <- adapter/datastore/sessionstore
+storage.KVProvider            <- adapter/datastore/kvstore
 ```
 
-`session` 和 `storage` 两棵树里没有、也不许有任何一处提到数据库。这条界线由 `tools/dbcheck` 把着，不靠自觉。
+`session` 和 `storage` 两棵树里没有、也不许有任何一处提到数据库。这条界线由 `internal/devtools/dbcheck` 把着，不靠自觉。
 
 一种根本不同的介质（对象存储、远端 API）不进本模块，它自己去实现同一道业务接口。本模块是「关系库这一种介质」的实现，不是所有持久化的总入口。
 
@@ -21,8 +21,8 @@ storage.KVProvider            <- datastore/kvstore
 
 ```mermaid
 flowchart TB
-    Session["session/persistence.Backend"] --> SS["datastore/sessionstore"]
-    Storage["storage.KVProvider"] --> KV["datastore/kvstore"]
+    Session["feature/persistence.Backend"] --> SS["adapter/datastore/sessionstore"]
+    Storage["storage.KVProvider"] --> KV["adapter/datastore/kvstore"]
     SS --> Log["datastore.LogUnit"]
     KV --> Rec["datastore.RecordUnit"]
     Log --> Medium["datastore.Medium"]
@@ -116,7 +116,7 @@ SQLite 那一支有两件事本模块管不了，得由装配方在 DSN 上设�
 
 设了 `DSH_REQUIRE_POSTGRES` 却没有连接串时**失败**而不是退回 SQLite——那种退回正是 CI 上 service container 没起来的样子，不拦住的话一整批本该压两种方言的用例只压了一种。
 
-选库这件事收在 `datastore/dbtest`，`kvstore` 和 `sessionstore` 共用；`datastore` 自己的测试写在包内（要够得着未导出的东西），引 `dbtest` 会成环，所以那边留着一份自己的。
+选库这件事收在 `adapter/datastore/dbtest`，`kvstore` 和 `sessionstore` 共用；`adapter/datastore` 自己的测试写在包内（要够得着未导出的东西），引 `dbtest` 会成环，所以那边留着一份自己的。
 
 不拿 sqlmock 之类的东西刷覆盖率：那验的是「我拼出了我以为我会拼的那句 SQL」，而这里真正会出事的地方恰恰是假库看不见的。
 
@@ -124,15 +124,15 @@ SQLite 那一支有两件事本模块管不了，得由装配方在 DSN 上设�
 
 | 路径 | 内容 |
 |---|---|
-| `datastore/medium.go` | 介质、命名空间、版面、实例标识、单元注册 |
-| `datastore/records.go` | 记录集：表、键值、单例槽、修订号与条件写 |
-| `datastore/logs.go` | 日志集：流、条目、追加、弹出 |
-| `datastore/dialect.go` | 各家数据库分歧处的收口，Postgres 与 SQLite 两支 |
-| `datastore/error.go` | 本层哨兵 |
-| `datastore/dbtest/` | 「这一轮跑在哪种库上」，两个适配层的测试共用 |
-| `datastore/kvstore/` | 记录集 → `storage.KVProvider` |
-| `datastore/sessionstore/` | 日志集 → `session/persistence.Backend` |
-| `tools/dbcheck/` | 把着这条界线的门禁 |
+| `adapter/datastore/medium.go` | 介质、命名空间、版面、实例标识、单元注册 |
+| `adapter/datastore/records.go` | 记录集：表、键值、单例槽、修订号与条件写 |
+| `adapter/datastore/logs.go` | 日志集：流、条目、追加、弹出 |
+| `adapter/datastore/dialect.go` | 各家数据库分歧处的收口，Postgres 与 SQLite 两支 |
+| `adapter/datastore/error.go` | 本层哨兵 |
+| `adapter/datastore/dbtest/` | 「这一轮跑在哪种库上」，两个适配层的测试共用 |
+| `adapter/datastore/kvstore/` | 记录集 → `storage.KVProvider` |
+| `adapter/datastore/sessionstore/` | 日志集 → `feature/persistence.Backend` |
+| `internal/devtools/dbcheck/` | 把着这条界线的门禁 |
 
 ## 深入阅读
 

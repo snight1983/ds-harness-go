@@ -95,7 +95,7 @@ Adapter 返回统一 `StreamChunk`。运行时和 Agent Loop处理：
 
 ## 重试
 
-`llm/llmretry` 根据已解析的 Provider 策略决定是否重试。
+`feature/llmretry` 根据已解析的 Provider 策略决定是否重试。
 
 - 普通模式受最大次数限制。
 - Always 模式由策略明确允许持续重试。
@@ -109,7 +109,7 @@ Agent 的 `request-error` Observer 可以认领失败并要求重试；默认是
 
 ## OpenAI 兼容适配器
 
-`llm/openaicompat` 是 OpenAI Chat Completions 兼容协议的流式 Adapter。
+`adapter/openaicompat` 是 OpenAI Chat Completions 兼容协议的流式 Adapter。
 
 支持：
 
@@ -133,7 +133,7 @@ Agent 的 `request-error` Observer 可以认领失败并要求重试；默认是
 
 ## Token 计量
 
-`llm/tokenmeter` 提供 Token 使用和估算：
+`feature/tokenmeter` 提供 Token 使用和估算：
 
 - 优先使用模型返回的实际 Usage。
 - 在缺少实际值时使用确定的启发式估算。
@@ -145,7 +145,7 @@ Agent 的 `request-error` Observer 可以认领失败并要求重试；默认是
 
 ## 录制与回放
 
-`llm/replay` 用于可重复测试和故障复现：
+`feature/replay` 用于可重复测试和故障复现：
 
 - 录制模型请求对应的流式响应。
 - 按稳定占位符处理动态 ID 和时间值。
@@ -197,10 +197,10 @@ LLM 模块不负责：
 | `llm/stream.go`、`llm/assembler.go` | 流式词汇和消息组装 |
 | `llm/runtime.go`、`llm/adapter.go` | 路由运行时和 Adapter 接口 |
 | `llm/config.go`、`llm/modelinfo.go` | 调用配置和模型目录 |
-| `llm/llmretry/` | 重试策略和耐久事件 |
-| `llm/openaicompat/` | OpenAI Chat Completions 兼容适配器 |
-| `llm/tokenmeter/` | 用量统计和估算 |
-| `llm/replay/`、`llm/mockserver/` | 测试录制、回放和假服务 |
+| `feature/llmretry/` | 重试策略和耐久事件 |
+| `adapter/openaicompat/` | OpenAI Chat Completions 兼容适配器 |
+| `feature/tokenmeter/` | 用量统计和估算 |
+| `feature/replay/`、`llm/mockserver/` | 测试录制、回放和假服务 |
 
 ## 深入阅读
 

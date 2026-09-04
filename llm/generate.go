@@ -10,7 +10,7 @@ package llm
 // 源: packages/llm/llm/src/types.ts:370
 //
 // 新增: DSH 在 GenerateOptions 上直接内联写 Branded<'SessionId'>，不从会话那个包
-// 引。Go 这边同样引不了——github.com/snight1983/ds-harness-go/session 引的是本包，反过来引会成环。
+// 引。Go 这边同样引不了——github.com/snight1983/ds-harness-go/sessionlog 引的是本包，反过来引会成环。
 // 所以这里另有一个同名类型，底下都是 string，跨包时显式转一次。这不是重复定义
 // 一份真理：会话那个包拥有的是「一个会话在存储里的身份」，本包这一个只是
 // 「盖在请求上的一个不透明标记」，本包一个字都不解释它。

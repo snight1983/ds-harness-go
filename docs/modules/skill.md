@@ -4,7 +4,7 @@
 
 ## 定位
 
-Skill 是模型阅读后遵循的任务说明，不是可调用函数。工具回答“模型能执行什么”，Skill 回答“这类任务应该怎么做”。本页覆盖 `skill`、`skill/skilltool`，并串起它们与 `core/systemprompt`、`preset/*`、`context/*` 的关系；这三处各有各的文档。
+Skill 是模型阅读后遵循的任务说明，不是可调用函数。工具回答“模型能执行什么”，Skill 回答“这类任务应该怎么做”。本页覆盖 `skill`、`feature/skill/skilltool`，并串起它们与 `harness/systemprompt`、`preset/*`、`context/*` 的关系；这三处各有各的文档。
 
 ## 架构
 
@@ -13,7 +13,7 @@ flowchart LR
     Providers["Skill Provider"] --> SkillRegistry["skill.Registry"]
     Presets["Agent Preset / Persona"] --> Scope["作用域注册"]
     SkillRegistry --> SkillTool["skill 工具与目录"]
-    Scope --> Prompt["core/systemprompt"]
+    Scope --> Prompt["harness/systemprompt"]
     SkillTool --> Prompt
     Prompt --> Assembly["步骤提示词与工具清单"]
     Assembly --> Model["模型请求"]
@@ -21,7 +21,7 @@ flowchart LR
     PreStep --> Model
 ```
 
-`context/*` 那三个包不经过 `core/systemprompt`：它们挂的是 `agent.OnPreStep`，直接往那一步的消息里塞。
+`context/*` 那三个包不经过 `harness/systemprompt`：它们挂的是 `agent.OnPreStep`，直接往那一步的消息里塞。
 
 所有贡献都显式挂在作用域上。全局能力位于外层，预设和 Agent 能力位于内层；同名能力由更近的一层覆盖，同层重名直接报错。
 
@@ -37,7 +37,7 @@ flowchart LR
 
 ## 模型如何使用 Skill
 
-`skill/skilltool` 提供三条通路：
+`feature/skill/skilltool` 提供三条通路：
 
 1. 在每个步骤前发布当前可用 Skill 的名称和描述。
 2. 模型调用 `skill` 工具，按准确名称读取最新正文和资源。
@@ -47,7 +47,7 @@ flowchart LR
 
 ## 系统提示词
 
-`core/systemprompt.Registry` 组合四类登记——段落、动态上下文、变量、工具提供方——装配成模型这一步的全部输入。Persona 占用固定段落 `deployment:persona`；预设里的 Persona 遮蔽掉部署方那份，不改变部署全局身份。
+`harness/systemprompt.Registry` 组合四类登记——段落、动态上下文、变量、工具提供方——装配成模型这一步的全部输入。Persona 占用固定段落 `deployment:persona`；预设里的 Persona 遮蔽掉部署方那份，不改变部署全局身份。
 
 细节见[系统提示词装配](systemprompt.md)。
 
@@ -92,9 +92,9 @@ flowchart LR
 
 | 路径 | 内容 |
 |---|---|
-| `skill/skill.go`、`skill/registry.go` | Skill 定义、Provider、分层注册与缓存 |
-| `skill/skilltool/` | Skill 目录、读取工具和显式调用处理 |
-| `core/systemprompt/` | 提示词段落、变量、工具清单和装配规则 |
+| `feature/skill/skill.go`、`feature/skill/registry.go` | Skill 定义、Provider、分层注册与缓存 |
+| `feature/skill/skilltool/` | Skill 目录、读取工具和显式调用处理 |
+| `harness/systemprompt/` | 提示词段落、变量、工具清单和装配规则 |
 | `preset/agentpresets/` | 预设发现、Composer 装配、换代与会话选择 |
 | `preset/persona/` | 作用域化 Persona 覆盖 |
 | `context/instructions/` | 工作区指令发现、预算和增量对账 |

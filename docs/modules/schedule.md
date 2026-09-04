@@ -2,7 +2,7 @@
 
 ## 定位
 
-`schedule/schedule` 把一次性和固定频率提醒写入会话日志，并在原会话存活时驱动投递。定时器只是事件日志的进程内派生状态，随时可以丢弃和重建。
+`feature/schedule` 把一次性和固定频率提醒写入会话日志，并在原会话存活时驱动投递。定时器只是事件日志的进程内派生状态，随时可以丢弃和重建。
 
 ## 架构与数据流程
 
@@ -50,8 +50,8 @@ schedule/change 事件 -> FoldEvents -> Record / View
 
 ## 相关源码
 
-- `schedule/schedule/domain.go`
-- `schedule/schedule/runtime.go`
-- `schedule/schedule/install.go`
-- `schedule/schedule/timeparse.go`
-- `schedule/schedule/invariant.go`
+- `feature/schedule/domain.go`
+- `feature/schedule/runtime.go`
+- `feature/schedule/install.go`
+- `feature/schedule/timeparse.go`
+- `feature/schedule/invariant.go`

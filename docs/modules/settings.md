@@ -4,7 +4,7 @@
 
 `settings` 提供按 Namespace 注册的类型化配置、JSON 文档合并、修订冲突检测、监听和脱敏展示。
 
-建在它上面的部署级默认模型选择另有一篇：[部署级默认模型](core-agentdefaultmodel.md)。
+建在它上面的部署级默认模型选择另有一篇：[部署级默认模型](agentdefaultmodel.md)。
 
 ## 架构
 
@@ -58,4 +58,4 @@ Backend -> settings.Provider -> Namespace Registration -> Scope[T]
 
 ## 深入阅读
 
-[部署级默认模型](core-agentdefaultmodel.md) · [凭据](credentials.md)
+[部署级默认模型](agentdefaultmodel.md) · [凭据](credentials.md)

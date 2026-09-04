@@ -8,9 +8,9 @@
 flowchart LR
     SDKClient["外部 SDK"] <-->|"按行 JSON-RPC 2.0"| SDK["sdkprotocol / sdkserver"]
     ACPClient["ACP 客户端"] <-->|"ACP v1"| ACP["acp.Bridge"]
-    SDK --> Agents["core/agent.Registry"]
+    SDK --> Agents["harness/agent.Registry"]
     ACP --> Agents
-    Agents --> Tools["core/tools"]
+    Agents --> Tools["tools"]
     Tools --> MCP["mcp Host / Connection"]
     MCP <-->|"Streamable HTTP"| MCPServer["远端 MCP Server"]
 ```
@@ -19,9 +19,9 @@ SDK 和 ACP 是入站 Agent 接口；MCP 是出站工具接口。MCP Server 不�
 
 ## SDK JSON-RPC
 
-`sdk/sdkprotocol` 定义按行分帧的 JSON-RPC 2.0 传输和稳定线上类型。畸形单行会被跳过，不会终止整个连接；并发写入保持每个消息独占一行。请求取消和连接关闭通过 `context.Context` 与传输 Done 信号传播。
+`protocol/sdk/sdkprotocol` 定义按行分帧的 JSON-RPC 2.0 传输和稳定线上类型。畸形单行会被跳过，不会终止整个连接；并发写入保持每个消息独占一行。请求取消和连接关闭通过 `context.Context` 与传输 Done 信号传播。
 
-`sdk/sdkserver` 处理三个请求：
+`protocol/sdk/sdkserver` 处理三个请求：
 
 | 请求 | 行为 |
 |---|---|
@@ -35,7 +35,7 @@ SDK 和 ACP 是入站 Agent 接口；MCP 是出站工具接口。MCP Server 不�
 
 ## ACP
 
-`acp/acp` 实现 ACP 的 Agent 端，面向受信任的自动化客户端。它支持：
+`protocol/acp` 实现 ACP 的 Agent 端，面向受信任的自动化客户端。它支持：
 
 - 文本、资源链接和通过附件服务准入的内联图片提示。
 - 已提交的助手文本和图片输出。
@@ -48,7 +48,7 @@ Bridge 只拥有自己创建的 Agent。关闭时先停止接收请求、结算�
 
 ## MCP
 
-`mcp` 把远端 MCP Server 的工具注册到 `core/tools`。公开名称按 `mcp__<server>__<tool>` 生成并稳定归一化；线上调用仍使用远端原名。
+`mcp` 把远端 MCP Server 的工具注册到 `tools`。公开名称按 `mcp__<server>__<tool>` 生成并稳定归一化；线上调用仍使用远端原名。
 
 一次工具清单同步先完整获取下一代定义，再原子替换当前注册。拉取失败时保留上一代；注册冲突时回滚本代，模型不会看到半套工具。连接断开按配置退避重连，`tools/list_changed` 触发重新同步。
 
@@ -75,7 +75,7 @@ Bridge 只拥有自己创建的 Agent。关闭时先停止接收请求、结算�
 - SDK Server 和 ACP Bridge 不提供完整认证、限流、配额或租户隔离。
 - MCP Server 的工具 Schema 不是授权证明，工具运行时仍需 Guard、审批和宿主策略。
 - 错误返回稳定协议错误，不把内部堆栈、凭据或后端连接信息发送给客户端。
-- 协议层不能绕过 `core/agent` 直接改写会话当前状态。
+- 协议层不能绕过 `harness/agent` 直接改写会话当前状态。
 
 ## 能力边界
 
@@ -91,11 +91,11 @@ Bridge 只拥有自己创建的 Agent。关闭时先停止接收请求、结算�
 
 | 路径 | 内容 |
 |---|---|
-| `sdk/sdkprotocol/` | 线上类型、按行 JSON-RPC 传输和错误映射 |
-| `sdk/sdkserver/` | SDK 请求处理、通知和 Agent 所有权 |
-| `acp/acp/` | ACP Bridge、内容准入、取消和审批 |
-| `mcp/host.go`、`mcp/connection.go` | MCP 连接、命名空间和重连 |
-| `mcp/bridge.go`、`mcp/content.go` | 工具注册、调用和结果内容转换 |
+| `protocol/sdk/sdkprotocol/` | 线上类型、按行 JSON-RPC 传输和错误映射 |
+| `protocol/sdk/sdkserver/` | SDK 请求处理、通知和 Agent 所有权 |
+| `protocol/acp/` | ACP Bridge、内容准入、取消和审批 |
+| `protocol/mcp/host.go`、`protocol/mcp/connection.go` | MCP 连接、命名空间和重连 |
+| `protocol/mcp/bridge.go`、`protocol/mcp/content.go` | 工具注册、调用和结果内容转换 |
 
 ## 深入阅读
 

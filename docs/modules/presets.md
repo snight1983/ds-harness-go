@@ -52,5 +52,5 @@ Go 不支持运行时 import npm 包，因此组合行通过 `ComposerSet` 查�
 - `preset/agentpresets/`
 - `preset/persona/`
 - `fs/`
-- `core/scope/`
-- `core/systemprompt/`
+- `scope/`
+- `harness/systemprompt/`

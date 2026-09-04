@@ -228,5 +228,5 @@
 
 | 包 | 毛病 |
 |---|---|
-| tools/consumercheck | **文件说明被当成了包文档**（main.go 少了 package 前那个空行） |
+| internal/devtools/consumercheck | **文件说明被当成了包文档**（main.go 少了 package 前那个空行） |
 

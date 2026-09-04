@@ -1,17 +1,17 @@
-// Package minimalhost 是 docs/embedding.md 那份装配顺序的可编译版本。
+// Package minimalhost 从一个第三方包的位置把最小闭环拼出来。
 //
 // 新增: DSH 没有对应物。它的装配是 cordis 的插件清单在运行期拼出来的，而那份
 // 清单是配置不是代码——写错了要等到进程起来才知道。本仓库不要那个容器，装配
-// 由宿主一行行写出来，于是「这套组件到底怎么拼」这件事在别处只以散文形式存在。
-// 这个包让它同时被编译器和测试看着。
+// 由 [github.com/snight1983/ds-harness-go/harness.New] 一行行写出来。
 //
-// # 它为什么必须在 core/agentloop 之外
+// # 它和 harness 的分工
 //
-// [github.com/snight1983/ds-harness-go/core/agentloop] 自己的测试跑得很足，但它们全在包内，用的是那个
-// 包自备的替身。包内测试证明不了一件事：**一个外部宿主能不能把这套东西拼起来**。
-// 那需要跨过导出面——只有导出的构造函数、导出的选项字段、导出的接口。本包在
-// 包外，所以任何一次让外部装配失败的改动（某个构造函数收窄了、某个字段不导出了、
-// 某个接口多了一个方法），会在这里编译不过，而不是等某个宿主升级依赖时才发现。
+// 装配顺序本身住在 [github.com/snight1983/ds-harness-go/harness]，把它真跑一遍的
+// 测试也在那里。本包只做一件那些测试做不到的事：**站在一个既不是 harness、也不是
+// 任何一个运行期包的位置上**，只用导出的构造函数、导出的选项字段和导出的接口，
+// 把同一份闭环拼出来。任何一次让外部装配失败的改动（某个构造函数收窄了、某个字段
+// 不导出了、某个接口多了一个方法），会在这里编译不过，而不是等某个宿主升级依赖
+// 时才发现。
 //
 // # 它装的是最小闭环，不是生产部署
 //
@@ -31,8 +31,8 @@
 // 漏一个，整段日志会在**恢复**的时候被判成「有不认识的事件类型」而整个拒掉，
 // 而那时离写下它的那次运行已经隔了一次重启。
 //
-// 跑了循环就至少要有 [github.com/snight1983/ds-harness-go/core/agent.EventTypes]——收件箱改动是循环
+// 跑了循环就至少要有 [github.com/snight1983/ds-harness-go/harness/agent.EventTypes]——收件箱改动是循环
 // 自己写进日志的。接了别的模块（压缩、重试、Goal、Schedule、Plan Mode、审批）
 // 就还要把各自的 EventTypes 并进来。接持久化时，这份词汇交给
-// [github.com/snight1983/ds-harness-go/session/persistence.CoordinatorDeps].Vocabulary。
+// [github.com/snight1983/ds-harness-go/feature/persistence.CoordinatorDeps].Vocabulary。
 package minimalhost

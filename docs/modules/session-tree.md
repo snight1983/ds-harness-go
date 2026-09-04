@@ -1,6 +1,6 @@
 # 会话日志与派生状态（`session/`）
 
-本文只讲 `session/` 这一棵树：顶层的事件词汇，加上它下面的九个子包。活会话对象（`core/session`）和会话检索（`sessionquery`）不在本文范围内，只在需要说明接缝时点到名字。
+本文只讲 `session/` 这一棵树：顶层的事件词汇，加上它下面的九个子包。活会话对象（`harness/session`）和会话检索（`sessionquery`）不在本文范围内，只在需要说明接缝时点到名字。
 
 **怎么读这篇文档**
 
@@ -38,10 +38,10 @@
 | 段 | 包 | 一句话 |
 |---|---|---|
 | 记什么 | `session` | 一条事件长什么样，一份日志立不立得住 |
-| 怎么存 | `session/persistence`（+ `datastore/sessionstore` 后端）、`session/checkpointpolicy` | 落到介质上，以及什么时候必须落 |
-| 读成什么 | `session/projection`、`session/projectioncache` | 折成当前状态，并把折叠进度存住 |
+| 怎么存 | `feature/persistence`（+ `adapter/datastore/sessionstore` 后端）、`feature/checkpointpolicy` | 落到介质上，以及什么时候必须落 |
+| 读成什么 | `sessionlog/projection`、`feature/projectioncache` | 折成当前状态，并把折叠进度存住 |
 
-另外四个包是**这套机制的使用者**，不是机制本身：`session/stats`（会话数字）、`session/sessiontitle` + `session/sessiontitlellm`（会话标题）、`session/telemetry`（外发上报）。
+另外四个包是**这套机制的使用者**，不是机制本身：`feature/sessionstats`（会话数字）、`feature/sessiontitle` + `feature/sessiontitle/sessiontitlellm`（会话标题）、`feature/telemetry`（外发上报）。
 
 ### 术语对照
 
@@ -86,14 +86,14 @@ flowchart TB
         Rules["ValidateLog · CheckVocabulary<br/>InterruptedTurnClosers · FoldSurface"]
     end
 
-    Live["core/session.Session（活会话，树外）"]
+    Live["harness/session.Session（活会话，树外）"]
 
     subgraph write["写路径"]
         Policy["checkpointpolicy<br/>三处耐久屏障"]
         Coord["persistence.Coordinator<br/>按会话串行 · 准备池 · 崩溃修复"]
         WB["persistence.WriteBehind<br/>攒批"]
         Backend{"persistence.Backend<br/>（接缝）"}
-        PG["datastore/sessionstore<br/>仓库自带的唯一介质"]
+        PG["adapter/datastore/sessionstore<br/>仓库自带的唯一介质"]
         Other["装配方自己实现的后端"]
     end
 
@@ -129,9 +129,9 @@ flowchart TB
     Rules -.被读侧使用.-> Reg
 ```
 
-**图怎么看**：中间那个 `core/session.Session`（活会话）是发动机，它不在本文范围内，但每一条线都从它出发。往左下是**写**：事件先被屏障按住、刷到硬盘，再攒批落到介质。往右下是**读**：同一条事件被同步折进各个投影，投影的进度再被缓存到另一条写链上。最上面那层是词汇——它只有值和纯函数，写侧读侧都用它，但它谁也不认识。
+**图怎么看**：中间那个 `harness/session.Session`（活会话）是发动机，它不在本文范围内，但每一条线都从它出发。往左下是**写**：事件先被屏障按住、刷到硬盘，再攒批落到介质。往右下是**读**：同一条事件被同步折进各个投影，投影的进度再被缓存到另一条写链上。最上面那层是词汇——它只有值和纯函数，写侧读侧都用它，但它谁也不认识。
 
-`persistence.Backend` 是一道**缝**，不是一个实现。本仓库是一个空运行时，落盘介质由装配它的人挑；仓库里自带的只有 `datastore/sessionstore` 一个，上游那两个第一方后端（JSONL、SQLite）在裁决表里是 `OUT_OF_SCOPE`，没有移过来。
+`persistence.Backend` 是一道**缝**，不是一个实现。本仓库是一个空运行时，落盘介质由装配它的人挑；仓库里自带的只有 `adapter/datastore/sessionstore` 一个，上游那两个第一方后端（JSONL、SQLite）在裁决表里是 `OUT_OF_SCOPE`，没有移过来。
 
 **要紧的一点**：两条写链是**分开**的。会话日志走 `persistence.Backend`，投影缓存走 `storage/domain`，它们不要求同一个介质。唯一的约束是次序——事件必须先于对应的缓存落盘，**缓存可以落后于日志，不能领先于日志**，否则恢复时会出现没有事实依据的状态。
 
@@ -139,7 +139,7 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-    participant L as core/session.Session
+    participant L as harness/session.Session
     participant P as checkpointpolicy
     participant C as persistence.Coordinator
     participant R as projection.Registry
@@ -221,7 +221,7 @@ flowchart TB
         direction TB
         V["session<br/>词汇"]
         PE["persistence<br/>接缝 + 编排"]
-        PG2["datastore/sessionstore<br/>唯一自带介质"]
+        PG2["adapter/datastore/sessionstore<br/>唯一自带介质"]
         CP["checkpointpolicy<br/>耐久时机"]
         PJ["projection<br/>折叠机制"]
         PC["projectioncache<br/>折叠进度落盘"]
@@ -247,7 +247,7 @@ flowchart TB
     TE --> PJ
 ```
 
-**图怎么看**：箭头是「谁依赖谁」。`session` 在最底下，谁都可以用它，它谁都不用——这是它能只放值和纯函数的原因。`datastore/sessionstore` 是 `persistence` 的**使用者**而不是它的一部分，装配方自己写的后端站在同一个位置。右边那一列全部只依赖 `projection`，它们随时可以整个不装。
+**图怎么看**：箭头是「谁依赖谁」。`session` 在最底下，谁都可以用它，它谁都不用——这是它能只放值和纯函数的原因。`adapter/datastore/sessionstore` 是 `persistence` 的**使用者**而不是它的一部分，装配方自己写的后端站在同一个位置。右边那一列全部只依赖 `projection`，它们随时可以整个不装。
 
 一张表看完十个单元的能力和它最要紧的那条边界：
 
@@ -255,7 +255,7 @@ flowchart TB
 |---|---|---|
 | `session` | 事件长什么样、日志立不立得住 | 不持有任何活对象 |
 | `persistence` | 落盘接缝 + 按会话串行的编排 | 不是具体介质 |
-| `datastore/sessionstore` | 一个会话一条流，接到日志集上 | 没有逐字节原始存档，也不认路 |
+| `adapter/datastore/sessionstore` | 一个会话一条流，接到日志集上 | 没有逐字节原始存档，也不认路 |
 | `checkpointpolicy` | 三处副作用边界上的耐久屏障 | 只喊「现在刷」，不判断「有没有东西要刷」 |
 | `projection` | 事件折成当前状态的机制 | 只提供机制，不提供内容 |
 | `projectioncache` | 折叠进度落盘 + 两级带介质读 | 永远不是权威，随时可以整个丢掉 |
@@ -279,12 +279,12 @@ flowchart TB
 
 **边界**
 
-- **不持有任何活对象。**没有事件总线、没有发布时机、没有 seed 生命周期——那些在 `core/session`。拆开的理由是持久化层只需要值和纯函数，放一个包里它就得连着一整套用不到的东西一起立起来。
+- **不持有任何活对象。**没有事件总线、没有发布时机、没有 seed 生命周期——那些在 `harness/session`。拆开的理由是持久化层只需要值和纯函数，放一个包里它就得连着一整套用不到的东西一起立起来。
 - **不解释业务含义。**它知道一条 `tool/call` 后面该配一条 `tool/result`，不知道那个工具干了什么。
 - `Event.Data` 是 `json.RawMessage`，**故意不解成联合类型**。上游登记表有 48 个事件类型，本仓库实现其中 13 个；日志是持久的，一个只认识 13 个类型的构建读到第 14 种时，正确行为是原样保管那段字节，而不是解成「未知」再排回去时丢掉字段。需要具名字段时才调 `DecodeData`，按需解码。
 - 因此「解不开」不等于「日志失败」：那件事由 `CheckVocabulary` 单独判，判据是 `Event.Ignorable`。
 
-### `session/persistence`
+### `feature/persistence`
 
 **它解决什么**：日志得存到某个地方去，但「某个地方」是装配这套东西的人挑的。这个包给出那道缝，外加所有后端都躲不掉的那些活（按会话排队、崩溃之后怎么收拾）。
 
@@ -298,13 +298,13 @@ flowchart TB
 
 **边界**
 
-- **不是具体介质。**上游第一方的两个后端（JSONL、SQLite）在裁决表里是 `OUT_OF_SCOPE`，没有移过来；本仓库自带的介质只有 `datastore/sessionstore` 一个，换别的就自己实现 `Backend`。本包给出的是那道缝。本包**不知道**下面是什么介质，也不该知道：数据库那一摊整个收在 `datastore` 底下，这条界线由 `tools/dbcheck` 把着。
+- **不是具体介质。**上游第一方的两个后端（JSONL、SQLite）在裁决表里是 `OUT_OF_SCOPE`，没有移过来；本仓库自带的介质只有 `adapter/datastore/sessionstore` 一个，换别的就自己实现 `Backend`。本包给出的是那道缝。本包**不知道**下面是什么介质，也不该知道：数据库那一摊整个收在 `adapter/datastore` 底下，这条界线由 `internal/devtools/dbcheck` 把着。
 - **不解释模型、工具或业务事件的业务含义。**
 - 不做格式迁移：`FormatVersion` 在未发布期间钉在 0，不承诺兼容性，不匹配的日志直接拒收。既然不迁移，就没有旧形状要升级。
 - **不看断尾凭据。**`StoredPrefix.TornMarker` 的类型是 `any`，编排层唯一会对它做的事就是原样递回 `Backend.CommitRepair`。`any` 表达的正是「不看」这件事本身。
-- 不替代所有消费方接口。宿主仍需提供生产 `Backend`、注入 `core/session.Store`、安装 Coordinator，并为 Agent Loop 适配 Preparation 的发布/释放。
+- 不替代所有消费方接口。宿主仍需提供生产 `Backend`、注入 `harness/session.Store`、安装 Coordinator，并为 Agent Loop 适配 Preparation 的发布/释放。
 
-### `datastore/sessionstore`
+### `adapter/datastore/sessionstore`
 
 **它解决什么**：把上面那道缝真的落到一个介质上。这是仓库里唯一一个能直接拿去用的后端。
 
@@ -324,7 +324,7 @@ flowchart TB
 - 日志会从最老的一头弹出事件，所以「从哪个 seq 起」问的是现存最早那条；一份被弹空的存档答不出这个数，改由「下一条要写的 seq」回答。
 - 变更令牌是来源限定的（介质实例 + 单元 + 计数）。拌进实例标识是必需的：两份各自独立的介质各自从 0 数起，不拌就会比出相等。
 
-### `session/checkpointpolicy`
+### `feature/checkpointpolicy`
 
 **它解决什么**：就是本文开头那个「已经花过的钱不会凭空消失」。它在每一个撤不回来的动作之前，把日志按到硬盘上。
 
@@ -368,7 +368,7 @@ flowchart LR
 - 三条规则本身写死，装配方只能选装不装、给谁装（`owner` 作用域）。
 - 模型看不见它：它不在工具表里，模型无从调用，也不参与「要不要刷」的决定。
 
-### `session/projection`
+### `sessionlog/projection`
 
 **它解决什么**：日志是流水账，界面要的是余额。这个包就是那台从流水账算余额的机器——而且是增量算的，来一条加一条，不是每次从头加一遍。
 
@@ -402,7 +402,7 @@ flowchart LR
 - 一份检查点行**永远不是权威**：版本对不上、或者它声称的水位超过了日志末尾，就丢掉重折。
 - 单元格按会话身份存，清理必须显式（`Forget`）；不清只会多占内存，不会读出错的值。
 
-### `session/projectioncache`
+### `feature/projectioncache`
 
 **它解决什么**：上一个包每次都要从头把流水账加一遍。这个包把「加到哪儿了、加出来是多少」存到硬盘上，下次接着加。这就是列表页秒开的原因。
 
@@ -432,7 +432,7 @@ flowchart LR
 - **不关它用的那个存储域**——域是装配方打开的，也归装配方关。
 - 写缓存前必须先把对应事件真正落盘。
 
-### `session/stats`
+### `feature/sessionstats`
 
 **它解决什么**：会话详情页上那几个数字，怎么保证在不同客户端、不同翻页状态下都一样。
 
@@ -450,7 +450,7 @@ flowchart LR
 - **负载读不回来就当一条不相干的事件放过。**折叠没有报错的位置，也不该有：一条读不回来的负载说明它在被追加的时候就没验，那是追加那一侧的缺陷，一个统计单元没有资格因为它而让整次读失败。
 - 取值范围校验只在从盘上读回来时跑——折叠本身只往上加非负的量，加不出越界的值；越界只可能来自一份被改过的、或者别的构建写下的检查点行。
 
-### `session/sessiontitle`
+### `feature/sessiontitle`
 
 **它解决什么**：本文开头那个「立刻有名字，过一会儿变好，你改过就再也不动」。
 
@@ -485,7 +485,7 @@ flowchart TB
 - 投影登记和三条订阅都是显式入口：`RegisterProjection`，加上 `Service.OnEvent`、`Service.OnMainRequest`、`Service.OnSessionDisposed`。装配方接哪几条自己定；一份只做离线回放的装配一条都不接，`Service.Get` 照样管用。
 - 有一条约定要守：`Session.Append` 会在服务持有自己那把锁的时候被调用，实现方不许反过来同步地调回本包的任何一个钩子。
 
-### `session/sessiontitlellm`
+### `feature/sessiontitle/sessiontitlellm`
 
 **它解决什么**：上一个包里那个 `Provider` 的具体实现——真的去问一次模型。
 
@@ -500,7 +500,7 @@ flowchart TB
 - 只收一个「有 Stream 方法」的窄接口（`Streamer`），不收整个 LLM 运行时——本包只用得上流式那一件事，窄口让测试不必架起一整个运行时。
 - 两个构造函数的登记 id（`FirstPromptID`、`AllPromptsID`）逐字照搬上游，因为那个 id 会被写进标题事件的来源里，改它等于改已经写下去的历史的读法。
 
-### `session/telemetry`
+### `feature/telemetry`
 
 **它解决什么**：把会话里发生的事往外送一份，给观测系统用。它只管**采**，不管**送**。
 
@@ -571,7 +571,7 @@ flowchart TB
 
 **图怎么看**：实线是装，虚线是拆。顺序不是随便排的——每一步都依赖上一步的产物：`Cache` 要 `Registry` 和 `Store`，`checkpointpolicy` 要 `Store` 已经装好。拆卸必须反序，理由同样是依赖：先拆下面的会让上面的对着一个已经没了的东西调。
 
-1. 打开介质，构造 `persistence.Backend`（仓库自带 `datastore/sessionstore`，别的介质自己实现），装上 `Coordinator`，挂到 `core/session.Store` 的四条观察者上。
+1. 打开介质，构造 `persistence.Backend`（仓库自带 `adapter/datastore/sessionstore`，别的介质自己实现），装上 `Coordinator`，挂到 `harness/session.Store` 的四条观察者上。
 2. 建 `projection.Registry`，把各个域的单元登记进去（`stats`、`sessiontitle` 的 `RegisterProjection`、以及树外的单元）。
 3. 打开缓存用的存储域，构造 `projectioncache.Cache`（两个节流阈值必填），在提交事件之后调 `Observe`、在会话脱离时调 `Detach`。
 4. 装 `checkpointpolicy`（一次装齐三条屏障），拿住返回的注销函数。
@@ -693,7 +693,7 @@ flowchart TB
 - **「写坏的尾巴」是后端的事。**编排层只知道 `TornMarker` 非 nil 意味着后面挂着一截要截掉的东西，它的类型是 `any`——编排层唯一会做的就是把它原样递回 `Backend.CommitRepair`。`any` 表达的正是「不看」这件事本身。
 - **「没收尾的回合」是词汇层的事。**`InterruptedTurnClosers` 从事件流本身算出该补哪几条，`BalanceStored` 把它们接在后面。因为补出来的那几条是**确定的**，这个函数跑两遍得到同样的字节——这就是崩溃修复可以安全重跑的原因。
 
-事务型后端（`datastore/sessionstore`）不存在第一种痕迹：一次写就是一个事务，要么整批提交，要么一条都没有，所以它的 `TornMarker` 恒为 nil。它的 `CommitRepair` 一旦收到非 nil 的 torn，说明编排器把别的后端的凭据递错了地方，当场拒绝，不去猜它是什么意思。
+事务型后端（`adapter/datastore/sessionstore`）不存在第一种痕迹：一次写就是一个事务，要么整批提交，要么一条都没有，所以它的 `TornMarker` 恒为 nil。它的 `CommitRepair` 一旦收到非 nil 的 torn，说明编排器把别的后端的凭据递错了地方，当场拒绝，不去猜它是什么意思。
 
 ---
 
@@ -710,8 +710,8 @@ flowchart TB
 这棵树不负责：
 
 - **决定模型如何回答、工具如何执行。**日志记录发生了什么，不参与决定。
-- **活会话对象本身**（`core/session`）和**会话检索**（`sessionquery`）。
-- **提供全套生产介质。**接缝在这里，仓库只自带 `datastore/sessionstore` 一个后端；上游的 JSONL、SQLite 后端是 `OUT_OF_SCOPE`，换别的介质由装配方自己实现 `Backend`。
+- **活会话对象本身**（`harness/session`）和**会话检索**（`sessionquery`）。
+- **提供全套生产介质。**接缝在这里，仓库只自带 `adapter/datastore/sessionstore` 一个后端；上游的 JSONL、SQLite 后端是 `OUT_OF_SCOPE`，换别的介质由装配方自己实现 `Backend`。
 - **上报的投递。**攒批、重试、排队、丢弃全在 `Sink` 下游。
 - **用户鉴权与租户权限**，也不提供 HTTP API。
 - **把缓存当成权威。**任何一级缓存都可以整个丢掉重算。
@@ -724,12 +724,12 @@ flowchart TB
 | 路径 | 内容 |
 |---|---|
 | `session/` | 事件、负载、会话头、日志校验、崩溃修复、表面折叠 |
-| `session/persistence/` | `Backend`/`Store` 接缝、`Coordinator`、`WriteBehind`、准备池、恢复原语 |
-| `datastore/sessionstore/` | 把会话接到日志集上的适配层，仓库自带的唯一介质 |
-| `session/checkpointpolicy/` | 三处副作用边界上的耐久屏障 |
-| `session/projection/` | 事件折成当前状态的注册表与三级读法 |
-| `session/projectioncache/` | 折叠检查点的持久化与两级带介质读法 |
-| `session/stats/` | 回合、步骤、耗时的统计单元 |
-| `session/sessiontitle/` | 标题状态与三种来路的钉住规则 |
-| `session/sessiontitlellm/` | 拿模型起标题的提供方实现 |
-| `session/telemetry/` | 采集、脱敏、交给宿主 Sink |
+| `feature/persistence/` | `Backend`/`Store` 接缝、`Coordinator`、`WriteBehind`、准备池、恢复原语 |
+| `adapter/datastore/sessionstore/` | 把会话接到日志集上的适配层，仓库自带的唯一介质 |
+| `feature/checkpointpolicy/` | 三处副作用边界上的耐久屏障 |
+| `sessionlog/projection/` | 事件折成当前状态的注册表与三级读法 |
+| `feature/projectioncache/` | 折叠检查点的持久化与两级带介质读法 |
+| `feature/sessionstats/` | 回合、步骤、耗时的统计单元 |
+| `feature/sessiontitle/` | 标题状态与三种来路的钉住规则 |
+| `feature/sessiontitle/sessiontitlellm/` | 拿模型起标题的提供方实现 |
+| `feature/telemetry/` | 采集、脱敏、交给宿主 Sink |

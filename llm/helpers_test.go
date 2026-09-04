@@ -12,7 +12,7 @@ import (
 	"iter"
 	"testing"
 
-	"github.com/snight1983/ds-harness-go/core/scope"
+	"github.com/snight1983/ds-harness-go/scope"
 )
 
 // testScope 造一个用完自动释放的作用域。

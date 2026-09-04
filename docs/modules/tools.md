@@ -1,6 +1,6 @@
-# core/tools
+# tools
 
-本文只讲 `core/tools` 一个包。用它注册进去的那些工具——todo、goal、schedule、MCP 桥接、子 agent 控制、技能调用——各有各的文档，不在这里。审批的实现方 `interaction/userapproval`、超时和重复提醒 `guard/*` 同理。
+本文只讲 `tools` 一个包。用它注册进去的那些工具——todo、goal、schedule、MCP 桥接、子 agent 控制、技能调用——各有各的文档，不在这里。审批的实现方 `interaction/userapproval`、超时和重复提醒 `guard/*` 同理。
 
 ---
 
@@ -37,7 +37,7 @@ graph LR
   RT -->|"字段 maxArgumentBytes"| MB["int<br/>缺省 1 MiB"]
 ```
 
-`layers` 就是 `core/scope` 提供的那张 `map[*scope.Key]*toolLayer`。`core/tools` 是它 10 个使用方之一。
+`layers` 就是 `scope` 提供的那张 `map[*scope.Key]*toolLayer`。`tools` 是它 10 个使用方之一。
 
 ### 二、toolLayer 的 7 张表
 
@@ -138,7 +138,7 @@ graph LR
 
 一个进程里活着很多 agent，agent 挂在预设下面。工具、限制、守卫全都按这条链继承。
 
-**自己注册的不受限制影响。** 继承面要过整条链上的全部限制，但这个作用域自己那一层注册的工具直接盖上去，一条也不过滤。这条豁免是「按子 agent 发能力清单」能成立的前提：`subagent/inprocessdriver` 把子 agent 的结构化输出工具注册进子 agent 自己那一层（`structured.go:226`），而 `subagent/subagent/childagent.go:248` 那份点名「这个孩子能用哪些能力」的过滤器绝不能把它答话用的机器一起摘掉。
+**自己注册的不受限制影响。** 继承面要过整条链上的全部限制，但这个作用域自己那一层注册的工具直接盖上去，一条也不过滤。这条豁免是「按子 agent 发能力清单」能成立的前提：`subagent/inprocessdriver` 把子 agent 的结构化输出工具注册进子 agent 自己那一层（`structured.go:226`），而 `feature/subagent/childagent.go:248` 那份点名「这个孩子能用哪些能力」的过滤器绝不能把它答话用的机器一起摘掉。
 
 `deepseek-harness-dsh-v0.1.2-alpha.3` 之前的版本把这条豁免读成「全局层豁免」而不是「自己那层豁免」。工具都挂在宿主装配里时两者等价；等预设把工具搬到 agent 平面上，它们就变成了**祖先**贡献，于是子 agent 的过滤器悄悄地什么也不再约束。本包按订正后的语义实现。
 
@@ -268,7 +268,7 @@ graph LR
 
 **中止结果要带走前一份结果攒下的上下文**（`canonicalAbort`，`pipeline.go:952`）。那些是**已经发生过的事实**：一个复合工具已经派发出去的子调用捎回来的话，不会因为外层被取消就变得不曾说过。
 
-`AbortedBeforeDispatchResult()`（`pipeline.go:946`）是导出的，给 `core/agentloop` 替**根本没轮到**的那些模型调用补结果用。`deepseek-harness-dsh-v0.1.2-alpha.3` 在 agent-loop 那边把这份结果的形状又手写了一遍，两处一旦对不上，日志里就会出现两种措辞不同的「派发前中止」。
+`AbortedBeforeDispatchResult()`（`pipeline.go:946`）是导出的，给 `harness/agentloop` 替**根本没轮到**的那些模型调用补结果用。`deepseek-harness-dsh-v0.1.2-alpha.3` 在 agent-loop 那边把这份结果的形状又手写了一遍，两处一旦对不上，日志里就会出现两种措辞不同的「派发前中止」。
 
 ---
 
@@ -304,7 +304,7 @@ graph LR
 - **不做鉴权。** 注册不是授权，审批只决定这一次调用放不放行。
 - **不实现审批。** `Approval` 是接口，实现在 `interaction/userapproval`。
 - **不执行 `Definition.Timeout`。** 那由 `guard/timeoutpolicy` 那条绕派发规则做。
-- **不决定并行度。** `ExecutionMode` 只答一次调用能不能重叠，一批能同时跑几个由 `core/agentloop` 定。
+- **不决定并行度。** `ExecutionMode` 只答一次调用能不能重叠，一批能同时跑几个由 `harness/agentloop` 定。
 - **不强杀不合作的执行体。** 取消是协作式的。
 - **不做 PTC（`run_code`）。** `deepseek-harness-dsh-v0.1.2-alpha.3` 那一整块整块不移，理由见 `docs/portmap/decisions.md`。
 
@@ -318,13 +318,13 @@ graph LR
 |---|---|---|
 | **注册工具** | goaltool、askuser、jobstool、mcp、planmode、schedule、querytool、skilltool、controltool、inprocessdriver、subagenttool、todo、toolralph | 13 处 `Register` |
 | **构造 Definition** | 上面那些，加 `subagent/reporttool` | 14 个包 |
-| **绕派发** | `guard/timeoutpolicy`、`session/checkpointpolicy` | 2 处 |
-| **执行后** | `guard/repeattoolreminder`、`spill/policy` | 2 处 |
+| **绕派发** | `guard/timeoutpolicy`、`feature/checkpointpolicy` | 2 处 |
+| **执行后** | `guard/repeattoolreminder`、`feature/spillpolicy` | 2 处 |
 | **结果观察** | `context/instructions`、`subagent/inprocessdriver` | 2 处 |
 | **执行前** | `jobs/jobstool` | 1 处 |
-| **限制** | `subagent/subagent` | 1 处 |
+| **限制** | `feature/subagent` | 1 处 |
 | **守卫** | `subagent/inprocessdriver` | 1 处 |
-| **四段管线** | `core/agentloop/toolcalls.go` | 唯一的一处 |
+| **四段管线** | `harness/agentloop/toolcalls.go` | 唯一的一处 |
 | **`Runtime.Execute`** | **没有调用方** | 0 |
 | **`Runtime.Schemas`** | **没有调用方** | 0 |
 | **`Runtime.KnownNames`** | **没有调用方** | 0 |
@@ -333,9 +333,9 @@ graph LR
 
 **注册是最常见的用法，扩展点是最少见的。** 13 个包注册工具，而五个扩展点加起来只有 9 处登记，分布在 8 个包里。
 
-**四段管线只有一个消费方。** `core/agentloop/toolcalls.go` 用 `Prepare` / `Dispatch` / `Finalize` / `Finish` 做并行调度；`Runtime.Execute` 是把这四段串起来的便利入口，非测试代码里一次都没用过。
+**四段管线只有一个消费方。** `harness/agentloop/toolcalls.go` 用 `Prepare` / `Dispatch` / `Finalize` / `Finish` 做并行调度；`Runtime.Execute` 是把这四段串起来的便利入口，非测试代码里一次都没用过。
 
-**`Schemas` 和 `KnownNames` 目前是死的。** `core/systemprompt` 从它自己那张 `toolProviders` 表拿工具清单（`registry.go:420`），而 `systemprompt.Registry.Tools` 在非测试代码里也没有调用方——这两侧之间的接线还不存在。
+**`Schemas` 和 `KnownNames` 目前是死的。** `harness/systemprompt` 从它自己那张 `toolProviders` 表拿工具清单（`registry.go:420`），而 `systemprompt.Registry.Tools` 在非测试代码里也没有调用方——这两侧之间的接线还不存在。
 
 ---
 
@@ -343,15 +343,15 @@ graph LR
 
 | 路径 | 内容 | 行数 |
 |---|---|---|
-| `core/tools/definition.go` | 工具、调用、结果三样东西的形状，以及五个错误类型 | 466 |
-| `core/tools/runtime.go` | 注册表：有什么工具、一个作用域看得见哪些 | 562 |
-| `core/tools/pipeline.go` | 派发管线：四段、四条瀑布、审批接缝 | 962 |
-| `core/tools/jsonschema.go` | 受限 JSON Schema 子集：能写什么、一份 schema 自己合法吗 | 732 |
-| `core/tools/jsonvalue.go` | 拿一个值按 schema 验一遍，列出违规说明 | 243 |
-| `core/tools/presentation.go` | 一次调用和一份结果在界面上的样子 | 384 |
+| `tools/definition.go` | 工具、调用、结果三样东西的形状，以及五个错误类型 | 466 |
+| `tools/runtime.go` | 注册表：有什么工具、一个作用域看得见哪些 | 562 |
+| `tools/pipeline.go` | 派发管线：四段、四条瀑布、审批接缝 | 962 |
+| `tools/jsonschema.go` | 受限 JSON Schema 子集：能写什么、一份 schema 自己合法吗 | 732 |
+| `tools/jsonvalue.go` | 拿一个值按 schema 验一遍，列出违规说明 | 243 |
+| `tools/presentation.go` | 一次调用和一份结果在界面上的样子 | 384 |
 
 ---
 
 ## 深入阅读
 
-[作用域](core-scope.md) · [Agent](agent.md) · [用户交互](interaction.md) · [运行时 Guard](guards.md) · [计划与待办](planning.md) · [MCP 客户端](mcp.md)
+[作用域](scope.md) · [Agent](agent.md) · [用户交互](interaction.md) · [运行时 Guard](guards.md) · [计划与待办](planning.md) · [MCP 客户端](mcp.md)

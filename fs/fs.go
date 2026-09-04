@@ -189,7 +189,7 @@ type FileSystem interface {
 	// 新增: DSH 那边没有这个方法——它的 writeText 收 string，而 JS 的 string 装得下
 	// 任意字节。Go 不行：一份二进制内容过一趟 string 会被 UTF-8 解码规则动到。
 	// 有了它，「一棵内容树的读写」这件事在本仓库里只剩这一条接缝
-	// （见 [github.com/snight1983/ds-harness-go/preset/agentpresets]）。
+	// （见 [github.com/snight1983/ds-harness-go/feature/preset/agentpresets]）。
 	//
 	// 它**不带权限位**。一个对象存储答不出「这份内容可不可执行」，让它编一个出来，
 	// 会让上层那些「这个脚本能不能跑」的判断在那份介质上悄悄地永远成立或永远不成立。
@@ -231,7 +231,7 @@ type FileSystem interface {
 // 源: packages/fs/fs/src/index.ts:118-135（processPath、fileUrl 两个抽象方法）
 //
 // 新增: DSH 把这两个方法和别的十个一起写在抽象类上，因为它那边每一个后端都架在
-// 一份真的文件系统上。本仓库不是：唯一的生产后端 [github.com/snight1983/ds-harness-go/fs/objectstore.Store]
+// 一份真的文件系统上。本仓库不是：唯一的生产后端 [github.com/snight1983/ds-harness-go/adapter/objectstore.Store]
 // 架在对象存储上，一个对象**没有**进程能打开的路径，也没有 file: URI。
 //
 // 强制它实现只剩三种写法，三种都是坏的：交回对象键或者 s3:// 串是一次静默的说谎，
@@ -241,7 +241,7 @@ type FileSystem interface {
 //
 // 所以它单独成一道接缝，语义交给类型系统：做得到的后端实现它，做不到的不实现，
 // 调用方类型断言，断言不过就是「这条路在这个部署上走不通」，一个 error 而不是一次
-// 崩溃。同样的手法见 [github.com/snight1983/ds-harness-go/session/persistence.SeekableBackend]。
+// 崩溃。同样的手法见 [github.com/snight1983/ds-harness-go/feature/persistence.SeekableBackend]。
 //
 // 本仓库目前**没有**调用方：会用到它的消费方（起子进程、拼命令行）整支在裁决里
 // 是范围外，见 README 的项目边界。留着这道接缝是为了宿主自己挂本地后端时有个

@@ -2,7 +2,7 @@
 
 ## 定位
 
-`util/outputretention` 统一大输出的保留和省略说明，`util/timeout` 统一超时边界、错误分类和空闲看门狗。这些包不依赖 Agent 业务，可被工具、协议和工作流复用。
+`feature/outputretention` 统一大输出的保留和省略说明，`feature/timeout` 统一超时边界、错误分类和空闲看门狗。这些包不依赖 Agent 业务，可被工具、协议和工作流复用。
 
 ## 架构与输出保留
 
@@ -37,5 +37,5 @@
 
 ## 相关源码
 
-- `util/outputretention/`
-- `util/timeout/`
+- `feature/outputretention/`
+- `feature/timeout/`

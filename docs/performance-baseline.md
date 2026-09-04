@@ -17,7 +17,7 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
         -run '^$' -bench . -benchmem -timeout 3600s
 ```
 
-`-run '^$'` 把单元测试挡在外面，只留基准。整组跑完在下面那台机器上约十二分钟，其中 `core/scope` 和 `core/agent` 占了大头。只关心某一组时按包跑即可。
+`-run '^$'` 把单元测试挡在外面，只留基准。整组跑完在下面那台机器上约十二分钟，其中 `scope` 和 `harness/agent` 占了大头。只关心某一组时按包跑即可。
 
 几个 benchmark 内部会周期性地重建被测对象（长会话的日志、收件箱的事件日志都只增不改），这样在时间制的 `-benchtime` 下不会把内存吃光。想拉长采样时间可以放心加 `-benchtime 5s`。
 
@@ -30,7 +30,7 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
 | 磁盘 | 本机 NVMe SSD，测试用 `t.TempDir()` 下的真实文件，真的 fsync |
 | 采样日期 | 2026-09-01 |
 
-## 长会话（`core/session`）
+## 长会话（`harness/session`）
 
 会话是事件溯源的，日志只增不改，所以每一条读路径都有退化成 O(日志长度) 的可能。三档日志长度并排跑，10 万那一档已经远超真实会话，留着是为了让线性项在噪声里显形。
 
@@ -49,7 +49,7 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
 - **快照同理。** `Events()` 把拷贝记住了，同一份快照在下一次追加之前反复交出都是缓存命中；上表量的是**失效之后**那一次（循环里先追一条再取），也就是「写一条、存一次」这个真实节奏。10 万条一次快照 2 ms、10 MB。持久化和压缩按回合调它没问题，轮询它不行。
 - **冷启动按定义线性，量它是为了给「打开一个旧会话要等多久」定个数。** 十万条事件的会话，构造要 0.74 秒、第一次要历史再等 0.56 秒。真实会话到不了这个量级，但这两个数是压缩策略的输入。
 
-## 并发 Agent（`core/agent`）
+## 并发 Agent（`harness/agent`）
 
 一台机器上会同时活着很多个 agent，而注册表是它们唯一的公共点：每一次状态变化、每一次收件箱插入、每一次登记和摘除都要过它的锁。这一组量的是**争用**，不是单个 agent 跑得快不快。用的是假 agent 而不是真循环——真循环要连模型，那量出来的是 mock 服务的延迟。
 
@@ -76,7 +76,7 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
 - **`List` 每次整份拷贝，按定义线性。** 记在这里是为了让「轮询这张表」的调用方知道账单：1000 个 agent 一次 7.3 µs、16 KB。
 - **收件箱每条消息约 5.6 µs**，因为每一次 `Append` 都要往会话日志里写一条 `inbox/spliced` 事件——含一次 JSON 排布和一次会话追加。它比「往切片上加一个元素」贵得多是设计如此：耐久的事实永远在日志上。收件箱本身按设计不加锁（只被自己那个 agent 的循环碰），这组数也是将来有人给它加锁时的对照。
 
-## 持久化（`session/persistence`）
+## 持久化（`feature/persistence`）
 
 只量协调层。它是纯内存的，写入器是空实现——真的落盘会把这一层要量的协调成本整个盖住。
 
@@ -91,9 +91,9 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
 
 - **攒批是为了把每事件成本摊掉。** 这四个数只是攒批本身的开销，摊掉的那笔在介质那一侧——协调层量不到它，所以这里给不出攒批的收益倍数。要那个数就得在一个真的后端上量。
 
-**介质那一侧现在没有基线。** 原先这里有一组走真 I/O 的数（`StoreAppendBatch`、`StoreLoad`、`BackendList`），它们出自那个一会话一文件的 JSONL 后端，那个包已经删掉了（`docs/session-log-limit.md` 的计划第 9 步）。现在唯一的第一方后端是 `datastore/sessionstore`，它要一个真的 Postgres 才跑得到，而基线机上没有——所以这一档留白，等有人在一台配得起库的机器上补。留白比留一组量的是另一份介质的数好：后者会被当成现在这条路的参照。
+**介质那一侧现在没有基线。** 原先这里有一组走真 I/O 的数（`StoreAppendBatch`、`StoreLoad`、`BackendList`），它们出自那个一会话一文件的 JSONL 后端，那个包已经删掉了（`docs/session-log-limit.md` 的计划第 9 步）。现在唯一的第一方后端是 `adapter/datastore/sessionstore`，它要一个真的 Postgres 才跑得到，而基线机上没有——所以这一档留白，等有人在一台配得起库的机器上补。留白比留一组量的是另一份介质的数好：后者会被当成现在这条路的参照。
 
-## SDK 洪泛（`sdk/sdkprotocol`）
+## SDK 洪泛（`protocol/sdk/sdkprotocol`）
 
 | Benchmark | 1 槽 | 8 槽 | 64 槽（默认） | 不限 |
 |---|---|---|---|---|
@@ -112,7 +112,7 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
 - **背压的代价是可以接受的。** 并发帧数从不限收到默认的 64 槽，吞吐只掉 2%（4.99 → 5.10 µs）；收到 1 槽（完全串行）才掉 42%。默认值处在曲线的平坦段上，换句话说这道限流基本是白给的保护。
 - **大帧吞吐在 50 MB/s 附近封顶**，1 KiB 那一档的 41.8 MB/s 是每帧固定开销还没被摊薄。分配随帧大小线性（13.6 MB/op @ 1 MiB），allocs 却几乎不变（53 → 94）——说明大帧走的是整块缓冲，没有按块碎分。
 
-## Shutdown（`core/scope`）
+## Shutdown（`scope`）
 
 作用域是所有权边界：`Dispose` 要把挂在上面的清理逐个跑完。关一个跑了很久的进程时，这条路径上挂着的东西可能很多。
 
@@ -130,10 +130,10 @@ go test ./core/session/ ./core/agent/ ./core/scope/ \
 
 ## 什么时候该重跑
 
-- 动了会话日志、派生历史缓存或表面折叠 → 重跑 `core/session`，盯 `AppendOnLongLog` 有没有从常数变线性。
-- 动了注册表的锁或观察者派发 → 重跑 `core/agent`，盯 `ObserverFanoutConcurrent` 的三档差。
-- 动了写回窗口、批大小或存储格式 → 重跑 `session/persistence/...`，盯 `StoreAppendBatch` 的每事件比值还在不在 60 倍量级。
-- 动了作用域的清理链表 → 重跑 `core/scope`，盯 `DeferAndCancel` 还是不是常数、`DisposeAfterChurn` 有没有相对 `Dispose` 变慢。
+- 动了会话日志、派生历史缓存或表面折叠 → 重跑 `harness/session`，盯 `AppendOnLongLog` 有没有从常数变线性。
+- 动了注册表的锁或观察者派发 → 重跑 `harness/agent`，盯 `ObserverFanoutConcurrent` 的三档差。
+- 动了写回窗口、批大小或存储格式 → 重跑 `feature/persistence/...`，盯 `StoreAppendBatch` 的每事件比值还在不在 60 倍量级。
+- 动了作用域的清理链表 → 重跑 `scope`，盯 `DeferAndCancel` 还是不是常数、`DisposeAfterChurn` 有没有相对 `Dispose` 变慢。
 
 ## 相关文档
 

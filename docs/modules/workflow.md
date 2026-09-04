@@ -8,14 +8,14 @@
 |---|---|---|
 | 后台作业 `jobs/*` | 进程内 Registry | Producer 启动、流式读取、等待或取消 |
 | 目标 `goal/*` | 会话事件日志 | Agent 空闲时按授权自动续推 |
-| 定时任务 `schedule/schedule` | 会话事件日志 | 进程内定时器到期后向原会话投递 |
+| 定时任务 `feature/schedule` | 会话事件日志 | 进程内定时器到期后向原会话投递 |
 | Ralph `workflow/toolralph` | 当前工具调用 | 每轮创建全新子 Agent，传递有界报告 |
 
 这些能力共享 Agent 和工具基础设施，但没有合并成一个万能工作流引擎。每种状态的耐久性、取消语义和权限边界不同。
 
 ## 后台作业
 
-`jobs/jobs` 定义作业状态、快照、输出和 Registry 接口；`jobs/localjobs` 提供进程内实现；`jobs/jobstool` 暴露模型可用的查看、读取、等待和终止能力。
+`feature/jobs` 定义作业状态、快照、输出和 Registry 接口；`jobs/localjobs` 提供进程内实现；`jobs/jobstool` 暴露模型可用的查看、读取、等待和终止能力。
 
 ```mermaid
 stateDiagram-v2
@@ -41,7 +41,7 @@ stateDiagram-v2
 
 ## 长期目标
 
-`goal/goal` 用 `goal/change` 事件保存完整目标快照，并以 revision 做 compare-and-set。目标阶段是耐久状态：`active`、`paused`、`blocked`、`complete`。
+`feature/goal` 用 `goal/change` 事件保存完整目标快照，并以 revision 做 compare-and-set。目标阶段是耐久状态：`active`、`paused`、`blocked`、`complete`。
 
 自动续推授权是进程内状态，不落盘。恢复、分叉或换进程后目标默认不自动运行，必须显式 Resume，避免旧日志自动触发新行为。
 
@@ -49,7 +49,7 @@ stateDiagram-v2
 
 ## 定时任务
 
-`schedule/schedule` 把计划和投递写入会话事件，内存定时器只是可重建的当前状态。
+`feature/schedule` 把计划和投递写入会话事件，内存定时器只是可重建的当前状态。
 
 - `after` 和 `at` 是一次性提醒；`every` 是固定频率提醒。
 - 时间统一写为 UTC RFC 3339 毫秒格式。
@@ -97,14 +97,14 @@ flowchart LR
 
 | 路径 | 内容 |
 |---|---|
-| `jobs/jobs/` | 作业契约、状态和 Registry |
+| `feature/jobs/` | 作业契约、状态和 Registry |
 | `jobs/localjobs/` | 进程内作业实现 |
 | `jobs/jobstool/` | 模型作业工具 |
-| `goal/goal/` | 目标事件、状态、revision 和服务 |
+| `feature/goal/` | 目标事件、状态、revision 和服务 |
 | `goal/goalrounddriver/` | 空闲续推驱动 |
 | `goal/goaltool/`、`goal/goalcommand/` | 模型工具与宿主命令入口 |
-| `schedule/schedule/` | 耐久计划、时间解析和投递运行时 |
-| `workflow/toolralph/` | 固定多轮子 Agent 工作流 |
+| `feature/schedule/` | 耐久计划、时间解析和投递运行时 |
+| `feature/workflow/toolralph/` | 固定多轮子 Agent 工作流 |
 
 ## 深入阅读
 

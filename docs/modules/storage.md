@@ -6,18 +6,18 @@
 
 ```mermaid
 flowchart TB
-    Session["活会话事件"] --> Coordinator["session/persistence Coordinator"]
-    Coordinator --> Persistence["session/persistence Backend"]
-    Persistence --> SessionBackend["datastore/sessionstore\n或宿主实现"]
+    Session["活会话事件"] --> Coordinator["feature/persistence Coordinator"]
+    Coordinator --> Persistence["feature/persistence Backend"]
+    Persistence --> SessionBackend["adapter/datastore/sessionstore\n或宿主实现"]
 
     State["设置等运行时领域数据"] --> Hub["storage.Storage"]
     Hub --> Domain["storage/domain"]
     Domain --> Backend["storage KV Backend"]
     Backend --> Contract["storagetest 测试实现"]
-    Backend --> KVStore["datastore/kvstore"]
+    Backend --> KVStore["adapter/datastore/kvstore"]
 
     Runtime["上下文、工具、协议"] --> FS["fs.FileSystem"]
-    FS --> Object["fs/objectstore"]
+    FS --> Object["adapter/objectstore"]
     Runtime --> Attach["attachment.Store"]
     Runtime --> Creds["credentials.Provider"]
 ```
@@ -63,18 +63,18 @@ Update ──> 读出这一条，连同它的修订号
 
 **变更事件只反映本副本的写。** B 副本改了一条记录，A 副本上的订阅者一声不响。跨副本的变更通知要一套发布订阅，本轮明确不做——这是一条画出来的边界，不是遗漏。
 
-`datastore/kvstore` 是生产后端之一。接口不要求宿主使用关系数据库；其他实现应通过 `storage/storagetest` 的契约测试。
+`adapter/datastore/kvstore` 是生产后端之一。接口不要求宿主使用关系数据库；其他实现应通过 `storage/storagetest` 的契约测试。
 
-本模块**不知道**下面是什么介质，也不该知道：schema、事务、连接池这些词一个都不出现在 `storage` 这棵树里，全在 [持久化抽象层](datastore.md) 底下，界线由 `tools/dbcheck` 把着。
+本模块**不知道**下面是什么介质，也不该知道：schema、事务、连接池这些词一个都不出现在 `storage` 这棵树里，全在 [持久化抽象层](datastore.md) 底下，界线由 `internal/devtools/dbcheck` 把着。
 
 ## 会话持久化
 
-`session/persistence` 定义会话存档、`Store` / `Backend` 接口、恢复与修复原语、`WriteBehind` 队列和活会话 `Coordinator`。Coordinator 监听 `core/session.Store` 的创建、事件、Flush 和释放边界，负责按会话串行、攒批、准备缓存和关闭排干。
+`feature/persistence` 定义会话存档、`Store` / `Backend` 接口、恢复与修复原语、`WriteBehind` 队列和活会话 `Coordinator`。Coordinator 监听 `harness/session.Store` 的创建、事件、Flush 和释放边界，负责按会话串行、攒批、准备缓存和关闭排干。
 
 ```mermaid
 sequenceDiagram
-    participant S as core/session
-    participant H as session/persistence Coordinator
+    participant S as harness/session
+    participant H as feature/persistence Coordinator
     participant P as persistence.Backend
     participant B as 文件 / 数据库 / 对象存储
 
@@ -93,13 +93,13 @@ sequenceDiagram
 - 存档 revision 用于判断同一份物理日志在两次观察之间是否变化。
 - 写入失败必须返回协调方，不能只记录日志后假装提交成功。
 
-`session/persistence.Backend` 与 `storage.Backend` 是两条不同接口，各有各的适配层：`datastore/kvstore` 填通用 KV 那条，`datastore/sessionstore` 填会话这条。填了一条不等于另一条也有了，宿主也可以自己实现 `session/persistence.Backend` 或完整 `Store`。使用 Backend 时可以复用内置 Coordinator，但具体介质和顶层接线仍由宿主负责。
+`feature/persistence.Backend` 与 `storage.Backend` 是两条不同接口，各有各的适配层：`adapter/datastore/kvstore` 填通用 KV 那条，`adapter/datastore/sessionstore` 填会话这条。填了一条不等于另一条也有了，宿主也可以自己实现 `feature/persistence.Backend` 或完整 `Store`。使用 Backend 时可以复用内置 Coordinator，但具体介质和顶层接线仍由宿主负责。
 
 ## 文件系统
 
 `fs.FileSystem` 描述 Agent 所在执行世界的文件能力，路径统一使用斜杠分隔的世界绝对路径。它不等于 Go 服务进程的本地磁盘。
 
-接口覆盖读取、写入、目录、状态和受策略约束的操作。`fs/objectstore` 把目录与文件映射到对象存储键，适合 S3、MinIO 等后端。路径清理、根目录限制和策略校验在访问后端前完成，不能把模型输入直接拼成存储键。
+接口覆盖读取、写入、目录、状态和受策略约束的操作。`adapter/objectstore` 把目录与文件映射到对象存储键，适合 S3、MinIO 等后端。路径清理、根目录限制和策略校验在访问后端前完成，不能把模型输入直接拼成存储键。
 
 仓库不提供“默认访问服务器本地磁盘”的生产实现。宿主需要明确选择执行环境和隔离策略。
 
@@ -150,11 +150,11 @@ sequenceDiagram
 | `storage/backend.go`、`storage/storage.go` | 通用 Backend 契约与错误语义 |
 | `storage/domain/` | 领域 Facility、串行提交和领域事件 |
 | `storage/storagetest/` | Backend 一致性测试套件 |
-| `datastore/kvstore/` | 把 KV Backend 接到持久化抽象层 |
-| `datastore/sessionstore/` | 把会话 Backend 接到持久化抽象层 |
-| `session/persistence/` | 会话 Backend/Store、Coordinator、准备池、修复和写入协调 |
+| `adapter/datastore/kvstore/` | 把 KV Backend 接到持久化抽象层 |
+| `adapter/datastore/sessionstore/` | 把会话 Backend 接到持久化抽象层 |
+| `feature/persistence/` | 会话 Backend/Store、Coordinator、准备池、修复和写入协调 |
 | `fs/` | 执行世界文件接口、路径与策略 |
-| `fs/objectstore/` | 对象存储文件实现 |
+| `adapter/objectstore/` | 对象存储文件实现 |
 | `attachment/` | 图片准入、保存和请求表示 |
 | `attachment/imagestore/` | 建在文件系统接缝上的内容寻址图片实现 |
 | `credentials/` | 凭据 Provider、记录和变化通知 |

@@ -4,7 +4,7 @@
 
 ## 定位
 
-`subagent/subagent` 是协调层，不实现新的 Agent Loop。进程内子 Agent 仍由 `core/agent` 和 `core/agentloop` 驱动；本模块负责选择 Provider、检查能力、建立父子关系并结算一次运行。
+`feature/subagent` 是协调层，不实现新的 Agent Loop。进程内子 Agent 仍由 `harness/agent` 和 `harness/agentloop` 驱动；本模块负责选择 Provider、检查能力、建立父子关系并结算一次运行。
 
 ## 架构
 
@@ -18,7 +18,7 @@ flowchart TB
     Provider --> External["宿主外部 Provider"]
     Spawn --> Driver["inprocessdriver"]
     Fork --> Driver
-    Driver --> Registry["core/agent.Registry"]
+    Driver --> Registry["harness/agent.Registry"]
     Registry --> Child["子 Agent / Agent Loop"]
     Child --> Result["Run 结算"]
     External --> Result
@@ -117,7 +117,7 @@ stateDiagram-v2
 
 | 路径 | 内容 |
 |---|---|
-| `subagent/subagent/` | Runtime、Provider/Run 契约、父子描述、查询和续行 |
+| `feature/subagent/` | Runtime、Provider/Run 契约、父子描述、查询和续行 |
 | `subagent/inprocessdriver/` | 进程内 Agent 创建、等待、结构化结果和释放 |
 | `subagent/spawninprocess/` | 新会话 Provider |
 | `subagent/forkinprocess/` | 会话分叉 Provider |

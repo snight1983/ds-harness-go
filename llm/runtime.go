@@ -5,8 +5,8 @@
 //
 // 新增: DSH 那边 LlmRuntime extends Service，登记走 ctx.effect、通知走 cordis 事件、
 // 瀑布走 ctx.waterfall。Go 这边一样也不照抄：生命周期挂在显式传进来的
-// [github.com/snight1983/ds-harness-go/core/scope.Scope] 上，通知是一张显式的观察者表，瀑布是一张
-// 有序的规则表加一次递归下钻——和本仓库 core/agent、core/session 完全一致。
+// [github.com/snight1983/ds-harness-go/scope.Scope] 上，通知是一张显式的观察者表，瀑布是一张
+// 有序的规则表加一次递归下钻——和本仓库 harness/agent、harness/session 完全一致。
 
 package llm
 
@@ -18,8 +18,8 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/snight1983/ds-harness-go/core/scope"
 	"github.com/snight1983/ds-harness-go/invariants"
+	"github.com/snight1983/ds-harness-go/scope"
 )
 
 // 这些是本运行时自己会挂出来的失败码。它们和 [ContextWindowExceededCode] 那一族
@@ -174,7 +174,7 @@ type RuntimeOptions struct {
 // 源: packages/llm/llm/src/index.ts:322-1066（LlmRuntime）
 //
 // 新增: 三张表加两张观察者表都由一把互斥锁护着——DSH 是单线程 JS，不需要。
-// 观察者一律在锁**外面**叫，理由和 core/agent 那边逐字相同：一个观察者反手来问
+// 观察者一律在锁**外面**叫，理由和 harness/agent 那边逐字相同：一个观察者反手来问
 // [Runtime.ListProviders] 是完全正当的，在锁里叫它就是自锁。
 type Runtime struct {
 	logger *slog.Logger
@@ -184,7 +184,7 @@ type Runtime struct {
 	//
 	// 新增: DSH 用一个 JS Map，它自己保插入顺序，而 [Runtime.ListProviders] 明写
 	// 「按登记次序」。Go 的 map 不保任何顺序，所以这个次序数组是必须的——和
-	// core/agent 的 Registry 那份 order 出于同一个理由。
+	// harness/agent 的 Registry 那份 order 出于同一个理由。
 	adapters     map[string]*adapterRegistration
 	adapterOrder []string
 	// directory 与 directoryOrder 同理，次序是声明次序。
@@ -435,7 +435,7 @@ func (h *AdapterRegistration) release() {
 	r.mutex.Lock()
 	if h.released {
 		// 走不到，理由同 [DirectoryRegistration.withdraw] 里那一句：
-		// 进这个函数的两条路都经由 core/scope 那份只跑一次的撤销。
+		// 进这个函数的两条路都经由 scope 那份只跑一次的撤销。
 		r.mutex.Unlock()
 		return
 	}
@@ -678,7 +678,7 @@ func (h *DirectoryRegistration) withdraw() {
 	r.mutex.Lock()
 	if h.disposed {
 		// 走不到：进这个函数的两条路——[DirectoryRegistration.Release] 和 owner
-		// 释放——都经由 core/scope 那份只跑一次的撤销。这一句是第二道闸，
+		// 释放——都经由 scope 那份只跑一次的撤销。这一句是第二道闸，
 		// 防的是以后有人把它直接接到别处。
 		r.mutex.Unlock()
 		return

@@ -2,7 +2,7 @@
 
 ## 定位
 
-`compaction` 定义压缩事务、事件、不变量和后端接口；`compaction/basic` 实现基于模型摘要的压缩；`compaction/toolresultpruner` 实现工具结果裁剪。压缩不会删除历史事件，而是追加事件，改变模型当前看到的表面。
+`compaction` 定义压缩事务、事件、不变量和后端接口；`feature/compaction/basic` 实现基于模型摘要的压缩；`feature/compaction/toolresultpruner` 实现工具结果裁剪。压缩不会删除历史事件，而是追加事件，改变模型当前看到的表面。
 
 ## 架构与事务模型
 
@@ -57,8 +57,8 @@ compaction/end
 
 ## 相关源码
 
-- `compaction/engine.go`
-- `compaction/invariant.go`
-- `compaction/toolpairing.go`
-- `compaction/basic/`
-- `compaction/toolresultpruner/`
+- `feature/compaction/engine.go`
+- `feature/compaction/invariant.go`
+- `feature/compaction/toolpairing.go`
+- `feature/compaction/basic/`
+- `feature/compaction/toolresultpruner/`

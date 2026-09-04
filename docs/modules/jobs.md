@@ -2,7 +2,7 @@
 
 ## 定位
 
-`jobs/jobs` 定义后台作业的公共契约，`jobs/localjobs` 和 `jobs/domainjobs` 是它的两台实现，`jobs/jobstool` 向模型暴露列举、读取、等待和终止能力，并在作业完成时把通知投回属主 Agent。
+`feature/jobs` 定义后台作业的公共契约，`jobs/localjobs` 和 `jobs/domainjobs` 是它的两台实现，`jobs/jobstool` 向模型暴露列举、读取、等待和终止能力，并在作业完成时把通知投回属主 Agent。
 
 ## 架构
 
@@ -79,7 +79,7 @@
 
 ## 相关源码
 
-- `jobs/jobs/`
+- `feature/jobs/`
 - `jobs/localjobs/`
 - `jobs/domainjobs/`
 - `jobs/jobstool/`

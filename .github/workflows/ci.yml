@@ -67,33 +67,36 @@ jobs:
       - name: fuzz 冒烟
         run: |
           set -e
-          go test ./sdk/sdkprotocol/ -run '^$' -fuzz FuzzLineStreamReadObject -fuzztime=30s
-          go test ./sdk/sdkprotocol/ -run '^$' -fuzz FuzzObjectParams -fuzztime=20s
-          go test ./llm/openaicompat/ -run '^$' -fuzz FuzzStreamChunks -fuzztime=30s
+          go test ./protocol/sdk/sdkprotocol/ -run '^$' -fuzz FuzzLineStreamReadObject -fuzztime=30s
+          go test ./protocol/sdk/sdkprotocol/ -run '^$' -fuzz FuzzObjectParams -fuzztime=20s
+          go test ./adapter/openaicompat/ -run '^$' -fuzz FuzzStreamChunks -fuzztime=30s
 
       - name: doccheck
-        run: go run ./tools/doccheck
+        run: go run ./internal/devtools/doccheck
 
       - name: consumercheck
-        run: go run ./tools/consumercheck
+        run: go run ./internal/devtools/consumercheck
 
       - name: dbcheck
-        run: go run ./tools/dbcheck
+        run: go run ./internal/devtools/dbcheck
 
       - name: oscheck
-        run: go run ./tools/oscheck
+        run: go run ./internal/devtools/oscheck
+
+      - name: layercheck
+        run: go run ./internal/devtools/layercheck
 
       # CI 上没有 DSH 上游快照，溯源注释的出处校验做不了，所以显式传
       # -no-provenance。这不是静默降级：工具自己会打一行横幅说这轮没对过源码。
       # 裁决表本身（七千多行的 PENDING/PORTED/SKIP 账本）照常全量校验。
       - name: portcheck（不含溯源验真）
-        run: go run ./tools/portcheck -no-provenance
+        run: go run ./internal/devtools/portcheck -no-provenance
 
   postgres:
     name: Postgres 后端契约
     runs-on: ubuntu-latest
 
-    # datastore 那一层（介质本身、记录集、日志集）和它上面那两个适配器（键值中枢、
+    # adapter/datastore 那一层（介质本身、记录集、日志集）和它上面那两个适配器（键值中枢、
     # 会话存档）的每条用例都要一个真库，没有 DSH_POSTGRES_DSN 就整包跳过。
     # 本地跳过是合理的（不能要求每个人装 Postgres），但一直跳过就等于这一整棵树
     # 没有测试。CI 是唯一能保证它们真的跑过的地方。
@@ -120,23 +123,23 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: go test（datastore 整棵树）
+      - name: go test（adapter/datastore 整棵树）
         env:
           DSH_POSTGRES_DSN: postgres://dsh:dsh@127.0.0.1:5432/dsh?sslmode=disable
           # 声明「这一轮就是要跑真库」。DSN 为空时用例会失败而不是跳过——
           # 否则 service container 没起来的那次，这个 job 会一行不跑地报绿。
           DSH_REQUIRE_POSTGRES: "1"
-        run: go test ./datastore/... ./storage/... -count=1
+        run: go test ./adapter/datastore/... ./storage/... -count=1
 
       # 契约用例每条一个新 schema，并发跑会互相踩连接数上限，所以 -race 这轮
       # 单独再来一次，仍然指向同一个库。
-      - name: go test -race（datastore 整棵树）
+      - name: go test -race（adapter/datastore 整棵树）
         env:
           DSH_POSTGRES_DSN: postgres://dsh:dsh@127.0.0.1:5432/dsh?sslmode=disable
           # 声明「这一轮就是要跑真库」。DSN 为空时用例会失败而不是跳过——
           # 否则 service container 没起来的那次，这个 job 会一行不跑地报绿。
           DSH_REQUIRE_POSTGRES: "1"
-        run: go test -race ./datastore/... ./storage/... -count=1
+        run: go test -race ./adapter/datastore/... ./storage/... -count=1
 
   cross:
     name: 交叉编译

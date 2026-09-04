@@ -2,7 +2,7 @@
 
 ## 定位
 
-`mcp` 把外部 Model Context Protocol 服务器的工具接入 `core/tools.Runtime`：建立连接、同步工具清单、转换输入输出、监听清单变化，并在断线后重连。
+`mcp` 把外部 Model Context Protocol 服务器的工具接入 `tools.Runtime`：建立连接、同步工具清单、转换输入输出、监听清单变化，并在断线后重连。
 
 ## 架构
 
@@ -18,7 +18,7 @@ Host.Connect -> Connection
           +-- 退避重连
           |
           v
-core/tools.Runtime
+tools.Runtime
 ```
 
 每个远端工具的稳定身份是 `(serverName, rawName)`，模型看到的名称由 `PublicToolName` 生成：`mcp__<服务器名>__<原名>`。公开名只用于本地注册，线上调用仍使用服务器原名。
@@ -52,8 +52,8 @@ core/tools.Runtime
 
 ## 相关源码
 
-- `mcp/host.go`
-- `mcp/connection.go`
-- `mcp/bridge.go`
-- `mcp/content.go`
-- `mcp/naming.go`
+- `protocol/mcp/host.go`
+- `protocol/mcp/connection.go`
+- `protocol/mcp/bridge.go`
+- `protocol/mcp/content.go`
+- `protocol/mcp/naming.go`

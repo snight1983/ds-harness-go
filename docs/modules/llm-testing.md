@@ -2,13 +2,13 @@
 
 ## 定位
 
-`llm/replay`、`llm/mockserver` 和 `cmd/llmmockserver` 为模型适配器提供确定性测试环境：前者直接在进程内按脚本回放，后者启动 OpenAI 兼容 HTTP 假服务，命令包提供可独立运行入口。
+`feature/replay`、`llm/mockserver` 和 `cmd/llmmockserver` 为模型适配器提供确定性测试环境：前者直接在进程内按脚本回放，后者启动 OpenAI 兼容 HTTP 假服务，命令包提供可独立运行入口。
 
 ## 架构与两种测试方式
 
 | 方式 | 适用范围 | 特点 |
 |---|---|---|
-| `llm/replay` | Agent Loop、重试和日志回归 | 无网络、按调用顺序消费脚本、可从 Session 日志派生 |
+| `feature/replay` | Agent Loop、重试和日志回归 | 无网络、按调用顺序消费脚本、可从 Session 日志派生 |
 | `llm/mockserver` | HTTP、SSE、超时和协议适配 | 真 HTTP 服务，可模拟分块、断流、挂起和错误 |
 
 ## Replay
@@ -40,6 +40,6 @@
 
 ## 相关源码
 
-- `llm/replay/`
+- `feature/replay/`
 - `llm/mockserver/`
 - `cmd/llmmockserver/`

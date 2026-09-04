@@ -82,7 +82,7 @@ func NewBlockAssembler() *BlockAssembler {
 // 新增: DSH 的 switch 末尾有一句 assertNever(chunk)，那是 TS 用来在编译期证明
 // 「所有变体都处理到了」的技巧。Go 这边 [StreamChunk] 是一个封了口的接口，
 // 一个不认识的具体类型只可能来自本包自己，所以这里落到 default 就是本包的 bug，
-// 直接 panic——和本仓库 fs/objectstore 那边处理「不可能发生的操作」是同一个立场。
+// 直接 panic——和本仓库 adapter/objectstore 那边处理「不可能发生的操作」是同一个立场。
 func (a *BlockAssembler) Push(chunk StreamChunk) {
 	switch typed := chunk.(type) {
 	case BlockStartChunk:

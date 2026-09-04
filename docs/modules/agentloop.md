@@ -1,6 +1,6 @@
 # Agent Loop
 
-对应包：`core/agentloop`
+对应包：`harness/agentloop`
 
 ## 定位
 
@@ -10,7 +10,7 @@
 
 ```mermaid
 flowchart LR
-    A["core/agent<br/>定契约、管名册<br/>把十二个挂钩点派发出去"] --> B["core/agentloop<br/>那份契约唯一的实现<br/>真正把回合跑起来"]
+    A["harness/agent<br/>定契约、管名册<br/>把十二个挂钩点派发出去"] --> B["harness/agentloop<br/>那份契约唯一的实现<br/>真正把回合跑起来"]
 ```
 
 包里只有两样东西：
@@ -471,13 +471,13 @@ flowchart LR
 
 | 路径 | 内容 | 行数 |
 |---|---|---|
-| `core/agentloop/agent.go` | 活 agent、三相、回合与步骤、模型请求装配 | 1464 |
-| `core/agentloop/loop.go` | 工厂、建与恢复、拆除链、公布次序 | 1299 |
-| `core/agentloop/toolcalls.go` | 工具调用调度、独占屏障、并行池、取消补齐 | 410 |
-| `core/agentloop/invariant.go` | 「请求和日志对得上」那道检查 | 307 |
-| `core/agentloop/runtimecontext.go` | 运行期上下文投影 | 236 |
-| `core/agentloop/doc.go` | 包说明与移植决定 | 41 |
-| `core/agentloop/constants.go` | 并行工具上限的默认值 | 13 |
+| `harness/agentloop/agent.go` | 活 agent、三相、回合与步骤、模型请求装配 | 1464 |
+| `harness/agentloop/loop.go` | 工厂、建与恢复、拆除链、公布次序 | 1299 |
+| `harness/agentloop/toolcalls.go` | 工具调用调度、独占屏障、并行池、取消补齐 | 410 |
+| `harness/agentloop/invariant.go` | 「请求和日志对得上」那道检查 | 307 |
+| `harness/agentloop/runtimecontext.go` | 运行期上下文投影 | 236 |
+| `harness/agentloop/doc.go` | 包说明与移植决定 | 41 |
+| `harness/agentloop/constants.go` | 并行工具上限的默认值 | 13 |
 
 ---
 

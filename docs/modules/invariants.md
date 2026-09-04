@@ -40,7 +40,7 @@ Registry.Register(package, Installer)
 
 宿主手上的开关是**装不装**，不是**失败了怎么办**：`Config.Enabled` 是总开关，`Allowlist` / `Blocklist` 按包名挑。生产上不想让检查有能力打断请求，就在那一侧关掉它，而不是指望它自己降级。
 
-这条 panic 不会带走整个进程：它落在 Agent 回合正文里时被 `core/agentloop` 那道兜底收成这个回合的一次失败（写 turn/end、广播 `agent/error`、相回到 idle），落在别处时由调用方自己的边界负责。
+这条 panic 不会带走整个进程：它落在 Agent 回合正文里时被 `harness/agentloop` 那道兜底收成这个回合的一次失败（写 turn/end、广播 `agent/error`、相回到 idle），落在别处时由调用方自己的边界负责。
 
 ## 能力边界
 

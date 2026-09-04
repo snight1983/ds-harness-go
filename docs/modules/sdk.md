@@ -2,7 +2,7 @@
 
 ## 定位
 
-`sdk/sdkprotocol` 定义进程外 SDK 与运行时之间的按行 JSON-RPC 2.0 协议；`sdk/sdkserver` 实现服务端请求处理和运行时通知转发。
+`protocol/sdk/sdkprotocol` 定义进程外 SDK 与运行时之间的按行 JSON-RPC 2.0 协议；`protocol/sdk/sdkserver` 实现服务端请求处理和运行时通知转发。
 
 ## 架构与协议
 
@@ -55,5 +55,5 @@ sdkserver.Server
 
 ## 相关源码
 
-- `sdk/sdkprotocol/`
-- `sdk/sdkserver/`
+- `protocol/sdk/sdkprotocol/`
+- `protocol/sdk/sdkserver/`

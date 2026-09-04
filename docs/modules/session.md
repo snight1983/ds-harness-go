@@ -11,7 +11,7 @@ Session 模块保存 Agent 运行的长期事实，并把这些事实转换成�
 | 包 | 职责 |
 |---|---|
 | `session`（本文） | 事件、负载、会话头、日志校验和纯计算，不持有活对象 |
-| [`core/session`](core-session.md) | 活 `Session`、`Store`、事件追加、创建、恢复和分叉 |
+| [`harness/session`](livesession.md) | 活 `Session`、`Store`、事件追加、创建、恢复和分叉 |
 
 持久化、查询、统计等模块只依赖 `session` 的值和规则，不需要依赖活会话注册表。
 
@@ -51,7 +51,7 @@ Inbox 插入和认领                ->    当前待处理消息
 
 ## 当前状态注册表
 
-`session/projection.Registry` 管理多个独立的状态计算单元。每个单元声明：
+`sessionlog/projection.Registry` 管理多个独立的状态计算单元。每个单元声明：
 
 - 唯一键。
 - 状态格式版本。
@@ -71,7 +71,7 @@ Inbox 插入和认领                ->    当前待处理消息
 
 ## 状态缓存
 
-`session/projectioncache` 保存状态计算检查点，避免长会话冷启动时从第一条事件重新处理。
+`feature/projectioncache` 保存状态计算检查点，避免长会话冷启动时从第一条事件重新处理。
 
 - 会话运行中，状态在内存里增量更新。
 - 回合结束、事件数达到阈值或时间达到阈值时写缓存。
@@ -87,7 +87,7 @@ Inbox 插入和认领                ->    当前待处理消息
 
 ## 活 Session
 
-[`core/session`](core-session.md) 里的 `Session` 是可追加事件的活对象，`Store` 管理进程内活会话。这一节只列它的对外能力，为什么这么设计在[活会话](core-session.md)那篇里。
+[`harness/session`](livesession.md) 里的 `Session` 是可追加事件的活对象，`Store` 管理进程内活会话。这一节只列它的对外能力，为什么这么设计在[活会话](livesession.md)那篇里。
 
 主要能力：
 
@@ -127,7 +127,7 @@ Session ID 与 Agent ID 在运行时必须一致。
 
 ## 持久化
 
-`session/persistence` 定义会话存档结构、`Store` / `Backend` 接口、`WriteBehind` 队列和活会话 `Coordinator`：
+`feature/persistence` 定义会话存档结构、`Store` / `Backend` 接口、`WriteBehind` 队列和活会话 `Coordinator`：
 
 - 创建持久化会话头。
 - 追加 Seq 连续的事件批次。
@@ -142,11 +142,11 @@ Session ID 与 Agent ID 在运行时必须一致。
 
 裁剪是一道**独立的可选缝**（`TrimmingBackend`），不是追加的副作用：丢多少是编排层的策略，不是介质的事，而一个只想追加的调用方不该被迫丢东西。实现不了这道缝的后端存档永远从 0 起——读的一侧本来就不许假设起点是 0，所以两种后端在读那边没有分别。上限（`MaxStoredEvents`）**没有关掉它的取值**：留一个开关就等于留一条退回「日志一条不删」那个旧前提的路。裁剪必须丢连续的一头，从中间挖走一条会让「被弹掉了」和「日志真坏了」再也分不开。
 
-`Coordinator` 已完成 Create、Append、Flush、退场排干、冷读修复和 `Prepare` 编排，但不等于具体介质，也不直接替代所有消费方接口。宿主必须提供生产 `Backend`，把 `core/session.Store` 注入并安装 Coordinator，再为 Agent Loop 适配 Preparation 的发布/释放与后端列表。持久化层不解释模型、工具或业务事件的业务含义。
+`Coordinator` 已完成 Create、Append、Flush、退场排干、冷读修复和 `Prepare` 编排，但不等于具体介质，也不直接替代所有消费方接口。宿主必须提供生产 `Backend`，把 `harness/session.Store` 注入并安装 Coordinator，再为 Agent Loop 适配 Preparation 的发布/释放与后端列表。持久化层不解释模型、工具或业务事件的业务含义。
 
 ## 检查点策略
 
-`session/checkpointpolicy` 在三处副作用边界安装耐久屏障：模型请求发出前、顶层工具调用执行前、每个步骤开始前。Flush 失败会阻止对应模型请求、工具或步骤继续，避免外部副作用发生后日志仍未落盘。嵌套工具调用复用外层屏障，不重复 Flush。该策略不拥有存储后端，也不负责状态缓存的数量和时间节流。
+`feature/checkpointpolicy` 在三处副作用边界安装耐久屏障：模型请求发出前、顶层工具调用执行前、每个步骤开始前。Flush 失败会阻止对应模型请求、工具或步骤继续，避免外部副作用发生后日志仍未落盘。嵌套工具调用复用外层屏障，不重复 Flush。该策略不拥有存储后端，也不负责状态缓存的数量和时间节流。
 
 ## 查询
 
@@ -159,16 +159,16 @@ Session ID 与 Agent ID 在运行时必须一致。
 - 追踪事件上下文和会话血统。
 - 对多会话执行受控并发的状态计算。
 
-`sessionquery/querytool` 把受授权的查询能力暴露给模型。宿主必须提供权限检查，不能让模型凭 Session ID 越权读取。
+`feature/sessionquery/querytool` 把受授权的查询能力暴露给模型。宿主必须提供权限检查，不能让模型凭 Session ID 越权读取。
 
 ## 统计、标题和遥测
 
 | 包 | 能力 |
 |---|---|
-| `session/stats` | 统计 Turn、Step、消息、Token 和运行结果 |
-| `session/sessiontitle` | 从事件维护规范化标题状态 |
-| `session/sessiontitlellm` | 使用模型生成标题的提供方 |
-| `session/telemetry` | 采集、脱敏并把记录交给宿主 Sink；批处理与重试由 Sink 负责 |
+| `feature/sessionstats` | 统计 Turn、Step、消息、Token 和运行结果 |
+| `feature/sessiontitle` | 从事件维护规范化标题状态 |
+| `feature/sessiontitle/sessiontitlellm` | 使用模型生成标题的提供方 |
+| `feature/telemetry` | 采集、脱敏并把记录交给宿主 Sink；批处理与重试由 Sink 负责 |
 
 这些能力读取同一份事件事实，但各自维护独立的当前结果和生命周期。
 
@@ -201,12 +201,12 @@ Session 模块不负责：
 | 路径 | 内容 |
 |---|---|
 | `session/` | 事件词汇、负载、日志校验与修复 |
-| [`core/session/`](core-session.md) | 活 Session 和 Store |
-| `session/persistence/` | Backend/Store 接缝、Coordinator、写后队列、准备池和恢复原语 |
-| `session/projection/` | 当前状态计算注册表 |
-| `session/projectioncache/` | 当前状态检查点缓存 |
-| `session/checkpointpolicy/` | 持久化时机 |
-| [`sessionquery/`](sessionquery.md) | 会话与事件查询 |
+| [`harness/session/`](livesession.md) | 活 Session 和 Store |
+| `feature/persistence/` | Backend/Store 接缝、Coordinator、写后队列、准备池和恢复原语 |
+| `sessionlog/projection/` | 当前状态计算注册表 |
+| `feature/projectioncache/` | 当前状态检查点缓存 |
+| `feature/checkpointpolicy/` | 持久化时机 |
+| [`feature/sessionquery/`](sessionquery.md) | 会话与事件查询 |
 
 ## 深入阅读
 

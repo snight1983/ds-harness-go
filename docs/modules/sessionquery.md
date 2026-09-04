@@ -1,6 +1,6 @@
-# 会话读侧（`sessionquery/`）
+# 会话读侧（`feature/sessionquery/`）
 
-本文只讲 `sessionquery` 这一个包，和它下面唯一的子包 `sessionquery/querytool`。会话日志本身怎么记、怎么落盘、怎么折成当前状态（`session/` 那棵树）不在本文范围内，只在需要说明接缝时点到名字。
+本文只讲 `sessionquery` 这一个包，和它下面唯一的子包 `feature/sessionquery/querytool`。会话日志本身怎么记、怎么落盘、怎么折成当前状态（`session/` 那棵树）不在本文范围内，只在需要说明接缝时点到名字。
 
 **怎么读这篇文档**
 
@@ -41,7 +41,7 @@
 | 层 | 包 | 一句话 |
 |---|---|---|
 | 读引擎 | `sessionquery` | 一次观察里，一份会话是什么、一条事件在哪、哪些字算可检索的文字 |
-| 工具面 | `sessionquery/querytool` | 把引擎摆到模型面前，并且只摆出这个调用方看得见的那一部分 |
+| 工具面 | `feature/sessionquery/querytool` | 把引擎摆到模型面前，并且只摆出这个调用方看得见的那一部分 |
 
 引擎层**完全不认识调用方**：它没有「当前用户」「当前 agent」的概念，谁问它都答同样的话。工具层则**一行读取逻辑都没有**：读、过滤、检索、追溯全部转手给引擎，它只管三件引擎故意不管的事——画边界、洗错误、排版文字。
 
@@ -303,7 +303,7 @@ flowchart TD
 - 活会话表：按 id 取一份、列举全部。必填。
 - 持久化：列举所有落地会话头、读出一份验过的落地日志。可选（`nil` 表示这次装配没挂）。
 
-**「落地」落在哪，这个包不知道也不该知道。**本包看见的只有那两个读方法。本仓库当下唯一的落地介质是一个关系数据库：`datastore/sessionstore` 把会话日志接到 `datastore` 的日志集上，一个会话就是一条流——会话 id 是流名，会话头是流的头，一条事件是一条条目，事件的序号就是条目的序号。所有会话装在**同一份介质**里（同一个连接池、同一个命名空间），所以「这个会话那份存档」这种东西不存在。文件式的那个后端已经从仓库里删掉了。
+**「落地」落在哪，这个包不知道也不该知道。**本包看见的只有那两个读方法。本仓库当下唯一的落地介质是一个关系数据库：`adapter/datastore/sessionstore` 把会话日志接到 `adapter/datastore` 的日志集上，一个会话就是一条流——会话 id 是流名，会话头是流的头，一条事件是一条条目，事件的序号就是条目的序号。所有会话装在**同一份介质**里（同一个连接池、同一个命名空间），所以「这个会话那份存档」这种东西不存在。文件式的那个后端已经从仓库里删掉了。
 
 这件事对本包的影响只有一处：**「按会话分区」是存储那一侧的事，不是这一侧的能力边界。**本包的语料天生是跨会话的——列举、过滤、血统追溯都在整份语料上做。工具层那条工作区边界之所以必须存在，正是因为下面这一层根本没有分区。
 
@@ -801,22 +801,22 @@ flowchart TD
 
 | 路径 | 内容 |
 |---|---|
-| `sessionquery/corpus.go` | 两处观察合成一份逻辑语料、「活的优先」、批量投影与并发 |
-| `sessionquery/engine.go` | 对外门面、装配参数、检索挂点 |
-| `sessionquery/sources.go` | 同一 id 底下两份观察的身份比对 |
-| `sessionquery/types.go` | 全部对外形状：记录、快照、追溯结果、封闭过滤器、检索请求与分页 |
-| `sessionquery/filters.go` | 纯谓词过滤、跨异步边界的复制、文字过滤器的元字符转义 |
-| `sessionquery/tracing.go` | 表面折一次、血统追溯与截断、事件关系追溯、按序号定位 |
-| `sessionquery/extraction.go` | 什么算可检索的语义文字，以及每一种「不算」的理由 |
-| `sessionquery/documents.go` | 事件到检索文档的投影 |
-| `sessionquery/titles.go` | 批量标题观察 |
-| `sessionquery/error.go` | 十七个分类码、错误值、取消翻译 |
-| `sessionquery/querytool/config.go` | 装配参数、引擎门面的窄接口、agent 解析 |
-| `sessionquery/querytool/tools.go` | 五件工具的 schema、指引段落、装载与卸载 |
-| `sessionquery/querytool/operations.go` | 五趟活的骨架、翻页与结果上限 |
-| `sessionquery/querytool/access.go` | 工作区边界、三段式授权、标题占位、血统裁剪 |
-| `sessionquery/querytool/boundary.go` | 消毒闸：十七个引擎码到模型安全说法的映射 |
-| `sessionquery/querytool/input.go` | 参数 schema、清洗、时间戳解析与取整 |
-| `sessionquery/querytool/presentation.go` | 纯文本排版，字符串即契约 |
-| `sessionquery/querytool/error.go` | 工具层自己那四个码 |
-| `sessionquery/querytool/invariant.go` | 空壳登记，只为占住包名 |
+| `feature/sessionquery/corpus.go` | 两处观察合成一份逻辑语料、「活的优先」、批量投影与并发 |
+| `feature/sessionquery/engine.go` | 对外门面、装配参数、检索挂点 |
+| `feature/sessionquery/sources.go` | 同一 id 底下两份观察的身份比对 |
+| `feature/sessionquery/types.go` | 全部对外形状：记录、快照、追溯结果、封闭过滤器、检索请求与分页 |
+| `feature/sessionquery/filters.go` | 纯谓词过滤、跨异步边界的复制、文字过滤器的元字符转义 |
+| `feature/sessionquery/tracing.go` | 表面折一次、血统追溯与截断、事件关系追溯、按序号定位 |
+| `feature/sessionquery/extraction.go` | 什么算可检索的语义文字，以及每一种「不算」的理由 |
+| `feature/sessionquery/documents.go` | 事件到检索文档的投影 |
+| `feature/sessionquery/titles.go` | 批量标题观察 |
+| `feature/sessionquery/error.go` | 十七个分类码、错误值、取消翻译 |
+| `feature/sessionquery/querytool/config.go` | 装配参数、引擎门面的窄接口、agent 解析 |
+| `feature/sessionquery/querytool/tools.go` | 五件工具的 schema、指引段落、装载与卸载 |
+| `feature/sessionquery/querytool/operations.go` | 五趟活的骨架、翻页与结果上限 |
+| `feature/sessionquery/querytool/access.go` | 工作区边界、三段式授权、标题占位、血统裁剪 |
+| `feature/sessionquery/querytool/boundary.go` | 消毒闸：十七个引擎码到模型安全说法的映射 |
+| `feature/sessionquery/querytool/input.go` | 参数 schema、清洗、时间戳解析与取整 |
+| `feature/sessionquery/querytool/presentation.go` | 纯文本排版，字符串即契约 |
+| `feature/sessionquery/querytool/error.go` | 工具层自己那四个码 |
+| `feature/sessionquery/querytool/invariant.go` | 空壳登记，只为占住包名 |

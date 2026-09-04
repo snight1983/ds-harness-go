@@ -11,7 +11,7 @@
 2. 服务端不能把 event 存在本地目录。
 
 模型看不到这些 event 的大部分：压缩只处理拼给模型的那一串消息，窗口用到 80% 触发、尾巴
-留 16%、更早的总结成一段（`compaction/basic/config.go:17-22`、`region.go:61-71`）。
+留 16%、更早的总结成一段（`feature/compaction/basic/config.go:17-22`、`region.go:61-71`）。
 全量 event 的用途是审计，不是恢复。
 
 ## 定下来的
@@ -26,8 +26,8 @@
 8. jsonl 后端不保留，数据库是唯一后端。
 9. 支持两种数据库：Postgres 和 SQLite。
 10. 键值存储中枢那边也补一个 SQLite 后端。
-11. 不加新的消息 ID 字段。`session.Event` 已有 `Seq`（会话内从 0 起、逐条加一），够用了。
-12. `tool/result` 的字节上限不改，`util/outputretention` 和 `spill` 保持原样。
+11. 不加新的消息 ID 字段。`sessionlog.Event` 已有 `Seq`（会话内从 0 起、逐条加一），够用了。
+12. `tool/result` 的字节上限不改，`feature/outputretention` 和 `spill` 保持原样。
 13. **「日志的头部会被删」是权威前提。** 代码里任何和它冲突的旧断言全部改成服从它，
     没有例外。不是逐处打补丁——那些断言是同一条旧前提（只追加、永不删除）垮掉之后
     冒出来的症状。
@@ -41,7 +41,7 @@
 
 ## 现状（已核过的）
 
-`session/persistence/backend.go` 这道缝本来就是为多后端留的，数据库后端要填的位置都是
+`feature/persistence/backend.go` 这道缝本来就是为多后端留的，数据库后端要填的位置都是
 现成的：
 
 | 能力 | 数据库后端怎么办 | 依据 |
@@ -80,10 +80,10 @@
 现有测试全绿就说明没改坏。第 7 步才真正开始删。反过来做的话，每一处口径问题都会
 表现成一个没有参照物的偶发 bug。
 
-0. **改 seq 的产生点。** `core/session` 的会话记一个 baseSeq，`Seq()` 和
+0. **改 seq 的产生点。** `harness/session` 的会话记一个 baseSeq，`Seq()` 和
    `event.Seq` 都改成 `baseSeq + len(log)`；起点由装配方**显式给**（`Options.BaseSeq`、
    `CreateOptions.BaseSeq`、`RestoreOptions.BaseSeq`），不从 `Seed[0].Seq` 推。
-   连带 `core/session/fork.go` 的分叉边界：它是个 seq，先减起点再当下标。
+   连带 `harness/session/fork.go` 的分叉边界：它是个 seq，先减起点再当下标。
    不先做这一步，后面每一步都是在一个会撞号的地基上砌墙。
 1. **起始 seq 进得来。** 存储侧交出「这份日志从哪个 seq 起」，`StoredPrefix` /
    `StoredSuffix` 带上它。这是后面五步的前提。
@@ -104,7 +104,7 @@
    第四个参数 `baseSeq` 传进去。判据因此从 `baseSeq > 0` 换成「这截尾巴是不是现存的
    全部」（`fromSeq <= baseSeq`），行的可用下界也从 `fromSeq-1` 换成
    `max(fromSeq, baseSeq)-1`。
-5. **改 `replacementRange` 的两种找不到**（`session/surface.go`），按原则第 4 条。
+5. **改 `replacementRange` 的两种找不到**（`sessionlog/surface.go`），按原则第 4 条。
 6. **`projectioncache` 的作废条件**：缓存行记的 seq 落在被弹区间之内就作废，走它已有的
    回退路，重折起点按起始 seq。
 
@@ -121,7 +121,7 @@
    - `List` 查头表。
    - 第一版不做迁移：没有旧表、没有旧数据，直接建表。
 
-   实现最初落在 `session/persistence/postgres`，第 12 步把它搬到了 `datastore/sessionstore`。
+   实现最初落在 `feature/persistence/postgres`，第 12 步把它搬到了 `adapter/datastore/sessionstore`。
    有两处比计划里多出来的东西，都是这份介质
    逼出来的：头表上多一列 `next_seq`，因为一份被弹空的存档 `MIN(seq)` 是 NULL，答不出
    「下一条写在哪儿」，而恰恰是那时候调用方最需要它；读路一律开可重复读的只读事务，
@@ -146,7 +146,7 @@
 
     「读本地文件」说的是上游 DSH，不是这份移植：Go 这边一次文件系统调用都没有，
     它早就只认 `Persistence` 那个两方法的窄接口（`List` + `Inspect`，
-    `sessionquery/corpus.go:75-90`），而 `persistence.Store` 满足它——换数据库后端
+    `feature/sessionquery/corpus.go:75-90`），而 `persistence.Store` 满足它——换数据库后端
     这件事在装配那一侧，本包一行不用改。
 
     真正要改的是这一步之前**没人查过的** seq 口径。上面「要改的地方」那一遍全仓审查
@@ -189,12 +189,12 @@
     还有两件事**留在包外**：`busy_timeout` 和 `foreign_keys` 都是连接上的状态，
     不是语句里的东西，所以进不了 `Dialect`，由装配方在 DSN 上设。
 
-    顺带把一个洞堵了：这一步之前 `datastore` 那几千行**一行也没跑过**——整批用例
+    顺带把一个洞堵了：这一步之前 `adapter/datastore` 那几千行**一行也没跑过**——整批用例
     只在有 `DSH_POSTGRES_DSN` 时才执行，而开发机上从来没有。现在缺省落在一个临时
     目录里的库文件上，`go test ./...` 就整批跑；设 DSN 则同一批用例体换到 Postgres 上
     再跑一遍。两种都要过，因为一种方言自己跟自己是没有分歧的。
 12. **把数据库整个收进一层。** 第 7 步和第 10 步走完之后，仓库里有两处各自开连接池、
-    各自建表、各自拼 SQL 的代码：会话日志一处（`session/persistence/postgres`），
+    各自建表、各自拼 SQL 的代码：会话日志一处（`feature/persistence/postgres`），
     键值中枢一处（`storage/postgres`）。两处的形状是抄来抄去的，连注释里都写着
     「理由同另一个包里那个同名函数」。
 
@@ -203,16 +203,16 @@
     知道下面是个数据库**——`session` 和 `storage` 的类型签名里出现 `*sql.DB`，
     等于把「后面用的是哪家库」写进了业务代码。
 
-    所以数据库整个收在 `datastore` 底下：它只认两种不带领域含义的形状（记录集、
-    日志集），业务包只声明自己那道业务接口，由 `datastore/kvstore` 和
-    `datastore/sessionstore` 两个适配层去实现。依赖方向是反的——适配层认识业务接口，
+    所以数据库整个收在 `adapter/datastore` 底下：它只认两种不带领域含义的形状（记录集、
+    日志集），业务包只声明自己那道业务接口，由 `adapter/datastore/kvstore` 和
+    `adapter/datastore/sessionstore` 两个适配层去实现。依赖方向是反的——适配层认识业务接口，
     业务接口不认识适配层。原来那两个包删掉。
 
     **这件事光靠约定守不住**：只要有一个人在 `session` 里 import 了 `database/sql`，
-    那道墙就没了，而且是悄悄没的。所以配一道跑得起来的门禁 `tools/dbcheck`，
+    那道墙就没了，而且是悄悄没的。所以配一道跑得起来的门禁 `internal/devtools/dbcheck`，
     三条机械可判的规则——SQL 语句文本只准在 `datastore/` 底下；`database/sql` 和各家
-    驱动只准在 `datastore/` 和 `cmd/` 底下；`datastore` 这个包只准被 `datastore/`、
-    `cmd/`、`tools/` 引用。详见 `docs/modules/datastore.md`。
+    驱动只准在 `datastore/` 和 `cmd/` 底下；`adapter/datastore` 这个包只准被 `datastore/`、
+    `cmd/`、`internal/devtools/` 引用。详见 `docs/modules/datastore.md`。
 
 ## 要改的地方
 
@@ -220,7 +220,7 @@
 
 ### 零、seq 的产生点就写着「seq = 日志长度」（会撞号）
 
-`core/session/session.go:387` 是新事件拿 seq 的地方：
+`harness/session/session.go:387` 是新事件拿 seq 的地方：
 
 ```go
 event.Seq = len(s.log)
@@ -244,7 +244,7 @@ seq 改成 `baseSeq + len(log)`。
 
 ### 一、「回退到从 0 重折」这条退路失效（死路）
 
-`session/projection/checkpoint.go`：
+`sessionlog/projection/checkpoint.go`：
 
 - `RestoreFloor`（:71-89）在检查点行缺失或版本对不上时把地板拉到 0，意思是「这个键
   必须重折整份日志」。
@@ -258,7 +258,7 @@ seq 改成 `baseSeq + len(log)`。
 
 ### 二、拿条数当写入进度（静默重复写）
 
-`session/persistence/coordinator_write.go:276-281`：`cursor = len(stored.Events)`，
+`feature/persistence/coordinator_write.go:276-281`：`cursor = len(stored.Events)`，
 再拿这个数去切活会话手上那份种子 `seed[len(stored.Events):]`。
 
 头部被弹掉之后条数变小，于是已经落盘的那一段会被当成「还没写」再追加一遍。不报错。
@@ -267,7 +267,7 @@ seq 改成 `baseSeq + len(log)`。
 
 ### 三、拿 seq 当下标
 
-- `session/persistence/coordinator_chain.go:318-321`：`fromSeq >= len(events)` 判界、
+- `feature/persistence/coordinator_chain.go:318-321`：`fromSeq >= len(events)` 判界、
   `events[fromSeq:]` 切片。改成减去起始 seq。
 - `session/surface.go:430`：`FoldSurface` 调 `planSurfaceEvent(..., 0)` 写死 baseSeq；
   :424 的注释也写着「第一条的 seq 是 0」。改成收一个 baseSeq 参数——增量那条路
@@ -275,7 +275,7 @@ seq 改成 `baseSeq + len(log)`。
 
 ### 四、按 seq 找不到就当日志坏了
 
-`session/surface.go` 的 `replacementRange`：压缩写的 `session/replace` 带着被遮住那些
+`sessionlog/surface.go` 的 `replacementRange`：压缩写的 `session/replace` 带着被遮住那些
 event 的 seq，折的时候按 seq 定位，找不到就返回 `ErrSurfaceViolation`，整份会话打不开。
 被遮住的正好是最老那批，也正好是 FIFO 先弹的那批。
 
@@ -288,16 +288,16 @@ event 的 seq，折的时候按 seq 定位，找不到就返回 `ErrSurfaceViola
 
 ### 六、只是文档措辞
 
-`session/persistence/store.go:58` 写的是「第一条事件的 seq 必须等于存档里的下一个 seq」。
+`feature/persistence/store.go:58` 写的是「第一条事件的 seq 必须等于存档里的下一个 seq」。
 这条契约本身在新前提下仍然成立，措辞里点明「下一个」是相对存档现有末尾，不是相对 0。
 
 ### 核过但不受影响
 
 - `session/surface.go:265` `assertToolResultRewrite`：已经是 `shadowedSeqs[0] - baseSeq`，
   baseSeq 是参数。
-- `compaction/toolresultpruner/session.go:58` `baseSeqOf`：取 `events[0].Seq`，本来就是变量，
+- `feature/compaction/toolresultpruner/session.go:58` `baseSeqOf`：取 `events[0].Seq`，本来就是变量，
   而且 :70 还有 `events[index].Seq != seq` 兜底。
-- `session/projection/doc.go:65`、`registry.go:313`：`session.Trace` 那一侧只保证严格递增，
+- `sessionlog/projection/doc.go:65`、`registry.go:313`：`sessionlog.Trace` 那一侧只保证严格递增，
   投影已经按 seq 比、不按下标切。
-- `session/projectioncache`：缓存行记着「算到 seq N 的状态」。N 落在被弹区间之内时那行
+- `feature/projectioncache`：缓存行记着「算到 seq N 的状态」。N 落在被弹区间之内时那行
   作废，走它自己已有的回退路。作废之后的重折起点按第一条改。

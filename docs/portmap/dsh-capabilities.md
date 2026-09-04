@@ -2,7 +2,7 @@
 
 每一行都来自包作者自己写下的内容，不经转述：
 `description` 取自各包 `package.json`，`类/接口` 取自源码里的 `export class` / `export interface`。
-由 `tools/capmap` 生成，重跑覆盖。
+由 `internal/devtools/capmap` 生成，重跑覆盖。
 
 ## 移植顺序（依赖拓扑分层）
 

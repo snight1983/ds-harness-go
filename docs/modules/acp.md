@@ -2,7 +2,7 @@
 
 ## 定位
 
-`acp/acp` 实现 Agent Client Protocol 的 Agent 端，把可信自动化客户端接到运行时。它负责会话创建、提示词提交、取消、授权决定和已提交助手输出的协议转换，不负责界面渲染，也不输出推理过程、工具轨迹或内部流片段。
+`protocol/acp` 实现 Agent Client Protocol 的 Agent 端，把可信自动化客户端接到运行时。它负责会话创建、提示词提交、取消、授权决定和已提交助手输出的协议转换，不负责界面渲染，也不输出推理过程、工具轨迹或内部流片段。
 
 ## 架构
 
@@ -58,8 +58,8 @@ Bridge ---- Peer
 
 ## 相关源码
 
-- `acp/acp/config.go`
-- `acp/acp/bridge.go`
-- `acp/acp/content.go`
-- `acp/acp/codec.go`
-- `acp/acp/invariant.go`
+- `protocol/acp/config.go`
+- `protocol/acp/bridge.go`
+- `protocol/acp/content.go`
+- `protocol/acp/codec.go`
+- `protocol/acp/invariant.go`

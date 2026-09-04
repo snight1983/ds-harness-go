@@ -236,5 +236,5 @@ func (r ResolvedModelInfo) Clone() ResolvedModelInfo {
 //
 // 新增: DSH 那边是一个内联的函数类型。这里给它一个名字，因为
 // [Runtime.RegisterModelDiscovery] 的签名读起来会好很多，而且这是本仓库一贯的
-// 做法（见 core/systemprompt 那边的 AssembleRule）。
+// 做法（见 harness/systemprompt 那边的 AssembleRule）。
 type ModelDiscovery func(ctx context.Context, request ModelDiscoveryRequest) ([]DiscoveredModel, error)

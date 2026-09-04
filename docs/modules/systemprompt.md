@@ -1,6 +1,6 @@
 # 系统提示词装配
 
-对应包：`core/systemprompt`
+对应包：`harness/systemprompt`
 
 ## 一句话
 
@@ -21,14 +21,14 @@ flowchart LR
     C["子 agent<br/>可以派下属去干"] --> P
     D["部署方<br/>你是某公司的客服"] --> P
     E["…还有十来个"] --> P
-    P["core/systemprompt"] --> M["模型这一步<br/>读到的材料"]
+    P["harness/systemprompt"] --> M["模型这一步<br/>读到的材料"]
 ```
 
 这些说明写在不同的包里，互相不知道对方存在。于是有四个问题必须有个地方统一回答：
 
 ```mermaid
 flowchart TD
-    P["core/systemprompt<br/>只回答这四个问题"]
+    P["harness/systemprompt<br/>只回答这四个问题"]
     P --> Q1["排序<br/>十几段话谁前谁后"]
     P --> Q2["覆盖<br/>两段讲同一件事听谁的"]
     P --> Q3["开关<br/>这个客户不要某一段怎么关"]
@@ -151,7 +151,7 @@ flowchart TD
     N["外层关掉了"] --> N2["内层打不开"]
 ```
 
-和「上下文压缩」没有任何关系。压缩是会话太长把旧消息缩写掉，那是 `core/agentloop` 的事。
+和「上下文压缩」没有任何关系。压缩是会话太长把旧消息缩写掉，那是 `harness/agentloop` 的事。
 
 ---
 
@@ -335,11 +335,11 @@ flowchart LR
 ## 这个包不做什么
 
 - **不提供任何内容。** 一段提示词、一个工具、一个变量都不自带。
-- **不知道工具是什么。** 只把功能模块报上来的定义排个序；定义、可见性、执行全在 `core/tools`。
-- **不发请求。** 装配结果交给 `core/agentloop` 去拼模型请求。
+- **不知道工具是什么。** 只把功能模块报上来的定义排个序；定义、可见性、执行全在 `tools`。
+- **不发请求。** 装配结果交给 `harness/agentloop` 去拼模型请求。
 - **不缓存。** 每次装配把每个提供方重新问一遍。
 - **不读写存储，不起后台任务，不计时。**
-- **不管快照什么时候进会话。** 只交出文本；什么时候插、插几次、旧的怎么办，是 `core/agentloop` 的事。
+- **不管快照什么时候进会话。** 只交出文本；什么时候插、插几次、旧的怎么办，是 `harness/agentloop` 的事。
 
 ---
 
@@ -365,7 +365,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    A["core/tools<br/>交出工具定义的方法"] -.->|"接线不存在"| B["core/systemprompt<br/>取工具清单的方法"]
+    A["tools<br/>交出工具定义的方法"] -.->|"接线不存在"| B["harness/systemprompt<br/>取工具清单的方法"]
     B --> C["真实运行路径上<br/>工具清单恒为空"]
 ```
 
@@ -379,7 +379,7 @@ flowchart LR
     T["当前时间"] --> H
     S["会话引用"] --> H
     H --> M["直接塞进这一步的消息"]
-    D["子 agent 的委派说明"] --> P["core/systemprompt"] --> M
+    D["子 agent 的委派说明"] --> P["harness/systemprompt"] --> M
 ```
 
 经过本包的环境快照，只有子 agent 的那一份委派说明。
@@ -390,12 +390,12 @@ flowchart LR
 
 | 路径 | 内容 | 行数 |
 |---|---|---|
-| `core/systemprompt/registry.go` | 注册表、五个登记入口、装配流程 | 580 |
-| `core/systemprompt/prompt.go` | 值类型、变量替换、工具排序、渲染 | 475 |
-| `core/systemprompt/doc.go` | 包说明与移植决定 | 65 |
+| `harness/systemprompt/registry.go` | 注册表、五个登记入口、装配流程 | 580 |
+| `harness/systemprompt/prompt.go` | 值类型、变量替换、工具排序、渲染 | 475 |
+| `harness/systemprompt/doc.go` | 包说明与移植决定 | 65 |
 
 ---
 
 ## 深入阅读
 
-[作用域](core-scope.md) · [Tools](tools.md) · [Agent](agent.md) · [Skill、提示词与预设](skill.md) · [Agent 预设与 Persona](presets.md) · [运行时上下文](context.md)
+[作用域](scope.md) · [Tools](tools.md) · [Agent](agent.md) · [Skill、提示词与预设](skill.md) · [Agent 预设与 Persona](presets.md) · [运行时上下文](context.md)
