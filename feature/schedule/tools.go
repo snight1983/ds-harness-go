@@ -537,7 +537,7 @@ func (s *toolSet) preflight(
 // 源: packages/schedule/schedule/src/tools.ts:221-228
 func (s *toolSet) foldForTool() (Folded, *ToolError) {
 	session := s.owner.Session()
-	folded, err := FoldEvents(session.Events(), session.Header().SeedLength)
+	folded, err := FoldEvents(session.Events(), session.Header())
 	if err != nil {
 		failure := toolErrorFrom(err)
 		return Folded{}, &failure

@@ -12,8 +12,8 @@ import (
 	"fmt"
 
 	"github.com/snight1983/ds-harness-go/feature/persistence"
+	"github.com/snight1983/ds-harness-go/feature/subagent/internal/childseed"
 	"github.com/snight1983/ds-harness-go/harness/agent"
-	coresession "github.com/snight1983/ds-harness-go/harness/session"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/scope"
 	"github.com/snight1983/ds-harness-go/sessionlog"
@@ -25,7 +25,12 @@ import (
 type materializeCreate struct {
 	// seed 是这个孩子的创建种子：继承来的父历史前缀，后面跟那条描述符事件。
 	seed []sessionlog.Event
-	// meta 是 [ChildSessionMeta] 拍好的那份血统元数据。SessionID、Seed、
+	// baseSeq 是 seed 第一条应有的 seq；默认 0。
+	//
+	// 新增: 理由见 [github.com/snight1983/ds-harness-go/harness/agent.CreateOptions.BaseSeq]。
+	// 一段从被弹过头的父日志上切下来的前缀不从 0 起。
+	baseSeq int
+	// meta 是 [ChildSessionMeta] 拍好的那份血统元数据。SessionID、Seed、BaseSeq、
 	// AgentOptions、Setup 由 [ContinuationManager.materializeTracked] 补上。
 	meta agent.CreateOptions
 	// delegatedPolicies 是在派发那一刻拍下来、要种进孩子自己日志的那份策略。
@@ -140,16 +145,11 @@ func (m *ContinuationManager) coldResume(
 // childOwnEvents 切出一份落盘检视里属于这个孩子自己的那截事件后缀。
 //
 // 新增: DSH 是 `loaded.events.slice(loaded.meta.seedLength ?? 0)`，JS 的 slice
-// 越界给空数组。Go 的切片越界是 panic，而这个长度来自介质，所以这里夹一道。
+// 越界给空数组。本仓库这道换算还多一层：SeedLength 是个条数，日志被弹过头之后
+// 它和下标差着一个起点，直接拿它当下标切会把一批属于这个孩子自己的事件当成
+// 继承来的丢掉。换算和夹取都收在 [sessionlog.SeedSuffix] 一处。
 func childOwnEvents(loaded persistence.Inspection) []sessionlog.Event {
-	boundary := loaded.Meta.SeedLength
-	if boundary < 0 {
-		boundary = 0
-	}
-	if boundary > len(loaded.Events) {
-		boundary = len(loaded.Events)
-	}
-	return loaded.Events[boundary:]
+	return sessionlog.SeedSuffix(loaded.Events, loaded.Meta)
 }
 
 // submitMaterialized 要么把消息投进一个刚物化出来的活化，要么把它整个回滚掉。
@@ -239,13 +239,14 @@ func (m *ContinuationManager) materializeTracked(
 		})
 	} else {
 		var seed []sessionlog.Event
-		seed, err = seedWithDelegatedPolicies(childID, inputs.create.seed, inputs.create.delegatedPolicies)
+		seed, err = childseed.Seed(childID, inputs.create.seed, inputs.create.baseSeq, inputs.create.delegatedPolicies.ApprovalPolicy)
 		if err != nil {
 			return nil, err
 		}
 		options := inputs.create.meta
 		options.SessionID = childID
 		options.Seed = seed
+		options.BaseSeq = inputs.create.baseSeq
 		options.AgentOptions = inputs.agentOptions
 		options.Setup = setup
 		handle, err = m.deps.Agents.Create(ctx, m.ownerScope, options)
@@ -284,41 +285,6 @@ func (m *ContinuationManager) materializeTracked(
 	}
 	m.watchSettlement(live)
 	return live, nil
-}
-
-// seedWithDelegatedPolicies 把那份派发策略以 `source: delegation` 折进孩子的创建
-// 种子；策略为空时原样交回。
-//
-// 源: packages/subagent/subagent/src/continuation.ts:1058-1063
-//
-// 只有全新创建才种（分叉种子之后，于是新策略压过陈旧的种子状态）；一次冷恢复
-// 回放的是那几条已经落盘的事件。
-//
-// 新增: DSH 是在 setup 回调里拿 `childCtx.agent.session` 现场追加的。Go 的
-// [github.com/snight1983/ds-harness-go/harness/agent.Setup] 只收作用域，而那一刻会话还没登记进
-// [github.com/snight1983/ds-harness-go/harness/session.Store]（见 [github.com/snight1983/ds-harness-go/harness/agentloop.AgentLoop]
-// 的 setupAndPublish：Prepare 出来的会话到 publish 才登记），所以这里够不着那份
-// 会话。改成在种子上排演一次——和 [SeedDescriptorTurn] 完全同一条路子：那几条事件
-// 照样落在 SeedLength 边界**之后**，因此仍旧是这个孩子自己的历史，而且照样在公布
-// 之前就定死了。
-func seedWithDelegatedPolicies(
-	childID sessionlog.SessionID,
-	seed []sessionlog.Event,
-	overrides DelegatedPolicyOverrides,
-) ([]sessionlog.Event, error) {
-	if overrides.ApprovalPolicy == "" {
-		return seed, nil
-	}
-	staged, err := coresession.NewSession(childID, coresession.Options{Seed: seed})
-	if err != nil {
-		return nil, fmt.Errorf("排演子 agent 派发策略种子失败：%w", err)
-	}
-	if err := AppendDelegatedPolicyOverrides(staged, overrides); err != nil {
-		// 走不到：那份负载是两个字符串转出来的 JSON，而这次追加落在一个刚排演
-		// 出来的游离会话上，没有别的边界会拒它。
-		return nil, fmt.Errorf("追加子 agent 派发策略失败：%w", err)
-	}
-	return staged.Events(), nil
 }
 
 // publishActivation 走完句柄交接之后那道准入边界：重验取消与准入、在父那边立起

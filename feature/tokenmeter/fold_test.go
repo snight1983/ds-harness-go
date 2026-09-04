@@ -19,7 +19,7 @@ func foldAll(t *testing.T, events []sessionlog.Event) ([]SurfaceNode, int) {
 		if !sessionlog.IsSurfaceEvent(event) {
 			continue
 		}
-		fold, err := foldSurfaceTokens(nodes, event)
+		fold, err := foldSurfaceTokens(nodes, event, 0)
 		if err != nil {
 			t.Fatalf("seq %d 折不进来：%v", event.Seq, err)
 		}
@@ -50,7 +50,7 @@ func TestFoldSurfaceTokensAppendsOneNodePerEvent(t *testing.T) {
 func TestFoldSurfaceTokensRejectsAnEventThatIsNotOnTheSurface(t *testing.T) {
 	t.Parallel()
 
-	if _, err := foldSurfaceTokens(nil, stepStartEvent(t, 0, 0)); err == nil {
+	if _, err := foldSurfaceTokens(nil, stepStartEvent(t, 0, 0), 0); err == nil {
 		t.Fatal("一条不上表面的事件不该折得进来")
 	}
 }
@@ -63,7 +63,7 @@ func TestFoldSurfaceTokensSplicesAReplacement(t *testing.T) {
 
 	replacement := replacementEvent(t, 0, 1, "s")
 	replacement.Seq = 3
-	fold, err := foldSurfaceTokens(nodes, replacement)
+	fold, err := foldSurfaceTokens(nodes, replacement, 0)
 	if err != nil {
 		t.Fatalf("替换该折得进来：%v", err)
 	}
@@ -92,12 +92,74 @@ func TestFoldSurfaceTokensLeavesTheCallerTableUntouchedOnFailure(t *testing.T) {
 
 	broken := replacementEvent(t, 7, 9, "s")
 	broken.Seq = 1
-	if _, err := foldSurfaceTokens(nodes, broken); err == nil {
+	if _, err := foldSurfaceTokens(nodes, broken, 0); err == nil {
 		t.Fatal("表面上不存在的区间不该折得进来")
 	}
 	if len(nodes) != 1 || nodes[0].Seq != 0 {
 		t.Fatalf("失败的折叠动了调用方的节点表：%v", nodes)
 	}
+}
+
+// 一次替换指着的老节点被 FIFO 弹掉之后，这份折叠不许再报错。
+//
+// 这是本仓库和上游分家的地方：上游的日志一条不删，所以「端点不在表面上」只可能是
+// 日志坏了。本仓库的日志会从最老的一头被弹掉一截，而压缩写的 session/replace 恰好
+// 指着最老那批——也就是恰好指着先被弹掉的那批。同一条降级 sessionlog 那份表面折叠
+// （surface.go 的 replacementRange）早就做了，这一份是后补的。
+func TestFoldSurfaceTokensDegradesWhenTheReplacedNodesWereTrimmedAway(t *testing.T) {
+	t.Parallel()
+
+	// 这一段日志从 seq 40 起，表面上只有 40 和 41 两个节点。
+	nodes := []SurfaceNode{{Seq: 40, Tokens: 11}, {Seq: 41, Tokens: 22}}
+
+	t.Run("两端都被弹掉时降级成一次追加", func(t *testing.T) {
+		t.Parallel()
+
+		replacement := replacementEvent(t, 8, 9, "s")
+		replacement.Seq = 42
+		fold, err := foldSurfaceTokens(nodes, replacement, 40)
+		if err != nil {
+			t.Fatalf("两端都被弹掉了，该降级而不是报错：%v", err)
+		}
+		if len(fold.nodes) != 3 || fold.nodes[2].Seq != 42 {
+			t.Fatalf("该在末尾追加一个节点、一个都不换走：%v", fold.nodes)
+		}
+		if fold.deltaTokens != fold.tokens {
+			t.Fatalf("没有节点被换走，净变化该等于它自己的估价：想要 %d，实际 %d",
+				fold.tokens, fold.deltaTokens)
+		}
+	})
+
+	t.Run("只有起点被弹掉时区间收到表面最前端", func(t *testing.T) {
+		t.Parallel()
+
+		// 起点 39 已经被弹掉，终点 40 还在：现存节点的 seq 都晚于 39，所以
+		// 从表面最前端切起。
+		replacement := replacementEvent(t, 39, 40, "s")
+		replacement.Seq = 42
+		fold, err := foldSurfaceTokens(nodes, replacement, 40)
+		if err != nil {
+			t.Fatalf("起点被弹掉了，该降级而不是报错：%v", err)
+		}
+		if len(fold.nodes) != 2 || fold.nodes[0].Seq != 42 || fold.nodes[1].Seq != 41 {
+			t.Fatalf("该换走 40 那一个、原地占住它的位置：%v", fold.nodes)
+		}
+		if want := fold.tokens - 11; fold.deltaTokens != want {
+			t.Fatalf("换走的只有 40 那一格：想要 %d，实际 %d", want, fold.deltaTokens)
+		}
+	})
+
+	t.Run("端点不小于起点却不在表面上，照旧报错", func(t *testing.T) {
+		t.Parallel()
+
+		// 40 和 41 都还在日志范围里，可 43 不在表面上——这不是被弹掉，
+		// 是这份节点表算的根本不是当前这个表面。
+		replacement := replacementEvent(t, 40, 43, "s")
+		replacement.Seq = 42
+		if _, err := foldSurfaceTokens(nodes, replacement, 40); err == nil {
+			t.Fatal("没被弹掉却定位不到的端点该照旧报错")
+		}
+	})
 }
 
 // 影子价协议走完整的时候，投影那份 O(1) 折叠和服务那份逐节点折叠
@@ -130,7 +192,7 @@ func TestBothFoldsAgreeAtEveryEventBoundary(t *testing.T) {
 		claim = fold.claim
 
 		if sessionlog.IsSurfaceEvent(event) {
-			serviceFold, err := foldSurfaceTokens(serviceNodes, event)
+			serviceFold, err := foldSurfaceTokens(serviceNodes, event, 0)
 			if err != nil {
 				t.Fatalf("seq %d 服务侧折不进来：%v", event.Seq, err)
 			}

@@ -79,17 +79,18 @@ func (s *Store) hasChildren(ctx context.Context, key string) (bool, error) {
 	listing, stop := context.WithCancel(ctx)
 	defer stop()
 
-	for object := range s.client.ListObjects(listing, s.bucket, minio.ListObjectsOptions{
+	object, listed := <-s.client.ListObjects(listing, s.bucket, minio.ListObjectsOptions{
 		Prefix:    s.dirPrefixOf(key),
 		Recursive: true,
 		MaxKeys:   1,
-	}) {
-		if object.Err != nil {
-			return false, translate(object.Err, fs.CodeIOError, "列举子项失败："+key)
-		}
-		return true, nil
+	})
+	if !listed {
+		return false, nil
 	}
-	return false, nil
+	if object.Err != nil {
+		return false, translate(object.Err, fs.CodeIOError, "列举子项失败："+key)
+	}
+	return true, nil
 }
 
 // Lstat 实现 [fs.FileSystem]：给出一条**路径**的元数据，不跟随最后一段的符号链接。
@@ -111,7 +112,9 @@ func (s *Store) Lstat(ctx context.Context, path string, cwd string) (fs.PathInfo
 	if err != nil || !found {
 		return fs.PathInfo{}, false, err
 	}
-	return fs.PathInfo{Version: info.Version, Type: info.Type, Size: info.Size}, true, nil
+	// 两个类型的字段逐个对得上，所以能直接转。用转换而不是逐字段抄：以后哪一边
+	// 多长出一个字段，这里就编译不过，而逐字段抄会把新字段悄悄丢掉。
+	return fs.PathInfo(info), true, nil
 }
 
 // ReadText 实现 [fs.FileSystem]：把整个对象读成解码好的字符串。

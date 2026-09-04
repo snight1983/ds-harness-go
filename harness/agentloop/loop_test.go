@@ -1360,9 +1360,15 @@ func TestResumeReleasesAPreparationThatArrivesAfterTheCallerGaveUp(t *testing.T)
 	t.Parallel()
 
 	world := newFactoryWorld(t)
+	// entered 是「这次读真的起来了」，gate 是「让它落定」。两道闸都要：只有 gate
+	// 的话取消可能赶在这次读起跑之前，那时候 [raceAbort] 在入口那道检查上就返回了、
+	// 压根不会去调 prepare——于是没有任何准备期被拿到，也就没有「迟到的」那一支
+	// 可言。这个用例会因此按调度随机地红，而红的原因和它要钉的那件事无关。
+	entered := make(chan struct{})
 	gate := make(chan struct{})
 	persistence := newPersistence(world.store, "迟到的")
 	persistence.prepare = func(_ context.Context, id sessionlog.SessionID) (*session.Session, error) {
+		close(entered)
 		<-gate
 		return world.store.Prepare(id, session.CreateOptions{})
 	}
@@ -1374,6 +1380,7 @@ func TestResumeReleasesAPreparationThatArrivesAfterTheCallerGaveUp(t *testing.T)
 		_, err := loop.Resume(ctx, world.owner, agent.ResumeOptions{ResumeSessionID: "迟到的"})
 		failed <- err
 	}()
+	<-entered
 	cancel()
 	if err := <-failed; err == nil {
 		t.Fatal("取消之后该报错回来")

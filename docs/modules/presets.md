@@ -2,7 +2,7 @@
 
 ## 定位
 
-`preset/agentpresets` 发现能力组合，把静态链接的 Go 组装器挂到常驻作用域，并让 Agent 通过父作用域加入预设；`preset/persona` 提供替换系统人设的组合项。
+`feature/preset/agentpresets` 发现能力组合，把静态链接的 Go 组装器挂到常驻作用域，并让 Agent 通过父作用域加入预设；`feature/preset/persona` 提供替换系统人设的组合项。
 
 ## 架构与预设结构
 
@@ -49,8 +49,8 @@ Go 不支持运行时 import npm 包，因此组合行通过 `ComposerSet` 查�
 
 ## 相关源码
 
-- `preset/agentpresets/`
-- `preset/persona/`
+- `feature/preset/agentpresets/`
+- `feature/preset/persona/`
 - `fs/`
 - `scope/`
 - `harness/systemprompt/`

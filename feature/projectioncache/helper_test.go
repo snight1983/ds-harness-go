@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"math"
 	"sync"
@@ -85,6 +84,19 @@ func countUnit(key string, version int) projection.Definition[countState] {
 		DecodeState: projection.StrictDecoder[countState](),
 		View:        func(state countState) any { return state.Count },
 	}
+}
+
+// initCountingUnit 是同一份折叠，另外数它被**从头折过几次**。
+//
+// [projection.Registry] 每给一个会话新开一个单元格就调一次 Init，所以这个数只在
+// 「那格不在了、要重折」时才涨——它是从包外看得见「单元格被扔掉了」的唯一凭据。
+func initCountingUnit(key string, inits *int) projection.Definition[countState] {
+	definition := countUnit(key, 0)
+	definition.Init = func() countState {
+		*inits++
+		return countState{}
+	}
+	return definition
 }
 
 // hostOnlyUnit 是同一份折叠，但没有客户端视图。
@@ -548,12 +560,4 @@ func validOptions(f *fixture) Options {
 		WriteEveryEvents: 1,
 		WriteInterval:    time.Second,
 	}
-}
-
-// describe 是错误信息里那一小段，把 nil 和非 nil 说清楚。
-func describe(err error) string {
-	if err == nil {
-		return "无错误"
-	}
-	return fmt.Sprintf("%v", err)
 }

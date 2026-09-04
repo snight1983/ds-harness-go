@@ -255,6 +255,7 @@ func Test令牌是来源限定的(t *testing.T) {
 	if left.revisionOf(1) == left.revisionOf(2) {
 		t.Error("同一个单元上计数不同，令牌就该不同")
 	}
+	//lint:ignore SA4000 两边写成一样的就是本行要验的：这个函数必须是纯的
 	if left.revisionOf(7) != left.revisionOf(7) {
 		t.Error("同一条没变过的流观察多少次都该是同一个令牌")
 	}

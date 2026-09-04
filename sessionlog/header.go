@@ -57,6 +57,20 @@ type SessionHeader struct {
 	//
 	// 新增: 0 就是「没给」，两者本来同义——一个 seed 长度为零的会话就是没有 seed。
 	SeedLength int `json:"seedLength,omitempty"`
+	// SeedBaseSeq 是建这个会话时日志的起点，也就是 seed 第一条事件的 seq。
+	//
+	// 新增: 上游没有这一条——它的日志从 0 起、一条不删，seed 永远占着
+	// 0..SeedLength-1，于是 SeedLength 本身就能当下标使。本仓库两个前提都不成立：
+	// 日志会从最老的一头被弹掉一截（见 docs/session-log-limit.md），而一次分叉
+	// 继承的是来源那些事件**连同它们的 seq**，所以一个从被弹过的来源分出来的
+	// 孩子，它的 seed 压根不是从 0 起的。
+	//
+	// 少了这个数，[SessionHeader.SeedLength] 就只剩一个条数：日志一旦被弹头，
+	// 谁都换算不回下标——「从哪儿开始是我自己干的活」这个问题就没有答案了。
+	// 血统边界的绝对 seq 因此是 SeedBaseSeq + SeedLength，见 [SeedBoundarySeq]。
+	//
+	// 旧存档没有这个键，读回来是 0。那恰好是对的：它们的 seed 本来就从 0 起。
+	SeedBaseSeq int `json:"seedBaseSeq,omitempty"`
 	// Origin 是这个会话的出身分类；空串表示没给。
 	Origin Origin `json:"origin,omitempty"`
 	// DelegationDepth 是派发深度：顶层会话是 0，子 agent 是父的深度加一。
@@ -84,6 +98,36 @@ type SessionHeader struct {
 	// 给人看的路径由 workspace 包保管，且只在 [github.com/snight1983/ds-harness-go/fs.FileSystem]
 	// 那条接缝的命名空间里有意义。
 	WorkspaceID WorkspaceID `json:"workspaceId,omitempty"`
+}
+
+// SeedBoundarySeq 是一个会话的血统边界，用绝对 seq 表示：seq 严格小于它的那些
+// 事件是从父会话继承来的，大于等于它的是这个会话自己干的活。
+//
+// 新增: 上游到处直接写 `events.slice(header.seedLength)`，因为它那边 seed 从 0 起、
+// seq 恒等于下标。本仓库两个前提都不成立，理由见 [SessionHeader.SeedBaseSeq]。
+// 边界因此先算成一个 seq，再由 [SeedSuffix] 换成下标。
+func SeedBoundarySeq(header SessionHeader) int {
+	return header.SeedBaseSeq + header.SeedLength
+}
+
+// SeedSuffix 切出一段日志里属于这个会话自己的那截——血统边界之后的全部事件。
+//
+// 新增: 三处调用方（收件箱重放、提醒折叠、子会话检视）要的都是同一件事，
+// 而它们各自算一遍下标正是本仓库出过错的地方：把一个条数当成下标使，日志被弹头
+// 之后会不动声色地多切掉一段。这里只此一份。
+//
+// 边界已经被弹出去时交回整段（一条继承来的都不剩），整段都还在边界之前时交回空。
+// 两头都夹住是有意的：调用方要的是「我自己干的活」，日志少了一截不该让它变成
+// 一次失败——那一截本来就不是它的。
+func SeedSuffix(events []Event, header SessionHeader) []Event {
+	index := SeedBoundarySeq(header) - LogBaseSeq(events)
+	if index < 0 {
+		index = 0
+	}
+	if index > len(events) {
+		index = len(events)
+	}
+	return events[index:]
 }
 
 // TodoStatus 是一条待办的生命周期状态。

@@ -13,6 +13,7 @@ import (
 
 	"github.com/snight1983/ds-harness-go/feature/interaction/userapproval"
 	"github.com/snight1983/ds-harness-go/feature/persistence"
+	"github.com/snight1983/ds-harness-go/feature/subagent/internal/childseed"
 	"github.com/snight1983/ds-harness-go/harness/agent"
 	coresession "github.com/snight1983/ds-harness-go/harness/session"
 	"github.com/snight1983/ds-harness-go/llm"
@@ -118,11 +119,32 @@ func TestChildOwnEventsClampsABoundaryFromTheMedium(t *testing.T) {
 	}
 }
 
+// 边界是**绝对 seq**，不是条数：一份被弹过头的日志上，拿 SeedLength 直接当下标
+// 会把这个孩子自己的事件一条条当成继承来的丢掉。
+func TestChildOwnEventsMeasuresTheBoundaryFromTheLogStart(t *testing.T) {
+	own := childOwnEvents(persistence.Inspection{
+		Meta:   sessionlog.SessionHeader{SeedBaseSeq: 40, SeedLength: 2},
+		Events: []sessionlog.Event{{Seq: 40}, {Seq: 41}, {Seq: 42}, {Seq: 43}},
+	})
+	if len(own) != 2 || own[0].Seq != 42 {
+		t.Fatalf("该从 seq 42 起，实际 %#v", own)
+	}
+
+	// 继承来的那一段整个被弹掉了：剩下的全归这个孩子自己。
+	own = childOwnEvents(persistence.Inspection{
+		Meta:   sessionlog.SessionHeader{SeedBaseSeq: 0, SeedLength: 2},
+		Events: []sessionlog.Event{{Seq: 9}, {Seq: 10}},
+	})
+	if len(own) != 2 {
+		t.Fatalf("继承的那段被弹光之后该整段都归自己，实际 %#v", own)
+	}
+}
+
 // ---- 种进去的派发策略 ----
 
-func TestSeedWithDelegatedPoliciesLeavesTheSeedAloneWhenThereIsNothingToSeed(t *testing.T) {
+func TestChildSeedLeavesTheSeedAloneWhenThereIsNothingToSeed(t *testing.T) {
 	seed := descriptorLog(t, 0, "查一下")
-	staged, err := seedWithDelegatedPolicies("child", seed, DelegatedPolicyOverrides{})
+	staged, err := childseed.Seed("child", seed, 0, "")
 	if err != nil {
 		t.Fatalf("排演种子失败：%v", err)
 	}
@@ -132,11 +154,9 @@ func TestSeedWithDelegatedPoliciesLeavesTheSeedAloneWhenThereIsNothingToSeed(t *
 }
 
 // 那条策略落在种子**之后**，所以它仍旧是这个孩子自己的历史。
-func TestSeedWithDelegatedPoliciesAppendsAfterTheSeed(t *testing.T) {
+func TestChildSeedAppendsAfterTheSeed(t *testing.T) {
 	seed := descriptorLog(t, 0, "查一下")
-	staged, err := seedWithDelegatedPolicies("child", seed, DelegatedPolicyOverrides{
-		ApprovalPolicy: "never",
-	})
+	staged, err := childseed.Seed("child", seed, 0, "never")
 	if err != nil {
 		t.Fatalf("排演种子失败：%v", err)
 	}
@@ -151,8 +171,8 @@ func TestSeedWithDelegatedPoliciesAppendsAfterTheSeed(t *testing.T) {
 	}
 }
 
-// brokenSeed 造一份**排演不出来**的创建种子：序号从 0 断开，而活会话表要求种子是
-// 从 0 起连续的。
+// brokenSeed 造一份**排演不出来**的创建种子：序号从起点断开，而活会话表要求种子
+// 是从 baseSeq 起连续的。
 func brokenSeed(t *testing.T) []sessionlog.Event {
 	t.Helper()
 	seed := descriptorLog(t, 0, "查一下")
@@ -160,12 +180,29 @@ func brokenSeed(t *testing.T) []sessionlog.Event {
 	return seed
 }
 
+// 种子不从 0 起时把 baseSeq 一起交下去，排演才走得通：父日志被弹过头之后，
+// 一段合法的分叉前缀本来就不从 0 起。
+func TestChildSeedStagesASeedThatDoesNotStartAtZero(t *testing.T) {
+	seed := descriptorLog(t, 0, "查一下")
+	for index := range seed {
+		seed[index].Seq += 40
+	}
+	staged, err := childseed.Seed("child", seed, 40, "never")
+	if err != nil {
+		t.Fatalf("一段从 seq 40 起的种子本该排演得动，却报了 %v", err)
+	}
+	if len(staged) <= len(seed) {
+		t.Fatalf("该多出那条策略，实际 %#v", staged)
+	}
+	if staged[0].Seq != 40 {
+		t.Fatalf("排演出来的第一条该还在 seq 40 上，实际 %d", staged[0].Seq)
+	}
+}
+
 // 排演不出来的种子当场把这一步拦下，而不是把那条策略悄悄丢掉：一个没种上策略的
 // 孩子是一个不受这次派发约束的孩子。
-func TestSeedWithDelegatedPoliciesRefusesASeedItCannotStage(t *testing.T) {
-	if _, err := seedWithDelegatedPolicies("child", brokenSeed(t), DelegatedPolicyOverrides{
-		ApprovalPolicy: "never",
-	}); err == nil {
+func TestChildSeedRefusesASeedItCannotStage(t *testing.T) {
+	if _, err := childseed.Seed("child", brokenSeed(t), 0, "never"); err == nil {
 		t.Fatal("排演不出来的种子该被拒")
 	}
 }

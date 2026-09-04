@@ -200,7 +200,7 @@ Session 模块不负责：
 
 | 路径 | 内容 |
 |---|---|
-| `session/` | 事件词汇、负载、日志校验与修复 |
+| `sessionlog/` | 事件词汇、负载、日志校验与修复 |
 | [`harness/session/`](livesession.md) | 活 Session 和 Store |
 | `feature/persistence/` | Backend/Store 接缝、Coordinator、写后队列、准备池和恢复原语 |
 | `sessionlog/projection/` | 当前状态计算注册表 |

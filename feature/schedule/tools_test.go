@@ -234,10 +234,18 @@ func TestCreateToolReportsBarrierFailureAsUncertain(t *testing.T) {
 
 func TestToolsReportCorruptLogWithoutLeakingDiagnostics(t *testing.T) {
 	world := newToolWorld(t)
-	if _, err := world.owner.log.Append(sessionlog.Event{
-		Type: EventChange, Data: json.RawMessage(`{"version":1,"operation":"delete","id":"ghost"}`),
-	}); err != nil {
-		t.Fatalf("往日志里塞坏事件失败：%v", err)
+	// 同一条记录删两遍才是真的坏了：指向一个从没建过的 id 在本仓库读成
+	// 「它的 create 被 FIFO 弹掉了」，会被跳过（见 [FoldEvents]）。
+	for _, payload := range []string{
+		createJSON(atRecordJSON),
+		`{"version":1,"operation":"delete","id":"schedule-2"}`,
+		`{"version":1,"operation":"delete","id":"schedule-2"}`,
+	} {
+		if _, err := world.owner.log.Append(sessionlog.Event{
+			Type: EventChange, Data: json.RawMessage(payload),
+		}); err != nil {
+			t.Fatalf("往日志里塞坏事件失败：%v", err)
+		}
 	}
 	for name, raw := range map[string]json.RawMessage{
 		"create": world.call(world.set.create, `{"prompt":"p","after_seconds":60}`),

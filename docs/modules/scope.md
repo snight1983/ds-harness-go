@@ -45,10 +45,10 @@ graph LR
   KEY --> M3["harness/systemprompt<br/>6 张表"]
   KEY --> M4["harness/session<br/>4 张表"]
   KEY --> M5["feature/subagent<br/>4 张表"]
-  KEY --> M6["jobs/localjobs<br/>3 张表"]
+  KEY --> M6["adapter/localjobs<br/>3 张表"]
   KEY --> M7["skill<br/>2 张表"]
-  KEY --> M8["interaction/commands<br/>1 张表"]
-  KEY --> M9["interaction/userapproval<br/>1 张表"]
+  KEY --> M8["feature/interaction/commands<br/>1 张表"]
+  KEY --> M9["feature/interaction/userapproval<br/>1 张表"]
   KEY --> M10["feature/goal<br/>1 张表"]
 ```
 
@@ -140,7 +140,7 @@ graph LR
   SA --> b3["providerAdded<br/>提供方加入"]
   SA --> b4["providerRemoved<br/>提供方移除"]
 
-  JB["jobs/localjobs 的 layer"]
+  JB["adapter/localjobs 的 layer"]
   JB --> j1["controllers<br/>控制器标签"]
   JB --> j2["listeners<br/>作业完成"]
   JB --> j3["changed<br/>可见集合变了"]
@@ -149,10 +149,10 @@ graph LR
   SK --> k1["providers *<br/>技能提供方"]
   SK --> k2["runtime *<br/>运行期注册的技能"]
 
-  CM["interaction/commands 的 layer"]
+  CM["feature/interaction/commands 的 layer"]
   CM --> c1["commands *<br/>斜杠命令"]
 
-  UA["interaction/userapproval 的 layer"]
+  UA["feature/interaction/userapproval 的 layer"]
   UA --> u1["answerers<br/>审批应答方"]
 
   GO["goal 的 layer"]

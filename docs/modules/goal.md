@@ -2,7 +2,7 @@
 
 ## 定位
 
-`feature/goal` 把跨多个回合推进的目标建模为会话事件；`goal/goaltool` 暴露模型工具；`goal/goalcommand` 暴露用户命令；`goal/goalrounddriver` 在回合边界决定继续、暂停或结束。
+`feature/goal` 把跨多个回合推进的目标建模为会话事件；`feature/goal/goaltool` 暴露模型工具；`feature/goal/goalcommand` 暴露用户命令；`feature/goal/goalrounddriver` 在回合边界决定继续、暂停或结束。
 
 ## 架构
 
@@ -59,6 +59,6 @@ goalrounddriver -> 下一轮 Agent 工作
 ## 相关源码
 
 - `feature/goal/`
-- `goal/goaltool/`
-- `goal/goalcommand/`
-- `goal/goalrounddriver/`
+- `feature/goal/goaltool/`
+- `feature/goal/goalcommand/`
+- `feature/goal/goalrounddriver/`

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/snight1983/ds-harness-go/harness/agent"
 	"github.com/snight1983/ds-harness-go/harness/agentloop"
@@ -33,7 +34,7 @@ type Options struct {
 	// Adapter 是把上面那条路由接到线上协议的适配器，必填。
 	//
 	// 走 OpenAI Chat Completions 兼容服务的话，现成的一份在
-	// [github.com/snight1983/ds-harness-go/llm/openaicompat]。
+	// [github.com/snight1983/ds-harness-go/adapter/openaicompat]。
 	Adapter llm.Adapter
 
 	// Persona 是部署方那份写进系统提示词的身份与行为约束，可以是空串。
@@ -188,13 +189,16 @@ func New(ctx context.Context, options Options) (*Harness, func(context.Context) 
 		Vocabulary:   vocabulary,
 	}
 
-	var unwound bool
+	// 幂等走 [sync.Once] 而不是一个裸布尔：拆宿主的两条路（正常收尾和某处出错时的
+	// 兜底）常常在不同 goroutine 上，一个裸布尔在那里是数据竞争，而且两边会同时读到
+	// false、把 unwindLoop 和 root.Dispose 各跑一遍。
+	var once sync.Once
+	var unwindErr error
 	return assembled, func(ctx context.Context) error {
-		if unwound {
-			return nil
-		}
-		unwound = true
-		// 两步各自跑到底再汇总：前一步失败就提前返回的话，根作用域永远拆不掉。
-		return errors.Join(unwindLoop(ctx), root.Dispose(ctx))
+		once.Do(func() {
+			// 两步各自跑到底再汇总：前一步失败就提前返回的话，根作用域永远拆不掉。
+			unwindErr = errors.Join(unwindLoop(ctx), root.Dispose(ctx))
+		})
+		return unwindErr
 	}, nil
 }

@@ -374,12 +374,13 @@ func TestSessionIDs候选全被裁掉时那一次写照样落下去(t *testing.T
 	ws := h.seedWorkspaces(ctx, "/a")[0]
 	h.persistence.set(header("s1", ws, 100))
 	registry := h.open(ctx)
-	created := mustGet(t, ctx, registry, ws)
+	// 拿一遍是为了让这个工作区先在账目上落下来；下面重开之后再取一次新的句柄。
+	mustGet(t, ctx, registry, ws)
 
 	// 会话头整个不见了：候选筛不出来，但账目本身没被任何 fn 改过。
 	h.persistence.set()
 	registry = h.reopen(ctx)
-	created = mustGet(t, ctx, registry, ws)
+	created := mustGet(t, ctx, registry, ws)
 	before := mustUpdatedAt(t, ctx, created)
 
 	// fn 说「我什么都没改」，可裁剪有所斩获，所以这一格不是空操作。

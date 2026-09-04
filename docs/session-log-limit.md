@@ -35,6 +35,12 @@
 15. 按 seq 找不到 event 不再一律当错误。分两种：seq 比当前最小的还小，是被弹掉了，
     正常；seq 落在现有范围内却找不到，是日志真坏了，照旧报错。FIFO 弹的是连续的
     一头，这两种分得开。
+16. **会话头上加一个 `SeedBaseSeq`，记建这个会话那天日志从哪个 seq 起。** 这是第 11 条
+    「不加新字段」的唯一例外，因为那一条说的是 event 上不加消息 ID，而这一条要存的
+    东西 event 上根本没有：`SeedLength` 是**条数**，`BaseSeq` 是**当前**起点，血统边界
+    落在哪一条上要的是**建会话那一刻**的起点，弹过一次之后谁都反推不回来。有了它，
+    边界就是一个绝对 seq：`SeedBaseSeq + SeedLength`。
+    字段是加上去的，老存档读回来是 0——而它们的日志本来就从 0 起，0 正是对的。
 
 第 9、10 条的理由：用哪个数据库是写服务的人的决定，不是库的决定。库这边只认
 `database/sql`，连接和后端由装配方给。
@@ -290,6 +296,32 @@ event 的 seq，折的时候按 seq 定位，找不到就返回 `ErrSurfaceViola
 
 `feature/persistence/store.go:58` 写的是「第一条事件的 seq 必须等于存档里的下一个 seq」。
 这条契约本身在新前提下仍然成立，措辞里点明「下一个」是相对存档现有末尾，不是相对 0。
+
+### 七、这一遍审查漏掉的：血统边界（后补）
+
+上面从「零」到「六」是照着「哪里拿 seq 当下标」找的，找的是**日志内部**的换算。漏掉了
+另一族：**继承来的那一段到哪儿为止**。它们不查 `events[seq]`，查的是 `SeedLength`，
+所以那一遍的检索词一个都没命中。
+
+`SeedLength` 是条数，被当成下标使了——只有在「日志从 0 起、一条没弹」时这两件事才重合。
+第 16 条那个 `SeedBaseSeq` 就是为补上这个差额加的。七处：
+
+| 哪里 | 拿边界干什么 | 切错了会怎样 |
+| --- | --- | --- |
+| `harness/agent/inbox.go` | 挑出自己那些待办拼接 | 父的待办被当成自己的重跑一遍 |
+| `feature/subagent/forkinprocess/provider.go` | 切「回合完整」的那段前缀 | 分叉带走半个回合，孩子重放不合法 |
+| `feature/subagent/continuationactivation.go` | 可续那条路的同一段前缀 | 同上，且多两场排演各拒一次 |
+| `feature/schedule/domain.go` | 折出这个会话自己的提醒 | 父那条 create 被重放，撞 id |
+| `feature/schedule/runtime.go` | 装载时验整条流 | 同上，而且 `faulted` 是不可逆的 |
+| `feature/tokenmeter/meter.go`（两处） | 缓存判活、按 seq 找源块 | 起点挪过之后照着旧缓存接着算 |
+
+换算全部收进 `sessionlog` 的三个函数，各处不再自己减：
+
+- `SeedBoundarySeq(header)` —— 边界的绝对 seq，就是 `SeedBaseSeq + SeedLength`。
+- `SeedSuffix(events, header)` —— 切掉继承来的那一段。**两头都夹住**：边界落在日志起点
+  之前（继承的那段已经被弹光了）或者落在末尾之后，都是正常状态，不报错。
+- `SeqIndex(events, seq)` —— 原则第 2 条那句话的唯一实现处：减起点，减完核
+  `events[index].Seq == seq`，对不上就答「没有」。
 
 ### 核过但不受影响
 

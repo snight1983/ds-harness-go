@@ -116,7 +116,7 @@ SQLite 那一支有两件事本模块管不了，得由装配方在 DSN 上设�
 
 设了 `DSH_REQUIRE_POSTGRES` 却没有连接串时**失败**而不是退回 SQLite——那种退回正是 CI 上 service container 没起来的样子，不拦住的话一整批本该压两种方言的用例只压了一种。
 
-选库这件事收在 `adapter/datastore/dbtest`，`kvstore` 和 `sessionstore` 共用；`adapter/datastore` 自己的测试写在包内（要够得着未导出的东西），引 `dbtest` 会成环，所以那边留着一份自己的。
+选库这件事收在 `adapter/datastore/internal/dbtest`，`kvstore` 和 `sessionstore` 共用；`adapter/datastore` 自己的测试写在包内（要够得着未导出的东西），引 `dbtest` 会成环，所以那边留着一份自己的。它摆在 `internal/` 底下，因为用得着它的只有 `adapter/datastore` 这棵子树——对外发布一个「挑测试跑在哪种库上」的包没有意义。
 
 不拿 sqlmock 之类的东西刷覆盖率：那验的是「我拼出了我以为我会拼的那句 SQL」，而这里真正会出事的地方恰恰是假库看不见的。
 
@@ -129,7 +129,7 @@ SQLite 那一支有两件事本模块管不了，得由装配方在 DSN 上设�
 | `adapter/datastore/logs.go` | 日志集：流、条目、追加、弹出 |
 | `adapter/datastore/dialect.go` | 各家数据库分歧处的收口，Postgres 与 SQLite 两支 |
 | `adapter/datastore/error.go` | 本层哨兵 |
-| `adapter/datastore/dbtest/` | 「这一轮跑在哪种库上」，两个适配层的测试共用 |
+| `adapter/datastore/internal/dbtest/` | 「这一轮跑在哪种库上」，两个适配层的测试共用 |
 | `adapter/datastore/kvstore/` | 记录集 → `storage.KVProvider` |
 | `adapter/datastore/sessionstore/` | 日志集 → `feature/persistence.Backend` |
 | `internal/devtools/dbcheck/` | 把着这条界线的门禁 |

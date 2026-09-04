@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/feature/subagent"
-	"github.com/snight1983/ds-harness-go/feature/subagent/providertest"
+	"github.com/snight1983/ds-harness-go/feature/subagent/internal/providertest"
 )
 
 func TestNewFallsBackToTheDefaultProviderName(t *testing.T) {

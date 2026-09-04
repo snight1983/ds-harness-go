@@ -5,7 +5,6 @@ package llmretry
 import (
 	"context"
 	"errors"
-	"math"
 	"slices"
 	"testing"
 	"time"
@@ -124,7 +123,10 @@ func TestAHugeRetryCountStillYieldsTheCeiling(t *testing.T) {
 	if got != policy.MaxDelay {
 		t.Errorf("该被上限截回 %v，是 %v", policy.MaxDelay, got)
 	}
-	if math.IsNaN(float64(got)) || got < 0 {
+	// 只判负数。NaN 在这里判不出来：got 已经是 [time.Duration] 了，一个整数转成
+	// float64 永远不是 NaN——真出了 NaN，那次浮点转整数在上一层就已经落成某个
+	// 具体的整数了，能看见的表现就是这个负数。
+	if got < 0 {
 		t.Errorf("算出来的延时不该是这个样子：%v", got)
 	}
 }

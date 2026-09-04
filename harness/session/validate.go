@@ -106,6 +106,12 @@ func validateSessionHeader(id sessionlog.SessionID, header sessionlog.SessionHea
 	if header.SeedLength < 0 {
 		return fmt.Errorf("%w: session header seedLength must be a non-negative safe integer", ErrInvalidHeader)
 	}
+	// 新增: 上游没有这一项，理由见 [sessionlog.SessionHeader.SeedBaseSeq]。一个负起点
+	// 会让 [sessionlog.SeedBoundarySeq] 算出一条落在日志之前的边界，于是「哪些是
+	// 继承来的」这个问题得到一个悄悄错掉的答案，而不是一次失败。
+	if header.SeedBaseSeq < 0 {
+		return fmt.Errorf("%w: session header seedBaseSeq must be a non-negative safe integer", ErrInvalidHeader)
+	}
 	if header.Origin != "" && header.Origin != sessionlog.OriginSubagent {
 		return fmt.Errorf("%w: session header origin must be %q", ErrInvalidHeader, sessionlog.OriginSubagent)
 	}

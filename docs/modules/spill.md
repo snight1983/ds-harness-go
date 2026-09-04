@@ -23,7 +23,7 @@ spill.Store.SaveText -> spill.Ref
 
 ## 落地实现
 
-`spill/textstore` 是这条接缝在本仓库的实现。它不认硬盘，只认 `fs` 那条文件系统接缝，所以换成对象存储是装配时的事，业务代码一行不动。
+`adapter/textstore` 是这条接缝在本仓库的实现。它不认硬盘，只认 `fs` 那条文件系统接缝，所以换成对象存储是装配时的事，业务代码一行不动。
 
 产物的落点长这样：
 
@@ -68,6 +68,6 @@ spill.Store.SaveText -> spill.Ref
 ## 相关源码
 
 - `spill/spill.go`
-- `spill/textstore/`
+- `adapter/textstore/`
 - `feature/spillpolicy/`
 - `tools/pipeline.go`

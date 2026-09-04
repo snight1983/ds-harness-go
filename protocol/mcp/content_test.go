@@ -204,6 +204,9 @@ func TestNormalizeContentReadsEveryTypedKind(t *testing.T) {
 		&sdk.AudioContent{MIMEType: "audio/wav", Data: []byte{3}},
 		&sdk.ResourceLink{Name: "n", URI: "file:///u"},
 		&sdk.EmbeddedResource{Resource: &sdk.ResourceContents{URI: "file:///r"}},
+		// 这一种 SDK 已经标了弃用，但弃用窗口里服务端照样发得出来，
+		// [normalizeBlock] 就得读得动它。故意留在这份「每一种都过一遍」的清单里。
+		//lint:ignore SA1019 弃用窗口内仍会收到，正因为如此才要覆盖
 		&sdk.ToolUseContent{ID: "1", Name: "t"},
 	})
 	if err != nil {

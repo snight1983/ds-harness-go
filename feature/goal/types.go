@@ -22,7 +22,7 @@ import (
 // 文本，里面出现尖括号一点都不稀奇；这份字节要落进会话日志并和 DSH 互读，多出来
 // 的转义会让同一句话在两侧长得不一样。
 //
-// 和 [github.com/snight1983/ds-harness-go/schedule.marshalNoEscape] 同一条理由：这件事必须落在最里面
+// 和 [github.com/snight1983/ds-harness-go/feature/schedule.marshalNoEscape] 同一条理由：这件事必须落在最里面
 // 那一层，外面那圈 Encoder 上的 SetEscapeHTML(false) 管不着自定义 MarshalJSON
 // 已经排好的字节。
 func marshalNoEscape(value any) ([]byte, error) {
@@ -325,7 +325,7 @@ const (
 //
 // 新增: DSH 那边这是 GoalSnapshotChangeMeta | GoalClearChangeMeta 两支联合。
 // Go 里合成一个带 Operation 判别的结构体（成例见
-// [github.com/snight1983/ds-harness-go/schedule.Change]）：排字节时按 Operation 分支，读回来时先看
+// [github.com/snight1983/ds-harness-go/feature/schedule.Change]）：排字节时按 Operation 分支，读回来时先看
 // Operation 再验那一支该有的键。
 //
 // Operation 是 [OpClear] 时用 Cleared / ClearedAt，别的时候用 Goal /

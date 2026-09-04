@@ -171,6 +171,42 @@ func TestEventCloneDetachesTheSlices(t *testing.T) {
 	}
 }
 
+// 这是本仓库和上游分家的那一处：上游全程 `events[seq]`，因为它的日志从 0 起、
+// 一条不删。日志被弹过头之后那个式子会取到隔壁那条上去，而且是**静悄悄**地取错。
+func TestSeqIndexConvertsAgainstTheLogStart(t *testing.T) {
+	t.Parallel()
+
+	trimmed := []Event{{Seq: 40}, {Seq: 41}, {Seq: 42}}
+	cases := map[string]struct {
+		events    []Event
+		seq       int
+		wantIndex int
+		wantOK    bool
+	}{
+		"没弹过头时 seq 就是下标": {events: []Event{{Seq: 0}, {Seq: 1}}, seq: 1, wantIndex: 1, wantOK: true},
+		"弹过头之后减掉起点":      {events: trimmed, seq: 42, wantIndex: 2, wantOK: true},
+		"起点那一条":          {events: trimmed, seq: 40, wantIndex: 0, wantOK: true},
+		"已经被弹掉的一条":       {events: trimmed, seq: 39, wantOK: false},
+		"还没写的一条":         {events: trimmed, seq: 43, wantOK: false},
+		"空日志":            {events: nil, seq: 0, wantOK: false},
+		// 中间缺了一条时光靠减法会指到隔壁：多核一遍 seq 就是为了逮住这个。
+		"中间断了一条":  {events: []Event{{Seq: 40}, {Seq: 42}}, seq: 41, wantOK: false},
+		"断口之后那一条": {events: []Event{{Seq: 40}, {Seq: 42}}, seq: 42, wantOK: false},
+	}
+	for name, each := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			index, ok := SeqIndex(each.events, each.seq)
+			if ok != each.wantOK {
+				t.Fatalf("在不在该是 %v，实际 %v", each.wantOK, ok)
+			}
+			if ok && index != each.wantIndex {
+				t.Fatalf("下标该是 %d，实际 %d", each.wantIndex, index)
+			}
+		})
+	}
+}
+
 // unmarshalableOp 是一个排不出去的表面操作，用来走到 [Event.MarshalJSON] 的错误分支。
 type unmarshalableOp struct{}
 

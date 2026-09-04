@@ -561,8 +561,8 @@ peer 之间的消息与共享任务：
 
 `agent-team-profile`（34 行）和 `agent-team-web-profile`（26 行）的运行时内容是各自的
 `dsh.bundle.patch` 文档，`src/index.ts` 只有一句 `export {}`。bundle 是**发行形态**（哪些
-插件装在一起），不是能力本身；Go 侧对应的是 `cmd/` 下选哪些包 import，成例是
-`example/minimalhost`。
+插件装在一起），不是能力本身；Go 侧对应的是宿主自己选哪些包 import，成例是
+`harness.New`。
 
 `client-ui-agent-team`（657 行）是 Web 端的花名册、任务板与队友导航，产物是 React 组件树
 （`TeamAction.tsx` 425 行）加一份 locales。同 `client/*` 一节：Go 侧没有渲染面。

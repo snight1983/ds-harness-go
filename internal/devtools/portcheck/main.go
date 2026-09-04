@@ -353,7 +353,7 @@ func report(rows []rulingtable.Row, counts map[string]int, stales, provenance, a
 	} else {
 		// 「验过出处」只说到出处存在、行号在界内。行号有没有漂是 reanchor 那一项的事，
 		// 这里把话说到边界为止——一句说过头的通过语比不通过更难发现。
-		fmt.Printf("源注释：%d 条，出处全部存在且行号在界内（是否漂移见 -mode reanchor）\n", provenance)
+		fmt.Printf("源注释：%d 条，出处全部存在，带行号的行号都在界内（是否漂移见 -mode reanchor）\n", provenance)
 		fmt.Printf("新增注释：%d 条\n", addedNotes)
 	}
 	if len(pendingSamples) > 0 {
@@ -367,17 +367,34 @@ func report(rows []rulingtable.Row, counts map[string]int, stales, provenance, a
 // 溯源注释的两种合法写法。
 //
 //	// 源: packages/core/session/src/index.ts:425-760
+//	// 源: packages/core/session/src/index.ts
 //	// 新增: Go 侧需要的并发保护，DSH 是单进程 CLI 所以没有
 //
 // 路径一律相对 DSH 根，用正斜杠。行号从 1 开始，闭区间。
-// 两个正则都锚在行首（`^`），等于要求 `源:` 前面那个 `//` 必须是这条注释的开头。
+//
+// **行号是选填的**，指整个文件（或者整个目录）时就只写路径——一个包的门面文件对着
+// 上游一整个 index.ts，硬编一段行号只会在上游一改版就全错。不带行号的写法在本仓库
+// 有二百多条，是常规写法，不是遗漏。两种写法都要验出处存在，带行号的另外验行号在界内。
+//
+// **一条注释里可以引不止一处**，中间用顿号隔开；路径后面也常跟一段中文说明是在指
+// 哪一段。所以认引用不是「取到行尾」，而是逐个找出以 `packages/` 打头的那些串——
+// 本仓库的出处路径无一例外都是这个前缀。这样顿号和全角括号自然成了边界，
+// 而多引的那几处每一处都会被验到，不会只验第一处。
+//
+// 这些曾经全都不成立：正则写成 `(\S+):(\d+)`，于是不带行号的整条匹配不上，
+// 既不被计数也不被校验。发现它是因为往一个新拆出来的文件头上写了一条**凭空编的**
+// 出处（`packages/llm/llm/src/runtime.ts`，DSH 里没有这个文件），门禁照样全绿。
+// 一道能被这样绕过去的门禁，它给的「出处全部存在」是假的。
+//
+// [reSourceLine] 锚在行首（`^`），等于要求 `源:` 前面那个 `//` 必须是这条注释的开头。
 //
 // 这一条不是洁癖。不锚行首的话，文档注释里写的**示例**会被当成真的溯源注释数进去——
 // 这个 bug 在本文件自己身上就发生过：头部说明里的三行示例被数成了 3 条真注释。
 // 一个会把示例当数据的检查器，报出来的数字没有意义。
 var (
-	reSource = regexp.MustCompile(`^//\s*源:\s*(\S+):(\d+)(?:-(\d+))?`)
-	reAdded  = regexp.MustCompile(`^//\s*新增:\s*(\S.*)`)
+	reSourceLine = regexp.MustCompile(`^//\s*源:`)
+	reCitation   = regexp.MustCompile(`packages/[A-Za-z0-9._@-]+(?:/[A-Za-z0-9._@-]+)*(?::(\d+)(?:-(\d+))?)?`)
+	reAdded      = regexp.MustCompile(`^//\s*新增:\s*(\S.*)`)
 )
 
 // checkProvenance 走遍 Go 代码，把每一条溯源注释拿去和 DSH 源码对质。
@@ -431,32 +448,52 @@ func checkProvenance(goRoot, dshRoot string) (int, int, []string, error) {
 					added++
 					continue
 				}
-				match := reSource.FindStringSubmatch(text)
-				if match == nil {
+				if !reSourceLine.MatchString(text) {
 					continue
 				}
+				// 一条注释算一条，哪怕它引了好几处——这个数说的是「有多少处代码
+				// 标了出处」，不是「一共写了多少个路径」。两者混用会让它和别的
+				// 工具对不上账。
 				count++
 				where := fmt.Sprintf("%s:%d", path, fileSet.Position(comment.Pos()).Line)
 
-				total, ok := lineCache[match[1]]
-				if !ok {
-					total = countLines(filepath.Join(dshRoot, filepath.FromSlash(match[1])))
-					lineCache[match[1]] = total
-				}
-				if total < 0 {
-					problems = append(problems,
-						fmt.Sprintf("%s 引的出处不存在：%s", where, match[1]))
-					continue
-				}
-				start, _ := strconv.Atoi(match[2])
-				end := start
-				if match[3] != "" {
-					end, _ = strconv.Atoi(match[3])
-				}
-				if start < 1 || end < start || end > total {
-					problems = append(problems,
-						fmt.Sprintf("%s 引的行范围 %d-%d 越界，%s 只有 %d 行",
-							where, start, end, match[1], total))
+				for _, match := range reCitation.FindAllStringSubmatch(text, -1) {
+					cited := match[0]
+					if index := strings.IndexByte(cited, ':'); index >= 0 {
+						cited = cited[:index]
+					}
+
+					total, ok := lineCache[cited]
+					if !ok {
+						total = countLines(filepath.Join(dshRoot, filepath.FromSlash(cited)))
+						lineCache[cited] = total
+					}
+					if total == missingSource {
+						problems = append(problems,
+							fmt.Sprintf("%s 引的出处不存在：%s", where, cited))
+						continue
+					}
+					// 只写路径的那种到此为止：出处在就够了，没有行号可越界。
+					// 引一个目录也走这一支——`packages/skill/tool-skill` 这种指的是
+					// 整个上游包，本来就没有行号可言。
+					if match[1] == "" {
+						continue
+					}
+					if total == directorySource {
+						problems = append(problems,
+							fmt.Sprintf("%s 给目录标了行号：%s 是目录，不是文件", where, cited))
+						continue
+					}
+					start, _ := strconv.Atoi(match[1])
+					end := start
+					if match[2] != "" {
+						end, _ = strconv.Atoi(match[2])
+					}
+					if start < 1 || end < start || end > total {
+						problems = append(problems,
+							fmt.Sprintf("%s 引的行范围 %d-%d 越界，%s 只有 %d 行",
+								where, start, end, cited, total))
+					}
 				}
 			}
 		}
@@ -465,11 +502,32 @@ func checkProvenance(goRoot, dshRoot string) (int, int, []string, error) {
 	return count, added, problems, err
 }
 
-// countLines 数一个文件有多少行。文件打不开返回 -1，让调用方把它报成「出处不存在」。
+// countLines 的两个哨兵返回值。
+//
+// 用负数当哨兵而不是多返一个 error，是因为这个结果要进 lineCache 缓存起来——
+// 「这条路径不存在」本身就是要缓存的答案之一，不然同一个错路径会被反复去磁盘上找。
+const (
+	// missingSource 表示这条路径在 DSH 快照里根本不存在。
+	missingSource = -1
+	// directorySource 表示它存在，但是个目录。只写路径时这没问题（指的是整个
+	// 上游包），标了行号就是错的。
+	directorySource = -2
+)
+
+// countLines 数一个文件有多少行，返回 [missingSource] 或 [directorySource] 表示
+// 它不是一个能数行的文件。
 func countLines(path string) int {
+	info, err := os.Stat(path)
+	if err != nil {
+		return missingSource
+	}
+	if info.IsDir() {
+		return directorySource
+	}
+
 	handle, err := os.Open(path)
 	if err != nil {
-		return -1
+		return missingSource
 	}
 	defer handle.Close()
 
@@ -480,7 +538,7 @@ func countLines(path string) int {
 		count++
 	}
 	if scanner.Err() != nil {
-		return -1
+		return missingSource
 	}
 	return count
 }

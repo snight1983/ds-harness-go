@@ -2,7 +2,7 @@
 
 ## 定位
 
-`plan/planmode` 管理“当前是否先规划后执行”的会话状态，`todo` 管理模型的结构化待办清单。两者都把状态写进 Session 事件并提供投影，但语义不同：计划模式控制请求装配，Todo 记录当前工作项。
+`feature/plan/planmode` 管理“当前是否先规划后执行”的会话状态，`todo` 管理模型的结构化待办清单。两者都把状态写进 Session 事件并提供投影，但语义不同：计划模式控制请求装配，Todo 记录当前工作项。
 
 ## 计划模式
 
@@ -49,5 +49,5 @@
 
 ## 相关源码
 
-- `plan/planmode/`
+- `feature/plan/planmode/`
 - `todo/`

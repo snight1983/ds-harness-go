@@ -190,10 +190,11 @@ func TestJSONFieldsFollowsEncodingJSONNaming(t *testing.T) {
 	}
 	type tagged struct {
 		embedded
-		Renamed    string `json:"renamed,omitempty" settings:"secret"`
-		NoTag      string
-		Skipped    string `json:"-" settings:"secret"`
-		unexported string //nolint:unused // 就是要验它不参与摘除
+		Renamed string `json:"renamed,omitempty" settings:"secret"`
+		NoTag   string
+		Skipped string `json:"-" settings:"secret"`
+		//lint:ignore U1000 这个字段永远不会被读——「不导出的字段不参与摘除」正是本用例要验的
+		unexported string
 	}
 
 	result := Redact[tagged](map[string]any{

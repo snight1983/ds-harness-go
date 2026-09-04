@@ -53,7 +53,7 @@ flowchart LR
 
 ## Agent 预设
 
-`preset/agentpresets` 从部署指定目录发现组合清单。Go 版本不在运行时动态导入代码；宿主必须在编译期登记具名 Composer，预设只引用已登记的 Composer 和配置。
+`feature/preset/agentpresets` 从部署指定目录发现组合清单。Go 版本不在运行时动态导入代码；宿主必须在编译期登记具名 Composer，预设只引用已登记的 Composer 和配置。
 
 - 一份预设只装载一次，并由选择它的 Agent 共享常驻作用域。
 - 任一组合项安装失败时，整份预设回滚。
@@ -65,9 +65,9 @@ flowchart LR
 
 | 包 | 能力 |
 |---|---|
-| `context/instructions` | 从工作目录到项目根发现指令文件，建立基线并增量报告变化 |
-| `context/timecontext` | 注入当前时间、时区和经过时间，时间来源可替换 |
-| `context/sessionref` | 把会话引用解析为受预算限制的模型上下文 |
+| `feature/context/instructions` | 从工作目录到项目根发现指令文件，建立基线并增量报告变化 |
+| `feature/context/timecontext` | 注入当前时间、时区和经过时间，时间来源可替换 |
+| `feature/context/sessionref` | 把会话引用解析为受预算限制的模型上下文 |
 
 工作区指令通过 `fs.FileSystem` 读取执行环境，不回退到宿主机文件系统。渲染受字节预算限制，优先保留离工作目录更近的指令。会话引用读取的是目标会话的模型可见状态，不直接拼接原始事件日志。
 
@@ -95,11 +95,11 @@ flowchart LR
 | `feature/skill/skill.go`、`feature/skill/registry.go` | Skill 定义、Provider、分层注册与缓存 |
 | `feature/skill/skilltool/` | Skill 目录、读取工具和显式调用处理 |
 | `harness/systemprompt/` | 提示词段落、变量、工具清单和装配规则 |
-| `preset/agentpresets/` | 预设发现、Composer 装配、换代与会话选择 |
-| `preset/persona/` | 作用域化 Persona 覆盖 |
-| `context/instructions/` | 工作区指令发现、预算和增量对账 |
-| `context/timecontext/` | 时间上下文 |
-| `context/sessionref/` | 会话引用与上下文生成 |
+| `feature/preset/agentpresets/` | 预设发现、Composer 装配、换代与会话选择 |
+| `feature/preset/persona/` | 作用域化 Persona 覆盖 |
+| `feature/context/instructions/` | 工作区指令发现、预算和增量对账 |
+| `feature/context/timecontext/` | 时间上下文 |
+| `feature/context/sessionref/` | 会话引用与上下文生成 |
 
 ## 深入阅读
 

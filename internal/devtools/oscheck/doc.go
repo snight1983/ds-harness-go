@@ -44,7 +44,7 @@
 //
 // # 豁免名单只有两项，不许再加
 //
-//   - **adapter/datastore/dbtest/**——数据库测试夹具，起一个临时 SQLite 文件再删掉。
+//   - **adapter/datastore/internal/dbtest/**——数据库测试夹具，起一个临时 SQLite 文件再删掉。
 //     它必须供别的包的测试 import，所以不能写成 _test.go，于是躲不进上面那条
 //     「测试不查」。
 //   - **feature/replay/**——快照测试用的假模型，从磁盘读回放脚本。它自陈见

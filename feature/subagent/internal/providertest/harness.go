@@ -18,8 +18,7 @@
 //
 // 这台装配要被**两个包**导入，而 Go 的 _test.go 只属于自己那个包，导不出去。
 // 所以它是一个普通包，像标准库的 net/http/httptest 一样导入 testing
-// （成例见 github.com/snight1983/ds-harness-go/storage/storagetest）。它落在 internal 下面，
-// 只有 github.com/snight1983/ds-harness-go/subagent/... 进得来。
+// （成例见 github.com/snight1983/ds-harness-go/storage/storagetest）。
 //
 // # 这里的孩子当场就静
 //
@@ -118,8 +117,9 @@ func (a *StubAgent) RunMaintenance(ctx context.Context, task func(context.Contex
 
 // Append 把一条事件追加到这个 agent 自己的日志上。
 //
-// 不给 Seq：会话自己按追加次序发号，于是「seq 等于数组下标」这条契约在这些用例里
-// 是真的成立的——fork 那段前缀切法正是靠它。
+// 不给 Seq：会话自己按追加次序发号，从它那份日志的起点起算。默认起点是 0，
+// 于是 seq 恰好等于下标；[Harness.RebaseParent] 把起点挪走之后就不是了——
+// fork 那段前缀切法两种情形都得对。
 func (a *StubAgent) Append(t *testing.T, kind sessionlog.EventType, value any) sessionlog.Event {
 	t.Helper()
 	appended, err := a.live.Append(sessionlog.Event{Type: kind, Data: payloadOf(t, value)})
@@ -179,6 +179,7 @@ func (f *recordingFactory) CreateAgent(
 	}
 	live, err := f.sessions.Create(ctx, agentScope, options.SessionID, coresession.CreateOptions{
 		Seed:            options.Seed,
+		BaseSeq:         options.BaseSeq,
 		WorkspaceID:     options.WorkspaceID,
 		ParentSession:   options.ParentSession,
 		SeedLength:      options.SeedLength,
@@ -290,6 +291,23 @@ func New(t *testing.T) *Harness {
 		tools:    toolRuntime,
 		owner:    scopeOf(t, "subagents"),
 	}
+}
+
+// RebaseParent 把父会话换成一份从 baseSeq 起的空日志，之后追加的回合就从那里发号。
+//
+// 存储会从最老的一头弹掉事件（见 docs/session-log-limit.md），一个被弹过头的父
+// 会话读回来就是这个样子：seq 不再等于数组下标。要在追加任何回合**之前**调，
+// 它换的是整份日志。
+func (h *Harness) RebaseParent(t *testing.T, baseSeq int) {
+	t.Helper()
+	header := h.Parent.live.Header()
+	live, err := coresession.NewSession(h.Parent.id, coresession.Options{
+		BaseSeq: baseSeq, Header: &header, Now: tickingClock(),
+	})
+	if err != nil {
+		t.Fatalf("造被弹过头的父会话失败：%v", err)
+	}
+	h.Parent.live = live
 }
 
 // Services 交出这台驱动那份装配。

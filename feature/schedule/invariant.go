@@ -24,8 +24,11 @@ import (
 type Stream struct {
 	// Events 是这条日志此刻的全部事件，按写下的先后。
 	Events []sessionlog.Event
-	// SeedLength 是从父会话继承来的那段前缀长度。
-	SeedLength int
+	// Header 是这个会话的头，种子边界从它算出来。
+	//
+	// 新增: DSH 传的是一个 seedLength 数字。本仓库的日志会被弹头，条数换不回下标，
+	// 理由见 [FoldEvents]。
+	Header sessionlog.SessionHeader
 }
 
 // ValidateStream 验一整条流；守住了就交回 nil。
@@ -41,7 +44,7 @@ type Stream struct {
 // 「不是 ScheduleLogError 就原样抛出去」在这里没有对应物，它守的是 TS 那边 catch
 // 收得住任何东西。
 func ValidateStream(stream Stream) error {
-	_, err := FoldEvents(stream.Events, stream.SeedLength)
+	_, err := FoldEvents(stream.Events, stream.Header)
 	return err
 }
 

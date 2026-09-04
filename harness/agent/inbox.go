@@ -63,12 +63,10 @@ type Inbox struct {
 // 已经跑过的活儿。
 func NewInbox(live *session.Session, notify InboxNotifications) (*Inbox, error) {
 	inbox := &Inbox{session: live, notify: notify}
-	events := live.Events()
-	seedLength := live.Header().SeedLength
-	if seedLength > len(events) {
-		seedLength = len(events)
-	}
-	for _, event := range events[seedLength:] {
+	// 新增: 这里曾经拿 SeedLength 直接当下标切。那是个条数，日志被弹过头之后它
+	// 和下标差着一个起点，于是每弹掉一条就多跳过一条属于本会话的收件箱改动——
+	// 一批已经排好队的待办凭空消失。换算收在 [sessionlog.SeedSuffix] 一处。
+	for _, event := range sessionlog.SeedSuffix(live.Events(), live.Header()) {
 		if event.Type != EventInboxSpliced {
 			continue
 		}

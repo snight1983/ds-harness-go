@@ -378,6 +378,55 @@ func TestMeasureReplaysFromScratchWhenTheLogGotShorter(t *testing.T) {
 	}
 }
 
+// 只看长度发现不了起点已经变过：弹掉三条又追加四条，日志反而是长的，
+// 而每一个下标指向的都已经是另一条事件了。
+func TestMeasureReplaysFromScratchWhenTheLogStartMoved(t *testing.T) {
+	t.Parallel()
+
+	meter := New()
+	before := newSession(userEvent(t, "一"), userEvent(t, "二"), userEvent(t, "三"))
+	if got := measure(t, meter, before, nil); got.LogRevision != 3 {
+		t.Fatalf("先量一份从 0 起的：%+v", got)
+	}
+
+	after := trimmedSession(3,
+		userEvent(t, "四"), userEvent(t, "五"), userEvent(t, "六"), userEvent(t, "七"))
+	got := measure(t, meter, after, nil)
+	if got.LogRevision != 4 {
+		t.Fatalf("起点变了该从头重放：想要 4，实际 %d", got.LogRevision)
+	}
+	if len(got.Nodes) != 4 || got.Nodes[0].Seq != 3 {
+		t.Fatalf("节点表该是弹过头之后那份自己的：%v", got.Nodes)
+	}
+}
+
+// 一条 seq 不是自己下标的来源：上游直接 `events[seq]` 在这里会取到隔壁那条上去，
+// 于是这一步的账被悄悄算成别人的。
+func TestProviderAssistantResolvesItsSourcesAgainstTheLogStart(t *testing.T) {
+	t.Parallel()
+
+	const base = 40
+	events := []sessionlog.Event{
+		headerEvent(t, simpleHeader("you are helpful")),
+		stepStartEvent(t, 0, 0),
+	}
+	events = append(events, textChunks(t, 0, 0, "a very long streamed answer indeed")...)
+	events = append(events, assistantEventFrom(t, 0, 0, "cut",
+		&llm.TokenUsage{InputTokens: 1}, []int{base + 2, base + 3, base + 4}))
+	view := trimmedSession(base, events...)
+
+	got := measure(t, New(), view, nil)
+
+	streamed := mustEstimateMessage(t, textMessage("a", llm.RoleAssistant, llm.ModelSource{}, "a very long streamed answer indeed"))
+	headerTokens, err := EstimateHeader(simpleHeader("you are helpful"))
+	if err != nil {
+		t.Fatalf("头估价不该失败：%v", err)
+	}
+	if want := headerTokens + streamed; got.Baseline.Tokens != want {
+		t.Fatalf("锚该按流里那份长的算：想要 %d，实际 %d", want, got.Baseline.Tokens)
+	}
+}
+
 // 提供方看见的是它自己那趟流产出的内容，不是后来落进日志的那条消息。
 // 所以引了来源分块的助手消息按分块重新装配一遍定价。
 func TestProviderAssistantIsPricedFromTheSourceChunks(t *testing.T) {

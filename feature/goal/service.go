@@ -26,7 +26,7 @@ import (
 // Agents 是本包要用的那一小块 agent 注册表能力。
 //
 // 新增: DSH 靠 `static inject = ['agents']` 拿到整个注册表。Go 里只声明用得着的
-// 那两个方法（成例见 [github.com/snight1983/ds-harness-go/schedule.Agents]）：一个回答「我手里这个
+// 那两个方法（成例见 [github.com/snight1983/ds-harness-go/feature/schedule.Agents]）：一个回答「我手里这个
 // agent 此刻还是注册表里那一个吗」，一个用来在会话生命周期起跑时把活化打回原形。
 type Agents interface {
 	// Get 按标识取此刻活着的那个 agent。
@@ -51,7 +51,7 @@ type ChangedObserver func(owner agent.Agent, change Changed)
 //
 // 新增: DSH 靠 cordis 的 `agentEvents(ctx, agent).emit(...)` 做作用域过滤派发，
 // 本仓库统一换成 [github.com/snight1983/ds-harness-go/scope.Layers]——全局层加各作用域的覆盖层，
-// 派发时按载体作用域的父链取并集（成例见 [github.com/snight1983/ds-harness-go/subagent.lifecycleLayer]）。
+// 派发时按载体作用域的父链取并集（成例见 [github.com/snight1983/ds-harness-go/feature/subagent.lifecycleLayer]）。
 type changedLayer struct {
 	changed *scope.AnonymousEntries[ChangedObserver]
 }

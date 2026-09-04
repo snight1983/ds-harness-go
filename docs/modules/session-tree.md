@@ -1,6 +1,6 @@
-# 会话日志与派生状态（`session/`）
+# 会话日志与派生状态（`sessionlog/`）
 
-本文只讲 `session/` 这一棵树：顶层的事件词汇，加上它下面的九个子包。活会话对象（`harness/session`）和会话检索（`sessionquery`）不在本文范围内，只在需要说明接缝时点到名字。
+本文只讲会话日志这条线：事件词汇 `sessionlog`，加上围着它转的九个包。这九个包不在一个目录底下——它们分住在 `sessionlog/projection`、`feature/` 和 `adapter/` 三处，所以本文按职责编排，不按目录编排。活会话对象（`harness/session`）和会话检索（`feature/sessionquery`）不在本文范围内，只在需要说明接缝时点到名字。
 
 **怎么读这篇文档**
 
@@ -37,7 +37,7 @@
 
 | 段 | 包 | 一句话 |
 |---|---|---|
-| 记什么 | `session` | 一条事件长什么样，一份日志立不立得住 |
+| 记什么 | `sessionlog` | 一条事件长什么样，一份日志立不立得住 |
 | 怎么存 | `feature/persistence`（+ `adapter/datastore/sessionstore` 后端）、`feature/checkpointpolicy` | 落到介质上，以及什么时候必须落 |
 | 读成什么 | `sessionlog/projection`、`feature/projectioncache` | 折成当前状态，并把折叠进度存住 |
 
@@ -219,7 +219,7 @@ flowchart LR
 flowchart TB
     subgraph mech["机制（这套东西本身）"]
         direction TB
-        V["session<br/>词汇"]
+        V["sessionlog<br/>词汇"]
         PE["persistence<br/>接缝 + 编排"]
         PG2["adapter/datastore/sessionstore<br/>唯一自带介质"]
         CP["checkpointpolicy<br/>耐久时机"]
@@ -247,13 +247,13 @@ flowchart TB
     TE --> PJ
 ```
 
-**图怎么看**：箭头是「谁依赖谁」。`session` 在最底下，谁都可以用它，它谁都不用——这是它能只放值和纯函数的原因。`adapter/datastore/sessionstore` 是 `persistence` 的**使用者**而不是它的一部分，装配方自己写的后端站在同一个位置。右边那一列全部只依赖 `projection`，它们随时可以整个不装。
+**图怎么看**：箭头是「谁依赖谁」。`sessionlog` 在最底下，谁都可以用它，它谁都不用——这是它能只放值和纯函数的原因。`adapter/datastore/sessionstore` 是 `persistence` 的**使用者**而不是它的一部分，装配方自己写的后端站在同一个位置。右边那一列全部只依赖 `projection`，它们随时可以整个不装。
 
 一张表看完十个单元的能力和它最要紧的那条边界：
 
 | 包 | 能力一句话 | 最要紧的一条边界 |
 |---|---|---|
-| `session` | 事件长什么样、日志立不立得住 | 不持有任何活对象 |
+| `sessionlog` | 事件长什么样、日志立不立得住 | 不持有任何活对象 |
 | `persistence` | 落盘接缝 + 按会话串行的编排 | 不是具体介质 |
 | `adapter/datastore/sessionstore` | 一个会话一条流，接到日志集上 | 没有逐字节原始存档，也不认路 |
 | `checkpointpolicy` | 三处副作用边界上的耐久屏障 | 只喊「现在刷」，不判断「有没有东西要刷」 |
@@ -266,7 +266,7 @@ flowchart TB
 
 下面逐包展开。
 
-### `session`（顶层，词汇层）
+### `sessionlog`（顶层，词汇层）
 
 **它解决什么**：所有人都得对「一条会话记录长什么样」有共识，否则写的人和读的人对不上。这个包就是那份共识，而且只是共识——它不干活。
 
@@ -723,7 +723,7 @@ flowchart TB
 
 | 路径 | 内容 |
 |---|---|
-| `session/` | 事件、负载、会话头、日志校验、崩溃修复、表面折叠 |
+| `sessionlog/` | 事件、负载、会话头、日志校验、崩溃修复、表面折叠 |
 | `feature/persistence/` | `Backend`/`Store` 接缝、`Coordinator`、`WriteBehind`、准备池、恢复原语 |
 | `adapter/datastore/sessionstore/` | 把会话接到日志集上的适配层，仓库自带的唯一介质 |
 | `feature/checkpointpolicy/` | 三处副作用边界上的耐久屏障 |

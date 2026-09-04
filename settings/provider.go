@@ -833,10 +833,12 @@ func (p *Provider) Close() {
 
 	for _, entry := range entries {
 		entry.writeMutex.Lock()
-		entry.writeMutex.Unlock() //nolint:staticcheck // 拿一遍再放，就是「等在途的写走完」
+		//lint:ignore SA2001 空临界区就是这里要的东西：拿一遍再放，等的是在途的写走完
+		entry.writeMutex.Unlock()
 	}
 	p.commitMutex.Lock()
-	p.commitMutex.Unlock() //nolint:staticcheck // 同上：等在途的通知发完
+	//lint:ignore SA2001 同上：等在途的通知发完
+	p.commitMutex.Unlock()
 }
 
 // SubscribeUpdated 订阅任意命名空间解析值的已提交变更，返回退订函数。

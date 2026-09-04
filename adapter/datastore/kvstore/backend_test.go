@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/adapter/datastore"
-	"github.com/snight1983/ds-harness-go/adapter/datastore/dbtest"
+	"github.com/snight1983/ds-harness-go/adapter/datastore/internal/dbtest"
 	"github.com/snight1983/ds-harness-go/storage"
 	"github.com/snight1983/ds-harness-go/storage/storagetest"
 )

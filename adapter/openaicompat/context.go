@@ -59,25 +59,6 @@ func flattenText(message llm.Message) string {
 	return builder.String()
 }
 
-// toolResultText 递归地把一条工具结果里的文本接起来。
-//
-// 源: packages/llm/llm-pi-ai/src/context.ts:29-34
-//
-// 要递归是因为一个工具可以把另一次调用的结果原样转发出来，那份内容会以嵌套的
-// [llm.ToolResultBlock] 的形式留在里面；不递归的话那段文字在线上会整个消失。
-func toolResultText(blocks llm.Content) string {
-	var builder strings.Builder
-	for _, block := range blocks {
-		switch typed := block.(type) {
-		case llm.TextBlock:
-			builder.WriteString(typed.Text)
-		case llm.ToolResultBlock:
-			builder.WriteString(toolResultText(typed.Content))
-		}
-	}
-	return builder.String()
-}
-
 // assertSupportedImageRoles 拒掉这条协议表示不了的图片位置。
 //
 // 源: packages/llm/llm-pi-ai/src/context.ts:36-46
@@ -144,7 +125,8 @@ func userParts(
 			}
 			parts = append(parts, imageParts(version)...)
 		case llm.ToolResultBlock:
-			// 嵌套的工具结果：内容展平进当前这条消息，理由同 [toolResultText]。
+			// 嵌套的工具结果：一个工具可以把另一次调用的结果原样转发出来，那份
+			// 内容就以嵌套块的形式留在里面。不展平的话那段文字在线上整个消失。
 			parts = append(parts, userParts(typed.Content, images)...)
 		}
 		// 别的块（推理、以后合并进来的新块）不是用户输入的词汇，不写。

@@ -211,6 +211,10 @@ func newSession(id sessionlog.SessionID, options Options, restore bool) (*Sessio
 		if err != nil {
 			return nil, err
 		}
+		// 血统边界的起点在这里盖，而不是在每一处合成头的地方各写一遍：这是新建
+		// 这条路上唯一一个同时看得见 baseSeq 和头的地方。恢复那条路不盖——那份头
+		// 是当初存下来的，它自己带着建会话那天的起点。
+		header.SeedBaseSeq = baseSeq
 		session.header = header
 	}
 
@@ -358,6 +362,11 @@ func (s *Session) SurfaceReplaceGeneration() int {
 //
 // 出错时日志一动不动。会出错的是：负载排不成 JSON、旧格式的请求头词汇、
 // 表面契约不成立、以及在这道接受／发布边界还开着的时候重入。
+//
+// 新增: 进来的那条 candidate 会被复制一份才入日志，所以调用方手上那份负载之后
+// 怎么动都碰不到日志。**交回来的那一条反过来**：它的 Data 就是日志里那一份，
+// 和 [Session.Events]、[EventObserver] 是同一条契约——当只读的，要改先
+// [github.com/snight1983/ds-harness-go/sessionlog.Event.Clone]。
 func (s *Session) Append(candidate sessionlog.Event) (sessionlog.Event, error) {
 	if candidate.Seq != 0 || candidate.Time != 0 {
 		// 新增: DSH 那个签名根本给不出这两个字段。Go 里能给，而**默默盖掉**

@@ -4,8 +4,9 @@
 // 不一样。如果它抓不住编造的出处，那它就只是一段让人安心的装饰——比没有更糟，
 // 因为它会让人以为这件事已经被管住了。
 //
-// 所以这里逐条钉住五种情况：真引用放过、文件不存在抓住、行号越界抓住、
-// 文档注释里的示例不算数、字符串字面量里长得像注释的内容不算数。
+// 所以这里逐条钉住这几种情况：真引用放过、文件不存在抓住、行号越界抓住、
+// 不带行号的那种照样要数要验、文档注释里的示例不算数、
+// 字符串字面量里长得像注释的内容不算数。
 package main
 
 import (
@@ -72,6 +73,145 @@ func Added() {}
 	if len(problems) != 0 {
 		t.Errorf("如实的引用不该被挑出问题，实际 %v", problems)
 	}
+}
+
+// TestProvenanceCountsAndChecksCitationsWithoutLineNumbers 钉住第三个真实发生过的
+// bug，也是这三个里危害最大的一个。
+//
+// 正则曾经写成 `(\S+):(\d+)`，路径后面**必须**跟行号才算数。于是仓库里两百多条
+// 只写路径的引用整条匹配不上：既不计数，也不验出处。发现它是因为往一个新拆出来的
+// 文件头上写了一条凭空编的出处，DSH 里根本没有那个文件，门禁照样全绿。
+//
+// 一道能被这样绕过去的门禁，它给的「出处全部存在」是假话——而假话比没有更糟，
+// 因为人会拿它当已经核对过的证据。
+func TestProvenanceCountsAndChecksCitationsWithoutLineNumbers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("出处存在就放过", func(t *testing.T) {
+		t.Parallel()
+
+		goRoot, dshRoot := provenanceFixture(t, `package ported
+
+// 源: packages/core/session/src/index.ts
+func Ported() {}
+`)
+
+		count, _, problems, err := checkProvenance(goRoot, dshRoot)
+		if err != nil {
+			t.Fatalf("checkProvenance() error = %v", err)
+		}
+		if count != 1 {
+			t.Errorf("不带行号的引用也该被数进来，实际数出 %d 条", count)
+		}
+		if len(problems) != 0 {
+			t.Errorf("出处存在就不该报问题，实际 %v", problems)
+		}
+	})
+
+	t.Run("出处不存在照样抓住", func(t *testing.T) {
+		t.Parallel()
+
+		goRoot, dshRoot := provenanceFixture(t, `package ported
+
+// 源: packages/core/session/src/does-not-exist.ts
+func Ported() {}
+`)
+
+		count, _, problems, err := checkProvenance(goRoot, dshRoot)
+		if err != nil {
+			t.Fatalf("checkProvenance() error = %v", err)
+		}
+		if count != 1 {
+			t.Errorf("不带行号的引用也该被数进来，实际数出 %d 条", count)
+		}
+		if len(problems) != 1 {
+			t.Fatalf("不带行号的编造出处本该被抓住，实际问题列表为 %v", problems)
+		}
+		if !strings.Contains(problems[0], "出处不存在") {
+			t.Errorf("报错该说清是出处不存在，实际 %q", problems[0])
+		}
+	})
+}
+
+// TestProvenanceChecksEveryCitationOnTheLine 钉住「一条注释引好几处」。
+//
+// 仓库里有不少 `// 源: a.ts、b.ts` 这样一行引两处的写法，后面还常跟一段中文说明
+// 在指哪一段。只认第一处的话，第二处等于没验；把说明里的中文一起吞进路径的话，
+// 第一处也验不成。所以边界靠 `packages/` 这个前缀找，不靠取到行尾。
+func TestProvenanceChecksEveryCitationOnTheLine(t *testing.T) {
+	t.Parallel()
+
+	goRoot, dshRoot := provenanceFixture(t, `package ported
+
+// 源: packages/core/session/src/index.ts:1-5、packages/core/session/src/gone.ts（那段折叠）
+func Ported() {}
+`)
+
+	count, _, problems, err := checkProvenance(goRoot, dshRoot)
+	if err != nil {
+		t.Fatalf("checkProvenance() error = %v", err)
+	}
+	// 一条注释算一条，哪怕它引了两处。
+	if count != 1 {
+		t.Errorf("应当数出 1 条源注释，实际 %d 条", count)
+	}
+	if len(problems) != 1 {
+		t.Fatalf("第二处出处不存在，本该被抓住，实际问题列表为 %v", problems)
+	}
+	if !strings.Contains(problems[0], "gone.ts") {
+		t.Errorf("报错该指向出问题的那一处，实际 %q", problems[0])
+	}
+	// 中文说明不能被吞进路径，否则第一处会被误报成「出处不存在」。
+	if strings.Contains(problems[0], "那段") {
+		t.Errorf("路径不该把后面的中文说明吞进去，实际 %q", problems[0])
+	}
+}
+
+// TestProvenanceHandlesDirectoryCitations 钉住「引的是一整个上游包」。
+//
+// `// 源: packages/skill/tool-skill` 这种指的是整个目录，没有行号可言，要放过；
+// 反过来给一个目录标行号是自相矛盾的，要抓住。
+func TestProvenanceHandlesDirectoryCitations(t *testing.T) {
+	t.Parallel()
+
+	t.Run("只写目录就放过", func(t *testing.T) {
+		t.Parallel()
+
+		goRoot, dshRoot := provenanceFixture(t, `package ported
+
+// 源: packages/core/session/src
+func Ported() {}
+`)
+
+		_, _, problems, err := checkProvenance(goRoot, dshRoot)
+		if err != nil {
+			t.Fatalf("checkProvenance() error = %v", err)
+		}
+		if len(problems) != 0 {
+			t.Errorf("引一整个目录不该报问题，实际 %v", problems)
+		}
+	})
+
+	t.Run("给目录标行号就抓住", func(t *testing.T) {
+		t.Parallel()
+
+		goRoot, dshRoot := provenanceFixture(t, `package ported
+
+// 源: packages/core/session/src:1-5
+func Ported() {}
+`)
+
+		_, _, problems, err := checkProvenance(goRoot, dshRoot)
+		if err != nil {
+			t.Fatalf("checkProvenance() error = %v", err)
+		}
+		if len(problems) != 1 {
+			t.Fatalf("给目录标行号本该被抓住，实际问题列表为 %v", problems)
+		}
+		if !strings.Contains(problems[0], "是目录") {
+			t.Errorf("报错该说清它是目录，实际 %q", problems[0])
+		}
+	})
 }
 
 // TestProvenanceCatchesAFabricatedFile 是这个检查器存在的核心理由。

@@ -19,7 +19,7 @@ import (
 )
 ```
 
-分发走标准 Go 模块代理，不提供 vendor 目录、不提供单独发布的子模块——`cmd/` 下的可执行文件和 `internal/devtools/` 下的门禁工具是 `package main`，`internal/` 下的包按语言规则外部进不来，其余 87 个包全部对外可引。
+分发走标准 Go 模块代理，不提供 vendor 目录、不提供单独发布的子模块——`cmd/` 下的可执行文件和 `internal/devtools/` 下的门禁工具是 `package main`，`internal/` 下的包按语言规则外部进不来（除了 `internal/devtools/`，还有几个只给自家子树用的：测试夹具 `adapter/datastore/internal/dbtest` 与 `feature/subagent/internal/providertest`，以及 `feature/subagent/internal/childseed`），其余 84 个包全部对外可引。
 
 **尚未打稳定版本 tag。** 在打 tag 之前，外部宿主用 `replace` 指到本地检出：
 
@@ -208,7 +208,7 @@ ds-harness-go/
 | == 适配层：生产后端实现 ==
 |-- adapter/
 |   |-- datastore/             唯一操作数据库的地方
-|   |   |-- dbtest/            挑选测试跑在哪种库上
+|   |   |-- internal/dbtest/   挑选测试跑在哪种库上
 |   |   |-- kvstore/           记录集接到通用键值后端
 |   |   `-- sessionstore/      日志集接到会话持久化后端
 |   |-- objectstore/           面向 S3、MinIO 的文件后端
@@ -226,7 +226,6 @@ ds-harness-go/
 |-- internal/devtools/         移植裁决与六道门禁
 |
 |-- cmd/                       可执行入口
-|-- example/                   可运行的最小宿主示例
 `-- docs/                      设计和能力映射文档
 ```
 
@@ -293,6 +292,8 @@ go run ./internal/devtools/portcheck
 go run ./internal/devtools/layercheck
 ```
 
+除了这串必跑的，仓库还维持 `staticcheck ./...` **零告警**。它不在上面那串里，因为它是一个 go.mod 之外的外部二进制（`go install honnef.co/go/tools/cmd/staticcheck@latest`），进门禁就等于要求每个人先装它。想跑就直接跑，配置在根目录的 `staticcheck.conf` 里：那份配置只关掉一条 `ST1005`，理由写在文件里；其余每一处例外都是代码里带理由的 `//lint:ignore`。
+
 这串命令同时由 `.github/workflows/ci.yml` 在每次 push 和 PR 上跑一遍，分成三个 job：`gates`（格式、构建、vet、测试、竞态、六道门禁）、`postgres`（起一个 `postgres:16` service container，跑那批只有真库才执行得到的后端契约）、`cross`（linux / darwin / windows 三个目标各编一次）。分开是因为它们红的时候含义不同：代码有问题、真库跑不通、换个平台编不过，混在一个 job 里说不清是哪一类。
 
 `portcheck` 的溯源注释验真需要 DSH 上游快照，路径由 `DSH_ROOT` 环境变量给出。CI 上没有那份快照，所以显式传 `-no-provenance` 只跑裁决表门禁；工具会打一行横幅说明这一轮没有对过源码，不静默降级。
@@ -316,7 +317,7 @@ go run ./internal/devtools/layercheck
 - 按通用服务端 Agent 运行时是否需要该能力决定范围，不按某个业务项目裁剪。
 - Go 有原生等价机制时使用 Go 机制，不复制 TypeScript 基础设施。
 - 运行时接口与具体后端分离，宿主决定模型、存储、对象存储和传输实现。
-- 源码使用 `// 源: packages/...:行号` 或 `// 新增: 理由` 记录实现依据，并由 `internal/devtools/portcheck` 校验。
+- 源码使用 `// 源: packages/...:行号` 或 `// 新增: 理由` 记录实现依据，并由 `internal/devtools/portcheck` 校验。行号选填，指整个文件或整个上游包时只写路径；一行可以引好几处，每一处都会被验。
 
 ## 许可证
 

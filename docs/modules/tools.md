@@ -1,6 +1,6 @@
 # tools
 
-本文只讲 `tools` 一个包。用它注册进去的那些工具——todo、goal、schedule、MCP 桥接、子 agent 控制、技能调用——各有各的文档，不在这里。审批的实现方 `interaction/userapproval`、超时和重复提醒 `guard/*` 同理。
+本文只讲 `tools` 一个包。用它注册进去的那些工具——todo、goal、schedule、MCP 桥接、子 agent 控制、技能调用——各有各的文档，不在这里。审批的实现方 `feature/interaction/userapproval`、超时和重复提醒 `guard/*` 同理。
 
 ---
 
@@ -138,7 +138,7 @@ graph LR
 
 一个进程里活着很多 agent，agent 挂在预设下面。工具、限制、守卫全都按这条链继承。
 
-**自己注册的不受限制影响。** 继承面要过整条链上的全部限制，但这个作用域自己那一层注册的工具直接盖上去，一条也不过滤。这条豁免是「按子 agent 发能力清单」能成立的前提：`subagent/inprocessdriver` 把子 agent 的结构化输出工具注册进子 agent 自己那一层（`structured.go:226`），而 `feature/subagent/childagent.go:248` 那份点名「这个孩子能用哪些能力」的过滤器绝不能把它答话用的机器一起摘掉。
+**自己注册的不受限制影响。** 继承面要过整条链上的全部限制，但这个作用域自己那一层注册的工具直接盖上去，一条也不过滤。这条豁免是「按子 agent 发能力清单」能成立的前提：`feature/subagent/inprocessdriver` 把子 agent 的结构化输出工具注册进子 agent 自己那一层（`structured.go:226`），而 `feature/subagent/childagent.go:248` 那份点名「这个孩子能用哪些能力」的过滤器绝不能把它答话用的机器一起摘掉。
 
 `deepseek-harness-dsh-v0.1.2-alpha.3` 之前的版本把这条豁免读成「全局层豁免」而不是「自己那层豁免」。工具都挂在宿主装配里时两者等价；等预设把工具搬到 agent 平面上，它们就变成了**祖先**贡献，于是子 agent 的过滤器悄悄地什么也不再约束。本包按订正后的语义实现。
 
@@ -302,8 +302,8 @@ graph LR
 
 - **不提供任何具体工具。** 一个都没有。
 - **不做鉴权。** 注册不是授权，审批只决定这一次调用放不放行。
-- **不实现审批。** `Approval` 是接口，实现在 `interaction/userapproval`。
-- **不执行 `Definition.Timeout`。** 那由 `guard/timeoutpolicy` 那条绕派发规则做。
+- **不实现审批。** `Approval` 是接口，实现在 `feature/interaction/userapproval`。
+- **不执行 `Definition.Timeout`。** 那由 `feature/guard/timeoutpolicy` 那条绕派发规则做。
 - **不决定并行度。** `ExecutionMode` 只答一次调用能不能重叠，一批能同时跑几个由 `harness/agentloop` 定。
 - **不强杀不合作的执行体。** 取消是协作式的。
 - **不做 PTC（`run_code`）。** `deepseek-harness-dsh-v0.1.2-alpha.3` 那一整块整块不移，理由见 `docs/portmap/decisions.md`。
@@ -317,13 +317,13 @@ graph LR
 | 用的是哪一面 | 引用方 | 数量 |
 |---|---|---|
 | **注册工具** | goaltool、askuser、jobstool、mcp、planmode、schedule、querytool、skilltool、controltool、inprocessdriver、subagenttool、todo、toolralph | 13 处 `Register` |
-| **构造 Definition** | 上面那些，加 `subagent/reporttool` | 14 个包 |
-| **绕派发** | `guard/timeoutpolicy`、`feature/checkpointpolicy` | 2 处 |
-| **执行后** | `guard/repeattoolreminder`、`feature/spillpolicy` | 2 处 |
-| **结果观察** | `context/instructions`、`subagent/inprocessdriver` | 2 处 |
-| **执行前** | `jobs/jobstool` | 1 处 |
+| **构造 Definition** | 上面那些，加 `feature/subagent/reporttool` | 14 个包 |
+| **绕派发** | `feature/guard/timeoutpolicy`、`feature/checkpointpolicy` | 2 处 |
+| **执行后** | `feature/guard/repeattoolreminder`、`feature/spillpolicy` | 2 处 |
+| **结果观察** | `feature/context/instructions`、`feature/subagent/inprocessdriver` | 2 处 |
+| **执行前** | `feature/jobs/jobstool` | 1 处 |
 | **限制** | `feature/subagent` | 1 处 |
-| **守卫** | `subagent/inprocessdriver` | 1 处 |
+| **守卫** | `feature/subagent/inprocessdriver` | 1 处 |
 | **四段管线** | `harness/agentloop/toolcalls.go` | 唯一的一处 |
 | **`Runtime.Execute`** | **没有调用方** | 0 |
 | **`Runtime.Schemas`** | **没有调用方** | 0 |

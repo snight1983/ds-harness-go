@@ -61,6 +61,8 @@ type pendingCallChange int
 
 const (
 	// pendingNone 不动那个集合。
+	//
+	//lint:ignore U1000 零值要有名字：删掉它后面三个的 iota 全部错位一格
 	pendingNone pendingCallChange = iota
 	// pendingAdd 加一个调用。
 	pendingAdd

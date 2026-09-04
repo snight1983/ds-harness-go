@@ -31,7 +31,7 @@ const (
 var exemptPrefixes = []string{
 	// 数据库测试夹具：起一个临时 SQLite 文件再删掉。它必须供别的包的测试
 	// import，所以不能写成 _test.go，于是躲不进「测试不查」那一条。
-	"adapter/datastore/dbtest/",
+	"adapter/datastore/internal/dbtest/",
 	// 快照测试用的假模型：从磁盘读回放脚本。那些脚本是仓库里的测试数据，
 	// 不是这个服务的运行时状态，自陈见 feature/replay/doc.go。
 	"feature/replay/",

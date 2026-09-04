@@ -104,6 +104,7 @@ func Test重开同一份介质拿回同一个实例标识(t *testing.T) {
 
 // 两份各自独立的介质各自盖各自的实例标识。撞上的话，令牌就不再是来源限定的了。
 func Test两份介质的实例标识不一样(t *testing.T) {
+	//lint:ignore SA4000 两边字面一样，跑的却是两次独立的 newMedium——这正是本行要验的
 	if newMedium(t).InstanceID() == newMedium(t).InstanceID() {
 		t.Fatal("两份介质盖出了同一个实例标识")
 	}

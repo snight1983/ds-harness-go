@@ -89,9 +89,9 @@ stateDiagram-v2
 
 | 包 | 能力 |
 |---|---|
-| `subagent/subagenttool` | 创建或继续子 Agent，并按配置选择同步等待或后台运行 |
-| `subagent/controltool` | 列出子树、发送消息、取消或控制已有子 Agent |
-| `subagent/reporttool` | 子 Agent 向父 Agent提交结构化阶段报告 |
+| `feature/subagent/subagenttool` | 创建或继续子 Agent，并按配置选择同步等待或后台运行 |
+| `feature/subagent/controltool` | 列出子树、发送消息、取消或控制已有子 Agent |
+| `feature/subagent/reporttool` | 子 Agent 向父 Agent提交结构化阶段报告 |
 
 工具只暴露当前调用者拥有或可见的子 Agent。运行 ID、会话 ID 和父子归属不能由模型任意伪造跨越作用域。
 
@@ -118,12 +118,14 @@ stateDiagram-v2
 | 路径 | 内容 |
 |---|---|
 | `feature/subagent/` | Runtime、Provider/Run 契约、父子描述、查询和续行 |
-| `subagent/inprocessdriver/` | 进程内 Agent 创建、等待、结构化结果和释放 |
-| `subagent/spawninprocess/` | 新会话 Provider |
-| `subagent/forkinprocess/` | 会话分叉 Provider |
-| `subagent/subagenttool/` | 派发工具 |
-| `subagent/controltool/` | 列表与控制工具 |
-| `subagent/reporttool/` | 子 Agent 报告工具 |
+| `feature/subagent/inprocessdriver/` | 进程内 Agent 创建、等待、结构化结果和释放 |
+| `feature/subagent/spawninprocess/` | 新会话 Provider |
+| `feature/subagent/forkinprocess/` | 会话分叉 Provider |
+| `feature/subagent/subagenttool/` | 派发工具 |
+| `feature/subagent/controltool/` | 列表与控制工具 |
+| `feature/subagent/reporttool/` | 子 Agent 报告工具 |
+| `feature/subagent/internal/childseed/` | 派发策略怎么落到孩子那条日志上，续行激活和进程内驱动共用 |
+| `feature/subagent/internal/providertest/` | Provider 契约夹具，只给本子树的测试用 |
 
 ## 深入阅读
 

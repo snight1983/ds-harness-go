@@ -397,7 +397,7 @@ func (r *Runtime) warn(what string, err error) {
 // 一条坏掉的提醒流不该把整个 agent 拖下水。
 func (r *Runtime) readFolded() (Folded, bool) {
 	session := r.agent.Session()
-	folded, err := FoldEvents(session.Events(), session.Header().SeedLength)
+	folded, err := FoldEvents(session.Events(), session.Header())
 	if err != nil {
 		r.mutex.Lock()
 		r.faulted = true

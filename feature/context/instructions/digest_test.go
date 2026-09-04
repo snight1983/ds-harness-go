@@ -22,6 +22,7 @@ func TestContentDigest是四十位小写十六进制(t *testing.T) {
 }
 
 func TestContentDigest同内容同摘要不同内容不同摘要(t *testing.T) {
+	//lint:ignore SA4000 两边写成一样的就是本行要验的：同一段内容必须算出同一个摘要
 	if ContentDigest("a") != ContentDigest("a") {
 		t.Fatal("同一段内容必须算出同一个摘要")
 	}

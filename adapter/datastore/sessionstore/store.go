@@ -63,7 +63,10 @@ func New(ctx context.Context, deps Deps, config Config) (*Store, error) {
 			MaxStoredEvents:          config.MaxStoredEvents,
 		})
 	if err != nil {
-		return nil, err
+		// 编排层建不起来时这道介质就没人收了：平时收它的是
+		// [persistence.Coordinator.Install] 那条排空路径，而它压根没生出来。
+		// 数据库连接池不会自己散，漏一次就一直占着。
+		return nil, errors.Join(err, backend.Close(ctx))
 	}
 	return &Store{backend: backend, coordinator: coordinator}, nil
 }

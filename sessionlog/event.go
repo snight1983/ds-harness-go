@@ -252,3 +252,24 @@ func LogBaseSeq(events []Event) int {
 	}
 	return events[0].Seq
 }
+
+// SeqIndex 把一条事件的 seq 换成它在这一整段日志里的下标。
+//
+// 新增: 上游全程直接写 `events[seq]`——它的日志从 0 起、一条不删，seq 和下标是
+// 同一个数。本仓库的日志会从最老的一头弹出事件（见 docs/session-log-limit.md），
+// 两者从此差着一个起点，而且这个差值会随着弹出越变越大。凡是手里攥着一个 seq
+// 要去取事件的地方都得先过这里。
+//
+// 第二个返回值为假说的是「这条 seq 不在这一段里」，它涵盖两种情形：被弹掉了
+// （seq 比起点小）和还没写（seq 越过末尾）。本函数不替调用方区分这两者——要分的
+// 自己比一次 [LogBaseSeq]，绝大多数调用方对它们的处置本来就相同。
+//
+// 减完还核一遍 `events[index].Seq == seq`：起点是从第一条事件读出来的，那一段
+// 中间要是缺了一条，光靠减法算出来的下标会不动声色地指到隔壁那条上去。
+func SeqIndex(events []Event, seq int) (int, bool) {
+	index := seq - LogBaseSeq(events)
+	if index < 0 || index >= len(events) || events[index].Seq != seq {
+		return 0, false
+	}
+	return index, true
+}

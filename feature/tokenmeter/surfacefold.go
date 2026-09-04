@@ -39,7 +39,10 @@ type surfaceTokenFold struct {
 // 派生不出消息的事件（内容为空、只为携带用量而存在的那条 assistant/message）
 // 估价为 0，但**照样占一个表面节点**：它在表面上是真实存在的一格，
 // 压缩那边要按格数和 seq 去对表。
-func foldSurfaceTokens(nodes []SurfaceNode, event sessionlog.Event) (surfaceTokenFold, error) {
+//
+// baseSeq 是这一段日志的起点，只在一次替换的端点定位不到时用得上，理由见下面
+// 那段注释。
+func foldSurfaceTokens(nodes []SurfaceNode, event sessionlog.Event, baseSeq int) (surfaceTokenFold, error) {
 	operation, eligible, err := sessionlog.SurfaceOpOf(event)
 	if err != nil {
 		return surfaceTokenFold{}, err
@@ -75,12 +78,43 @@ func foldSurfaceTokens(nodes []SurfaceNode, event sessionlog.Event) (surfaceToke
 			"token 表面：seq %d 带的表面操作认不得：%q", event.Seq, operation.SurfaceOpKind())
 	}
 
-	// 区间的两端都必须是当前表面上真实存在的节点，而且起点不能在终点后面。
-	// 对不上说明这份节点表算的根本不是当前这个表面——继续折下去只会把一个
-	// 错得离谱的数悄悄传下去，所以在这里断掉。
+	// 一个端点定位不到得先分两种（docs/session-log-limit.md 原则第 4 条）：它落在
+	// baseSeq 之前，那是被 FIFO 弹掉了，正常损耗；它不小于 baseSeq 却仍然不在表面
+	// 上，才是这份节点表算的根本不是当前这个表面——那种情况继续折下去只会把一个
+	// 错得离谱的数悄悄传下去，所以照旧在这里断掉。
+	//
+	// 新增: 这条降级是照 [github.com/snight1983/ds-harness-go/sessionlog] 那份表面
+	// 折叠（surface.go 的 replacementRange）已经定下的先例做的。同一件事在本仓库
+	// 有两份实现是**故意**的（理由见本文件开头），可它们对「日志会被弹头」的认识
+	// 必须一致——只有那一份改了的话，一次压缩过、又活得够久的会话会算得出消息、
+	// 却算不出它值多少 token。
 	startIndex := indexOfSeq(nodes, replace.Start)
+	if startIndex < 0 {
+		if replace.Start >= baseSeq {
+			return surfaceTokenFold{}, fmt.Errorf(
+				"token 表面：seq %d 的替换声明的起始 seq %d 不在表面上",
+				event.Seq, replace.Start)
+		}
+		// 起点被弹掉时区间往前收到表面最前端：现存每个节点的 seq 都不小于 baseSeq，
+		// 也就都晚于那个被弹掉的起点，所以它们要么本来就在区间里、要么在它右边，
+		// 右边那一半由终点的下标切掉。
+		startIndex = 0
+	}
 	endIndex := indexOfSeq(nodes, replace.End)
-	if startIndex < 0 || endIndex < 0 || startIndex > endIndex {
+	if endIndex < 0 {
+		if replace.End >= baseSeq {
+			return surfaceTokenFold{}, fmt.Errorf(
+				"token 表面：seq %d 的替换声明的结束 seq %d 不在表面上",
+				event.Seq, replace.End)
+		}
+		// 终点也被弹掉了（这时起点必然也被弹掉了），整个区间在表面上一点不剩，
+		// 这次替换降级成一次追加：没有节点被换走，所以净变化就是它自己的估价。
+		next := make([]SurfaceNode, len(nodes), len(nodes)+1)
+		copy(next, nodes)
+		next = append(next, SurfaceNode{Seq: event.Seq, Tokens: tokens})
+		return surfaceTokenFold{tokens: tokens, nodes: next, deltaTokens: tokens}, nil
+	}
+	if startIndex > endIndex {
 		return surfaceTokenFold{}, fmt.Errorf(
 			"token 表面：seq %d 的替换声明的当前区间 %d-%d 在表面上不成立",
 			event.Seq, replace.Start, replace.End)

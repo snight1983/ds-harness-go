@@ -824,6 +824,37 @@ func TestDetachWritesSynchronouslyAndDropsTheBookkeeping(t *testing.T) {
 	}
 }
 
+func TestDetachAlsoDropsTheRegistryCellsForThatSession(t *testing.T) {
+	t.Parallel()
+
+	// 这里是唯一一处同时握着注册表、又知道「这个会话不再是活的」的地方。不删那格，
+	// 一台长期在跑的服务每接一个会话就多留一份**每个单元一份**的状态，只增不减。
+	inits := 0
+	f := newFixture(t, 1000, time.Hour)
+	mustRegister(t, f.registry, initCountingUnit("count", &inits))
+
+	live := newLive("s1", 7, userEvent(0))
+	f.cache.Observe(live, live.events[0])
+	f.registry.Snapshot(live)
+	if inits != 1 {
+		t.Fatalf("头一次折该开一格，实际折了 %d 次", inits)
+	}
+	// 再读一次不该重折：那一格还在。
+	f.registry.Snapshot(live)
+	if inits != 1 {
+		t.Fatalf("那一格还在，不该重折，实际折了 %d 次", inits)
+	}
+
+	if err := f.cache.Detach(context.Background(), live); err != nil {
+		t.Fatalf("脱离不该失败：%v", err)
+	}
+	// 那格没了，所以再碰一次这个会话就得从头折。
+	f.registry.Snapshot(live)
+	if inits != 2 {
+		t.Fatalf("脱离之后该重折，实际总共折了 %d 次", inits)
+	}
+}
+
 func TestDetachHandsTheFailureBackAndStillDropsTheBookkeeping(t *testing.T) {
 	t.Parallel()
 

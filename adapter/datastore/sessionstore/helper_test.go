@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/adapter/datastore"
-	"github.com/snight1983/ds-harness-go/adapter/datastore/dbtest"
+	"github.com/snight1983/ds-harness-go/adapter/datastore/internal/dbtest"
 	coresession "github.com/snight1983/ds-harness-go/harness/session"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/sessionlog"

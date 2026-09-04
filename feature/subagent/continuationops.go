@@ -100,7 +100,7 @@ func (m *ContinuationManager) StartContinuable(
 		return ContinuableStart{}, err
 	}
 	lineageSeedLength := len(prepared.Seed)
-	seed, err := SeedDescriptorTurn(childID, prepared.Seed, descriptor)
+	seed, err := SeedDescriptorTurn(childID, prepared.Seed, prepared.SeedBaseSeq, descriptor)
 	if err != nil {
 		return ContinuableStart{}, err
 	}
@@ -133,6 +133,7 @@ func (m *ContinuationManager) StartContinuable(
 		parent:   parent,
 		create: &materializeCreate{
 			seed:              seed,
+			baseSeq:           prepared.SeedBaseSeq,
 			meta:              ChildSessionMeta(parent, childDepth, lineageSeedLength, m.deps.Composition.Presets),
 			delegatedPolicies: delegatedPolicies,
 		},

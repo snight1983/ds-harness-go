@@ -112,7 +112,7 @@ sequenceDiagram
 - 读取可以通过 Projector 生成特定模型或协议需要的表示。
 - 图片不可用时返回稳定错误码，由协议层决定拒绝请求还是降级为文本诊断。
 
-`attachment/imagestore` 是它建在 `fs.FileSystem` 上的实现：内容寻址，哈希既是名字也是唯一判据，同一张图存多少次都只占一份，读回时逐字节核对。细节见[附件与图片](attachment.md)。
+`adapter/imagestore` 是它建在 `fs.FileSystem` 上的实现：内容寻址，哈希既是名字也是唯一判据，同一张图存多少次都只占一份，读回时逐字节核对。细节见[附件与图片](attachment.md)。
 
 附件引用可以进入会话事件，敏感原始数据的保留期限、访问控制和删除策略由 Store 背后那套介质及宿主决定。
 
@@ -156,7 +156,7 @@ sequenceDiagram
 | `fs/` | 执行世界文件接口、路径与策略 |
 | `adapter/objectstore/` | 对象存储文件实现 |
 | `attachment/` | 图片准入、保存和请求表示 |
-| `attachment/imagestore/` | 建在文件系统接缝上的内容寻址图片实现 |
+| `adapter/imagestore/` | 建在文件系统接缝上的内容寻址图片实现 |
 | `credentials/` | 凭据 Provider、记录和变化通知 |
 
 ## 深入阅读

@@ -2,7 +2,7 @@
 
 ## 定位
 
-`context/instructions`、`context/sessionref` 和 `context/timecontext` 在每一步模型请求前生成可追溯上下文：工作区指令、被引用会话和当前时间。三者都把结果写成带来源的消息，并通过事件日志决定何时重算。
+`feature/context/instructions`、`feature/context/sessionref` 和 `feature/context/timecontext` 在每一步模型请求前生成可追溯上下文：工作区指令、被引用会话和当前时间。三者都把结果写成带来源的消息，并通过事件日志决定何时重算。
 
 ## 架构
 
@@ -58,6 +58,6 @@
 
 ## 相关源码
 
-- `context/instructions/`
-- `context/sessionref/`
-- `context/timecontext/`
+- `feature/context/instructions/`
+- `feature/context/sessionref/`
+- `feature/context/timecontext/`

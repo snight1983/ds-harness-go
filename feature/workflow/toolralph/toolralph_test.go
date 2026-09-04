@@ -350,6 +350,7 @@ func TestRoundPromptCarriesTheHandoffAcrossRounds(t *testing.T) {
 func TestRoundPromptIsPure(t *testing.T) {
 	t.Parallel()
 	previous := goodReport()
+	//lint:ignore SA4000 两边写成一样的就是本用例要验的：这段提示词必须是纯的
 	if roundPrompt("目标", 3, 9, &previous) != roundPrompt("目标", 3, 9, &previous) {
 		t.Fatalf("同样的入参该排出同样的字")
 	}

@@ -34,10 +34,15 @@ func changeEvent(payload string) sessionlog.Event {
 	return sessionlog.Event{Type: EventChange, Data: json.RawMessage(payload)}
 }
 
+// seededHeader 是一份只交代种子边界的头，供只关心「切在哪儿」的用例用。
+func seededHeader(seedLength int) sessionlog.SessionHeader {
+	return sessionlog.SessionHeader{SeedLength: seedLength}
+}
+
 // mustFold 是那些「这一串一定折得动」的地方用的短路。
 func mustFold(t *testing.T, events []sessionlog.Event, seedLength int) Folded {
 	t.Helper()
-	folded, err := FoldEvents(events, seedLength)
+	folded, err := FoldEvents(events, seededHeader(seedLength))
 	if err != nil {
 		t.Fatalf("FoldEvents 本该成功，却报了 %v", err)
 	}
@@ -214,12 +219,48 @@ func TestFoldEventsKeepsCreationOrder(t *testing.T) {
 	}
 }
 
-func TestFoldEventsRejectsBadSeedLength(t *testing.T) {
+// 日志被弹过头之后，种子边界可以落在这一段的两头之外。两头都不是「日志坏了」，
+// 而是各有一个确切的答案，所以这里断言的是折出来的东西，不是一条错。
+func TestFoldEventsHandlesABoundaryOutsideTheLog(t *testing.T) {
 	events := []sessionlog.Event{changeEvent(createJSON(afterRecordJSON))}
-	_, err := FoldEvents(events, -1)
-	expectLogError(t, err, "负的 seedLength")
-	_, err = FoldEvents(events, 2)
-	expectLogError(t, err, "越过末尾的 seedLength")
+
+	// 边界落在末尾之后：这一段全是继承来的，一条都不归自己。
+	folded := mustFold(t, events, 2)
+	if len(folded.Active) != 0 {
+		t.Fatalf("边界越过末尾时本该一条都不折，实际 %+v", folded.Active)
+	}
+
+	// 边界落在起点之前——继承来的那一段已经被弹掉了，剩下的全归自己。
+	folded, err := FoldEvents([]sessionlog.Event{
+		{Seq: 7, Type: EventChange, Data: changeEvent(createJSON(afterRecordJSON)).Data},
+	}, sessionlog.SessionHeader{SeedBaseSeq: 0, SeedLength: 3})
+	if err != nil {
+		t.Fatalf("边界落在起点之前本该折得动，却报了 %v", err)
+	}
+	if len(folded.Active) != 1 {
+		t.Fatalf("边界落在起点之前时本该整段都归自己，实际 %+v", folded.Active)
+	}
+}
+
+// 种子边界是**绝对 seq**，不是条数。
+func TestFoldEventsMeasuresTheBoundaryFromTheLogStart(t *testing.T) {
+	// 这个会话当初从 seq 40 起、继承了 3 条，边界因此在 43。后来 40 被弹掉了，
+	// 现在日志从 41 起——边界离日志起点只剩 2 条，不是 SeedLength 那个 3。
+	inherited := changeEvent(createJSON(atRecordJSON))
+	own := changeEvent(createJSON(afterRecordJSON))
+	folded, err := FoldEvents([]sessionlog.Event{
+		{Seq: 41, Type: EventChange, Data: inherited.Data},
+		{Seq: 42, Type: EventChange, Data: inherited.Data},
+		{Seq: 43, Type: EventChange, Data: own.Data},
+	}, sessionlog.SessionHeader{SeedBaseSeq: 40, SeedLength: 3})
+	if err != nil {
+		t.Fatalf("本该折得动，却报了 %v", err)
+	}
+	// 两头都咬人：继承来的那两条是同一个 id 建了两次，切早了会以「重用的 id」失败；
+	// 拿 SeedLength 当下标切会切晚一条，连自己那条都折不进来。
+	if len(folded.Active) != 1 || folded.Active[0].ID != "schedule-1" {
+		t.Fatalf("折出来的是 %+v，本该只有边界之后那一条", folded.Active)
+	}
 }
 
 func TestFoldEventsRejectsReusedID(t *testing.T) {
@@ -228,23 +269,51 @@ func TestFoldEventsRejectsReusedID(t *testing.T) {
 		changeEvent(createJSON(afterRecordJSON)),
 		changeEvent(`{"version":1,"operation":"delete","id":"schedule-1"}`),
 		changeEvent(createJSON(afterRecordJSON)),
-	}, 0)
+	}, seededHeader(0))
 	expectLogError(t, err, "重用的 id")
 }
 
-func TestFoldEventsRejectsDanglingTargets(t *testing.T) {
-	_, err := FoldEvents([]sessionlog.Event{
-		changeEvent(`{"version":1,"operation":"delete","id":"schedule-9"}`),
-	}, 0)
-	expectLogError(t, err, "指向不活着记录的 delete")
+// 一条指向不活着记录的改动分两种，这里钉的是那道分界线。
+//
+// 那个 id 在这一段里被 create 过：它是先被删掉、后面又被指了一次，日志真的坏了。
+// 那个 id 在这一段里从没出现过：它的 create 被 FIFO 弹掉了（见
+// docs/session-log-limit.md），静默跳过——报错的代价是 [Runtime] 永久熄火，
+// 这个会话的提醒再也不响。
+func TestFoldEventsSplitsDanglingTargetsByWhetherTheIDWasEverCreated(t *testing.T) {
+	t.Run("这一段里创建过，照旧报错", func(t *testing.T) {
+		_, err := FoldEvents([]sessionlog.Event{
+			changeEvent(createJSON(afterRecordJSON)),
+			changeEvent(`{"version":1,"operation":"delete","id":"schedule-1"}`),
+			changeEvent(`{"version":1,"operation":"delete","id":"schedule-1"}`),
+		}, seededHeader(0))
+		expectLogError(t, err, "指向已经删掉那条记录的 delete")
 
-	_, err = FoldEvents([]sessionlog.Event{
-		changeEvent(`{"version":1,"operation":"dispatch","id":"schedule-9"}`),
-	}, 0)
-	expectLogError(t, err, "指向不活着记录的 dispatch")
+		_, err = FoldEvents([]sessionlog.Event{
+			changeEvent(createJSON(afterRecordJSON)),
+			changeEvent(`{"version":1,"operation":"delete","id":"schedule-1"}`),
+			changeEvent(`{"version":1,"operation":"dispatch","id":"schedule-1"}`),
+		}, seededHeader(0))
+		expectLogError(t, err, "指向已经删掉那条记录的 dispatch")
+	})
 
-	_, err = FoldEvents([]sessionlog.Event{changeEvent(`{`)}, 0)
-	expectLogError(t, err, "根本读不动的负载")
+	t.Run("创建被弹掉了，跳过而不是报错", func(t *testing.T) {
+		folded := mustFold(t, []sessionlog.Event{
+			changeEvent(`{"version":1,"operation":"delete","id":"schedule-9"}`),
+			changeEvent(`{"version":1,"operation":"dispatch","id":"schedule-9"}`),
+			changeEvent(createJSON(afterRecordJSON)),
+		}, 0)
+		if len(folded.Active) != 1 || folded.Active[0].ID != "schedule-1" {
+			t.Fatalf("折出来的是 %+v，本该只剩后面那条建起来的", folded.Active)
+		}
+		if len(folded.SeenIDs) != 1 {
+			t.Fatalf("用过的 id 是 %v，被弹掉的那个不该冒出来", folded.SeenIDs)
+		}
+	})
+
+	t.Run("根本读不动的负载照旧报错", func(t *testing.T) {
+		_, err := FoldEvents([]sessionlog.Event{changeEvent(`{`)}, seededHeader(0))
+		expectLogError(t, err, "根本读不动的负载")
+	})
 }
 
 func TestFoldEventsRemovesDeletedAndDispatchedOneShots(t *testing.T) {
@@ -283,20 +352,20 @@ func TestFoldEventsRejectsMismatchedDispatchShape(t *testing.T) {
 		changeEvent(createJSON(afterRecordJSON)),
 		changeEvent(`{"version":1,"operation":"dispatch","id":"schedule-1",` +
 			`"acceptedAt":"2026-08-30T12:00:00.000Z"}`),
-	}, 0)
+	}, seededHeader(0))
 	expectLogError(t, err, "一次性提醒带了 acceptedAt")
 
 	_, err = FoldEvents([]sessionlog.Event{
 		changeEvent(createJSON(everyRecordJSON)),
 		changeEvent(`{"version":1,"operation":"dispatch","id":"schedule-3"}`),
-	}, 0)
+	}, seededHeader(0))
 	expectLogError(t, err, "固定频率提醒少了 acceptedAt")
 
 	_, err = FoldEvents([]sessionlog.Event{
 		changeEvent(createJSON(everyRecordJSON)),
 		changeEvent(`{"version":1,"operation":"dispatch","id":"schedule-3",` +
 			`"acceptedAt":"2026-08-30T11:00:00.000Z"}`),
-	}, 0)
+	}, seededHeader(0))
 	expectLogError(t, err, "早于当前 scheduledAt 的 acceptedAt")
 }
 

@@ -49,7 +49,7 @@
 
 两条规则：不许调 `os` 包里那些碰文件系统的函数（打开、读写、建删、改名、取工作目录，完整名单在 `internal/devtools/oscheck/check.go` 的 `bannedOSFuncs`），不许 import `path/filepath` 和 `io/ioutil`。`os` 的其余部分不管——`os.Getenv`、`os.Exit`、`os.Stdout` 和磁盘没有关系。`path/filepath` 是宿主机路径的语法（盘符、反斜杠、符号链接），本仓库的路径一律斜杠分隔、由后端解释，拼路径用 `path`。
 
-只查非 `_test.go` 的文件：测试要造夹具、要临时目录，那是测试进程自己的事。分区同样按路径：`internal/devtools/` 和 `cmd/` 整个放行（它们跑在本机上，是门禁工具和装配点，一个装配点从磁盘读一份配置文件正是它的活儿），其余按业务包管。豁免名单只有两项——`adapter/datastore/dbtest/`（数据库测试夹具，必须供别的包的测试 import，所以不能写成 `_test.go`）和 `feature/replay/`（快照测试用的假模型，从磁盘读回放脚本）。**这份名单是封闭的**；将来真写一个本地磁盘后端 `fs/localdisk` 时再加一条，那时它是唯一一个被允许碰宿主机磁盘的业务包，而这正是它存在的全部理由。
+只查非 `_test.go` 的文件：测试要造夹具、要临时目录，那是测试进程自己的事。分区同样按路径：`internal/devtools/` 和 `cmd/` 整个放行（它们跑在本机上，是门禁工具和装配点，一个装配点从磁盘读一份配置文件正是它的活儿），其余按业务包管。豁免名单只有两项——`adapter/datastore/internal/dbtest/`（数据库测试夹具，必须供别的包的测试 import，所以不能写成 `_test.go`）和 `feature/replay/`（快照测试用的假模型，从磁盘读回放脚本）。**这份名单是封闭的**；将来真写一个本地磁盘后端 `fs/localdisk` 时再加一条，那时它是唯一一个被允许碰宿主机磁盘的业务包，而这正是它存在的全部理由。
 
 ## 移植账本
 

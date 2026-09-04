@@ -49,7 +49,7 @@ Provider 代表具体 UI、协议桥或宿主回调。没有 Provider、调用�
 
 ## 相关源码
 
-- `interaction/commands/`
-- `interaction/userquestions/`
-- `interaction/askuser/`
-- `interaction/userapproval/`
+- `feature/interaction/commands/`
+- `feature/interaction/userquestions/`
+- `feature/interaction/askuser/`
+- `feature/interaction/userapproval/`

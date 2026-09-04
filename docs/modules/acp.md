@@ -59,7 +59,10 @@ Bridge ---- Peer
 ## 相关源码
 
 - `protocol/acp/config.go`
-- `protocol/acp/bridge.go`
+- `protocol/acp/bridge.go` —— 桥本身：攥着哪些会话、怎么装上去、握手与收摊
+- `protocol/acp/bridgesession.go` —— 会话台账：开、恢复、列出、关掉、配置项
+- `protocol/acp/bridgeprompt.go` —— 一次提示词从准入到结算的状态机
+- `protocol/acp/bridgeevents.go` —— 运行时那几条边翻成线上的话
 - `protocol/acp/content.go`
 - `protocol/acp/codec.go`
 - `protocol/acp/invariant.go`

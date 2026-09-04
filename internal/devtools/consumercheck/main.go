@@ -34,6 +34,7 @@ const consumerModule = "consumercheck.example/host"
 
 // namedImports 是生成的程序里要具名引的那几个包，它们不再进空引清单。
 var namedImports = map[string]string{
+	"github.com/snight1983/ds-harness-go/harness":             "harness",
 	"github.com/snight1983/ds-harness-go/harness/agentloop":   "agentloop",
 	"github.com/snight1983/ds-harness-go/scope":               "scope",
 	"github.com/snight1983/ds-harness-go/harness/session":     "coresession",
@@ -275,7 +276,7 @@ func materialize(directory, root, module string, packages []string) error {
 func renderProgram(packages []string) string {
 	var out strings.Builder
 	out.WriteString("// 由 internal/devtools/consumercheck 生成：一个仓库外的宿主。\n\npackage main\n\nimport (\n")
-	for _, standard := range []string{"context", "encoding/json", "fmt", "os"} {
+	for _, standard := range []string{"context", "encoding/json", "fmt", "iter", "os"} {
 		fmt.Fprintf(&out, "\t%q\n", standard)
 	}
 	out.WriteString("\n")
@@ -302,13 +303,24 @@ func renderProgram(packages []string) string {
 
 // consumerBody 是那个外部宿主的正文。
 //
-// 它做两件事。一是编译期那句断言：持久化编排器**自己**就满足 agent 工厂要的会话
+// 它做三件事。一是编译期那句断言：持久化编排器**自己**就满足 agent 工厂要的会话
 // 持久化。这条接缝一度装不起来（编排器交回准备期、工厂声明的是会话），而且两边
 // 各自的测试都绿着——外部装配方是唯一撞得上它的人，所以这句断言摆在这里。
-// 二是真的把最小闭环走一遍：建作用域、建会话存储、建会话、追加一条用户消息、
-// 读回来。只编译不跑的话，一个装配顺序上的错要到宿主上线才暴露。
+// 二是真的调一次 [github.com/snight1983/ds-harness-go/harness.New]：只用导出的构造
+// 函数、导出的选项字段和一个**外部自己实现**的 llm.Adapter，把那份最小闭环从仓库
+// 外面拼出来。某个构造函数收窄了、某个字段不导出了、某个接口多了一个方法，都在
+// 这里编译不过。三是把会话那条最小闭环走一遍：建作用域、建会话存储、建会话、
+// 追加一条用户消息、读回来。只编译不跑的话，一个装配顺序上的错要到宿主上线才暴露。
 const consumerBody = `
 var _ agentloop.SessionPersistence = (*persistence.Coordinator)(nil)
+
+// 外部宿主自己实现的模型适配器。它一个字节都不发——这里要证的是「这个接口小到
+// 外面实现得了」，不是模型能不能跑通。
+type outsideAdapter struct{}
+
+func (outsideAdapter) Stream(context.Context, llm.GenerateOptions) (iter.Seq2[llm.StreamChunk, error], error) {
+	return func(func(llm.StreamChunk, error) bool) {}, nil
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -319,6 +331,25 @@ func main() {
 
 func run() error {
 	ctx := context.Background()
+
+	assembled, teardown, err := harness.New(ctx, harness.Options{
+		Provider: "外部提供方",
+		Model:    "外部模型",
+		Adapter:  outsideAdapter{},
+	})
+	if err != nil {
+		return fmt.Errorf("从仓库外面装最小闭环失败：%w", err)
+	}
+	defer func() { _ = teardown(ctx) }()
+	if assembled.Agents == nil || assembled.Loop == nil || assembled.Sessions == nil {
+		return fmt.Errorf("装出来的闭环少了东西：%+v", assembled)
+	}
+	// 词汇里至少要有循环自己写的那几种，否则接上持久化之后这些事件在恢复时
+	// 会被判成不认识的类型——而那时离写下它已经隔了一次重启。
+	if !assembled.Vocabulary.Knows(sessionlog.EventUserMessage) {
+		return fmt.Errorf("装出来的词汇不认识用户消息：%v", assembled.Vocabulary.Types())
+	}
+
 	root := scope.NewRoot()
 	defer func() { _ = root.Dispose(ctx) }()
 

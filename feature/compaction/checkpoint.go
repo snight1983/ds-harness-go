@@ -60,10 +60,9 @@ func NewCheckpointSource(checkpoint CheckpointSource) (llm.PluginSource, error) 
 		return llm.PluginSource{}, fmt.Errorf("%w：压缩检查点的 compactionId 不能是空的",
 			ErrInvariantViolated)
 	}
-	extra, err := json.Marshal(checkpointExtra{
-		CompactionID:    checkpoint.CompactionID,
-		SourceCommandID: checkpoint.SourceCommandID,
-	})
+	// 直接转，不逐字段抄：[checkpointExtra] 就是这个类型在介质上的镜像，两边哪天
+	// 长得不一样了就该在这里编译不过；逐字段抄会把新字段悄悄漏在介质外面。
+	extra, err := json.Marshal(checkpointExtra(checkpoint))
 	if err != nil {
 		// 不可达：两个字段都是 string，排不出去的情况不存在。
 		return llm.PluginSource{}, fmt.Errorf("%w：压缩检查点的出处排不出去：%w",
@@ -106,8 +105,5 @@ func CheckpointSourceOf(source llm.MessageSource) (CheckpointSource, bool, error
 		return CheckpointSource{}, true, fmt.Errorf("%w：压缩检查点的出处读不回来：%w",
 			ErrMalformedEvent, err)
 	}
-	return CheckpointSource{
-		CompactionID:    extra.CompactionID,
-		SourceCommandID: extra.SourceCommandID,
-	}, true, nil
+	return CheckpointSource(extra), true, nil
 }

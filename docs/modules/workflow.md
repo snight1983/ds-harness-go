@@ -9,13 +9,13 @@
 | 后台作业 `jobs/*` | 进程内 Registry | Producer 启动、流式读取、等待或取消 |
 | 目标 `goal/*` | 会话事件日志 | Agent 空闲时按授权自动续推 |
 | 定时任务 `feature/schedule` | 会话事件日志 | 进程内定时器到期后向原会话投递 |
-| Ralph `workflow/toolralph` | 当前工具调用 | 每轮创建全新子 Agent，传递有界报告 |
+| Ralph `feature/workflow/toolralph` | 当前工具调用 | 每轮创建全新子 Agent，传递有界报告 |
 
 这些能力共享 Agent 和工具基础设施，但没有合并成一个万能工作流引擎。每种状态的耐久性、取消语义和权限边界不同。
 
 ## 后台作业
 
-`feature/jobs` 定义作业状态、快照、输出和 Registry 接口；`jobs/localjobs` 提供进程内实现；`jobs/jobstool` 暴露模型可用的查看、读取、等待和终止能力。
+`feature/jobs` 定义作业状态、快照、输出和 Registry 接口；`adapter/localjobs` 提供进程内实现；`feature/jobs/jobstool` 暴露模型可用的查看、读取、等待和终止能力。
 
 ```mermaid
 stateDiagram-v2
@@ -45,7 +45,7 @@ stateDiagram-v2
 
 自动续推授权是进程内状态，不落盘。恢复、分叉或换进程后目标默认不自动运行，必须显式 Resume，避免旧日志自动触发新行为。
 
-`goal/goalrounddriver` 在 Agent 真正空闲时排入下一轮提示，并在排队、认领、写入事件等边界反复确认目标仍有效。用户新消息、取消、阶段变化或轮数上限都会使本轮让步。`goaltool` 提供模型工具，`goalcommand` 提供宿主命令接入。
+`feature/goal/goalrounddriver` 在 Agent 真正空闲时排入下一轮提示，并在排队、认领、写入事件等边界反复确认目标仍有效。用户新消息、取消、阶段变化或轮数上限都会使本轮让步。`goaltool` 提供模型工具，`goalcommand` 提供宿主命令接入。
 
 ## 定时任务
 
@@ -62,7 +62,7 @@ stateDiagram-v2
 
 ## Ralph 工作流
 
-`workflow/toolralph` 面向一个不可变目标循环创建全新子 Agent。每轮只接收目标和上一轮的有界结构化报告，不继承前几轮聊天记录；长期事实放在共享工作区中。
+`feature/workflow/toolralph` 面向一个不可变目标循环创建全新子 Agent。每轮只接收目标和上一轮的有界结构化报告，不继承前几轮聊天记录；长期事实放在共享工作区中。
 
 ```mermaid
 flowchart LR
@@ -98,11 +98,11 @@ flowchart LR
 | 路径 | 内容 |
 |---|---|
 | `feature/jobs/` | 作业契约、状态和 Registry |
-| `jobs/localjobs/` | 进程内作业实现 |
-| `jobs/jobstool/` | 模型作业工具 |
+| `adapter/localjobs/` | 进程内作业实现 |
+| `feature/jobs/jobstool/` | 模型作业工具 |
 | `feature/goal/` | 目标事件、状态、revision 和服务 |
-| `goal/goalrounddriver/` | 空闲续推驱动 |
-| `goal/goaltool/`、`goal/goalcommand/` | 模型工具与宿主命令入口 |
+| `feature/goal/goalrounddriver/` | 空闲续推驱动 |
+| `feature/goal/goaltool/`、`feature/goal/goalcommand/` | 模型工具与宿主命令入口 |
 | `feature/schedule/` | 耐久计划、时间解析和投递运行时 |
 | `feature/workflow/toolralph/` | 固定多轮子 Agent 工作流 |
 

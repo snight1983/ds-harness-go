@@ -385,16 +385,30 @@ func dispatchedRecord(record Record, change Change) (Record, bool, error) {
 //
 // 源: packages/schedule/schedule/src/domain.ts:622-645（foldScheduleEvents）
 //
-// seedLength 是这条日志从父会话那里继承来的前缀长度：分叉出来的孩子不拥有父那一段
-// 提醒，也不该在自己这边把它们再响一遍。
+// header 定的是种子边界：分叉出来的孩子不拥有父那一段提醒，也不该在自己这边把
+// 它们再响一遍。
+//
+// 新增: DSH 收的是一个 seedLength 数字，因为它的日志从 0 起、一条不删，那个条数
+// 直接就是下标。本仓库的日志会从最老的一头被弹掉一截（见 docs/session-log-limit.md），
+// 条数和下标差着一个起点，所以这里收整份头，换算交给 [sessionlog.SeedSuffix]。
+// 顺带去掉了「seedLength 必须落在这条日志里」那条拒收：日志被弹过头之后边界落在
+// 日志起点**之前**是正常的，那意味着继承来的那一段已经不在了，剩下的全归自己。
+//
+// 新增: 同一条前提还管着「一条改动指向的记录不在活着的那批里」怎么办。DSH 一律
+// 判日志坏了，因为它的日志一条不删。本仓库的 FIFO 会把最老的 create 弹走而把后面
+// 那条 delete 或 dispatch 留下，于是那条改动指向的记录**从来没进过这一段**——
+// 这正是「定下来的」第 14 条说的那种损耗（被弹掉的 event 对应的状态丢了就丢了），
+// 静默跳过。反过来，那个 id 在这一段里出现过又指不着，才是日志真的坏了，照旧报错。
+// 这个区分靠 seen 就够：它记的是这一段里被 create 过的每一个 id，一个都不删。
+//
+// 不这么改的话代价是不可逆的：[Runtime] 折不动就永久熄火（runtime.go 的 faulted），
+// 于是默认那 1000 条上限一旦削掉某个会话最老的一条 create，这个会话的提醒**再也
+// 不响**，而且重启也救不回来。
 //
 // 新增: DSH 用一个 JS Map 同时管顺序和查找。Go 的 map 没有顺序，所以这里就是一个
 // 切片加线性查找——活着的提醒本来就是几条到几十条的量级，为它建一张索引表要多守
 // 一条「表和切片对得上」的不变量，那比线性扫贵。
-func FoldEvents(events []sessionlog.Event, seedLength int) (Folded, error) {
-	if seedLength < 0 || seedLength > len(events) {
-		return Folded{}, &LogError{Reason: "schedule 的 seedLength 必须落在这条日志里"}
-	}
+func FoldEvents(events []sessionlog.Event, header sessionlog.SessionHeader) (Folded, error) {
 	active := make([]Record, 0, 8)
 	seenIDs := make([]ID, 0, 8)
 	seen := make(map[ID]struct{}, 8)
@@ -406,7 +420,7 @@ func FoldEvents(events []sessionlog.Event, seedLength int) (Folded, error) {
 		}
 		return -1
 	}
-	for _, event := range events[seedLength:] {
+	for _, event := range sessionlog.SeedSuffix(events, header) {
 		if event.Type != EventChange {
 			continue
 		}
@@ -425,12 +439,18 @@ func FoldEvents(events []sessionlog.Event, seedLength int) (Folded, error) {
 		case OpDelete:
 			index := indexOf(change.ID)
 			if index < 0 {
+				if _, created := seen[change.ID]; !created {
+					continue
+				}
 				return Folded{}, &LogError{Reason: fmt.Sprintf("delete 指向一个不活着的 id %q", change.ID)}
 			}
 			active = append(active[:index], active[index+1:]...)
 		default:
 			index := indexOf(change.ID)
 			if index < 0 {
+				if _, created := seen[change.ID]; !created {
+					continue
+				}
 				return Folded{}, &LogError{Reason: fmt.Sprintf("dispatch 指向一个不活着的 id %q", change.ID)}
 			}
 			next, alive, err := dispatchedRecord(active[index], change)

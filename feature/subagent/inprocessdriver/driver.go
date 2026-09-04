@@ -15,8 +15,8 @@ import (
 
 	"github.com/snight1983/ds-harness-go/feature/interaction/userapproval"
 	"github.com/snight1983/ds-harness-go/feature/subagent"
+	"github.com/snight1983/ds-harness-go/feature/subagent/internal/childseed"
 	"github.com/snight1983/ds-harness-go/harness/agent"
-	coresession "github.com/snight1983/ds-harness-go/harness/session"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/scope"
 	"github.com/snight1983/ds-harness-go/sessionlog"
@@ -49,6 +49,12 @@ type RunOptions struct {
 	// **nil 和空切片不是一回事**（见 [github.com/snight1983/ds-harness-go/harness/session.Options.Seed]）：
 	// 前者是全新的孩子，后者是一段长度为零的继承前缀。
 	Seed []sessionlog.Event
+
+	// SeedBaseSeq 是 Seed 第一条应有的 seq；默认 0。
+	//
+	// 新增: 理由见 [github.com/snight1983/ds-harness-go/harness/agent.CreateOptions.BaseSeq]。
+	// 父会话的日志被弹过头时这段前缀不从 0 起。
+	SeedBaseSeq int
 }
 
 // StartInProcessRun 立起并驱动一个进程内的一次性孩子；交回的那一刻这个孩子已经
@@ -125,10 +131,10 @@ func StartInProcessRun(
 	// 新增: DSH 在 setup 里拿 `childCtx.agent.session` 现场追加那份派发策略。Go 的
 	// [github.com/snight1983/ds-harness-go/harness/agent.Setup] 只收作用域，那一刻会话还没登记进
 	// [github.com/snight1983/ds-harness-go/harness/session.Store]，所以改成在种子上排演一次——和
-	// [github.com/snight1983/ds-harness-go/feature/subagent.SeedDescriptorTurn] 完全同一条路子，理由
-	// 和那边的 seedWithDelegatedPolicies 逐字相同：那几条事件照样落在 SeedLength
-	// 边界**之后**，因此仍旧是这个孩子自己的历史，也照样在公布之前就定死了。
-	seed, err := seedWithDelegatedPolicies(childID, options.Seed, inherited)
+	// [github.com/snight1983/ds-harness-go/feature/subagent.SeedDescriptorTurn] 完全同一条路子：那几条
+	// 事件照样落在 SeedLength 边界**之后**，因此仍旧是这个孩子自己的历史，也照样在
+	// 公布之前就定死了。续行激活那条路走的是同一个函数。
+	seed, err := childseed.Seed(childID, options.Seed, options.SeedBaseSeq, inherited.ApprovalPolicy)
 	if err != nil {
 		return nil, err
 	}
@@ -136,6 +142,7 @@ func StartInProcessRun(
 	create := subagent.ChildSessionMeta(parent, childDepth, activationBoundary, services.Composition.Presets)
 	create.SessionID = childID
 	create.Seed = seed
+	create.BaseSeq = options.SeedBaseSeq
 	create.AgentOptions = subagent.ResolveChildAgentOptions(parent, request.AgentOptions)
 	create.Setup = setup
 
@@ -144,32 +151,6 @@ func StartInProcessRun(
 		return nil, err
 	}
 	return drivePublishedRun(ctx, handle, request.Prompt, childID, activationBoundary, structured), nil
-}
-
-// seedWithDelegatedPolicies 把那份派发策略以 `source: delegation` 折进孩子的创建
-// 种子；策略为空时原样交回。
-//
-// 源: packages/subagent/subagent-in-process-driver/src/index.ts:118
-//
-// 新增: 这是 github.com/snight1983/ds-harness-go/feature/subagent 里那个同名未导出函数的同一份判断。
-// 两处各写一遍而不是导出共用，是因为它交出去就成了这条接缝的公开面，而它其实是
-// 「Go 的 Setup 够不着会话」这个实现细节的补丁，不该被当成契约。
-func seedWithDelegatedPolicies(
-	childID sessionlog.SessionID,
-	seed []sessionlog.Event,
-	overrides subagent.DelegatedPolicyOverrides,
-) ([]sessionlog.Event, error) {
-	if overrides.ApprovalPolicy == "" {
-		return seed, nil
-	}
-	staged, err := coresession.NewSession(childID, coresession.Options{Seed: seed})
-	if err != nil {
-		return nil, fmt.Errorf("排演子 agent 派发策略种子失败：%w", err)
-	}
-	if err := subagent.AppendDelegatedPolicyOverrides(staged, overrides); err != nil {
-		return nil, fmt.Errorf("追加子 agent 派发策略失败：%w", err)
-	}
-	return staged.Events(), nil
 }
 
 // attachDescriptorAppend 在孩子的初始回合之内、它第一次请求之前，追加**恰好一条**

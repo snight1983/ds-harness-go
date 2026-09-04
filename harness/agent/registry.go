@@ -74,10 +74,22 @@ type CreateOptions struct {
 
 	// Seed 是回放／分叉用的初始历史。
 	//
-	// 一次分叉给的是父会话日志里一段**回合完整**的前缀：必须从 seq 0 起连续、
+	// 一次分叉给的是父会话日志里一段**回合完整**的前缀：必须从 BaseSeq 起连续、
 	// 只带无损 JSON、且没有开着的回合／步骤或者悬空的工具调用。工厂把它交给
 	// 会话那道耐久校验边界，在公布之前。
 	Seed []sessionlog.Event
+
+	// BaseSeq 是 Seed 第一条应有的 seq，也是这份日志的起点；默认 0。
+	//
+	// 新增: 上游没有这一条——它的日志从 0 起、一条不删，一段前缀永远从 0 起。
+	// 本仓库的日志会从最老的一头被弹掉一截（见 docs/session-log-limit.md），
+	// 而一次分叉继承的是来源那些事件**连同它们的 seq**，所以从一个被弹过的父
+	// 会话切出来的 Seed 不从 0 起。不把这个数带下去，会话那道 seed 校验会以
+	// 「seq 对不上、必须从 0 起连续」当场拒收——一个孩子会因为父亲活得够久
+	// 而生不出来。
+	//
+	// 取值就是父会话的 [github.com/snight1983/ds-harness-go/harness/session.Session.BaseSeq]。
+	BaseSeq int
 
 	// AgentOptions 是这个 agent 自己的提供方路由与模型。
 	AgentOptions Options

@@ -200,6 +200,46 @@ func TestUnwindIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestUnwindIsIdempotentUnderConcurrency 钉住那道幂等在多条线上同时进来时也成立。
+//
+// 上一条只在一条线上连调两次，那样一个裸布尔也过得了。真实的宿主是把它挂在 defer
+// 和某条关停路径上，两条常常在不同 goroutine 上撞在一起：裸布尔在那里既是数据竞争
+// （-race 会报），两边也会同时读到 false，把根作用域拆两遍。
+func TestUnwindIsIdempotentUnderConcurrency(t *testing.T) {
+	t.Parallel()
+
+	_, unwind, err := harness.New(t.Context(), harness.Options{
+		Provider: "甲",
+		Model:    "m-1",
+		Adapter:  &scriptedAdapter{reply: "好"},
+	})
+	if err != nil {
+		t.Fatalf("装最小闭环失败：%v", err)
+	}
+
+	const racers = 8
+	start := make(chan struct{})
+	errs := make(chan error, racers)
+	var group sync.WaitGroup
+	for range racers {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			<-start
+			errs <- unwind(context.Background())
+		}()
+	}
+	close(start)
+	group.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("并发拆除该条条都成功，实际 %v", err)
+		}
+	}
+}
+
 // TestAssembleRejectsIncompleteOptions 钉住三项必填缺一样就当场报错。
 //
 // 缺了它们装配其实还能拼完，错要到第一次真发请求时才炸——那时调用栈上已经没有

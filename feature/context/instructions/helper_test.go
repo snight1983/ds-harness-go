@@ -101,12 +101,6 @@ func (f *fakeFS) setVersion(p string, version fs.Version) *fakeFS {
 	return f
 }
 
-// setContent 只换内容、不动版本，用来造「版本没变但内容变了」。
-func (f *fakeFS) setContent(p string, content string) *fakeFS {
-	f.entries[path.Clean(p)].content = content
-	return f
-}
-
 // hideSize 让这个后端报不出某个文件的大小。
 func (f *fakeFS) hideSize(p string) *fakeFS {
 	f.entries[path.Clean(p)].sizeUnknown = true

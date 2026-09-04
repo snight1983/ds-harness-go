@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/feature/subagent"
-	"github.com/snight1983/ds-harness-go/feature/subagent/providertest"
+	"github.com/snight1983/ds-harness-go/feature/subagent/internal/providertest"
 	"github.com/snight1983/ds-harness-go/sessionlog"
 )
 
@@ -85,7 +85,10 @@ func TestCompletedTurnPrefixStopsAtTheLastCompletedTurn(t *testing.T) {
 			harness := providertest.New(t)
 			each.arrange(t, harness.Parent)
 
-			prefix := completedTurnPrefix(harness.Parent)
+			prefix, baseSeq := completedTurnPrefix(harness.Parent)
+			if baseSeq != 0 {
+				t.Fatalf("这个替身的日志没被弹过头，起点该是 0，实际 %d", baseSeq)
+			}
 			if len(prefix) != each.want {
 				t.Fatalf("前缀该有 %d 条，实际 %d 条", each.want, len(prefix))
 			}
@@ -143,6 +146,38 @@ func TestStartSeedsTheChildWithTheCompletedTurnPrefix(t *testing.T) {
 	}
 }
 
+// 从一个被弹过头的父分叉：那段前缀不从 0 起，起点必须跟着种子一起交到造法手上。
+// 漏掉它，孩子那道种子校验（它核的是每一条的 seq 都等于 baseSeq + 下标）会当场
+// 拒掉一段本来完好的历史，于是一次合法的分叉建不出孩子来。
+func TestStartCarriesTheLogStartOfATrimmedParent(t *testing.T) {
+	t.Parallel()
+
+	const base = 40
+	harness := providertest.New(t)
+	harness.RebaseParent(t, base)
+	harness.Parent.AppendCompletedTurn(t, 0)
+	harness.Parent.AppendOpenTurn(t, 1)
+
+	run, err := New("", harness.Services()).Start(t.Context(), harness.Request("干活", "fork"))
+	if err != nil {
+		t.Fatalf("开工失败：%v", err)
+	}
+	t.Cleanup(func() { _ = run.Dispose(t.Context()) })
+
+	created := harness.OnlyCreate(t)
+	if created.BaseSeq != base {
+		t.Fatalf("交给造法的起点该是 %d，实际 %d", base, created.BaseSeq)
+	}
+	if len(created.Seed) != 3 {
+		t.Fatalf("该拿 3 条种子建孩子，实际 %d 条", len(created.Seed))
+	}
+	for index, event := range created.Seed {
+		if want := base + index; event.Seq != want {
+			t.Fatalf("第 %d 条种子的 seq 该是 %d，实际 %d", index, want, event.Seq)
+		}
+	}
+}
+
 // 父那边一个回合都没完成时，fork 出来的孩子和 spawn 出来的一样是全新的。
 func TestStartCreatesAFreshChildWhenNoTurnHasCompleted(t *testing.T) {
 	t.Parallel()
@@ -164,7 +199,9 @@ func TestStartCreatesAFreshChildWhenNoTurnHasCompleted(t *testing.T) {
 func TestPrepareContinuableCapturesTheSamePrefix(t *testing.T) {
 	t.Parallel()
 
+	const base = 40
 	harness := providertest.New(t)
+	harness.RebaseParent(t, base)
 	harness.Parent.AppendCompletedTurn(t, 0)
 	harness.Parent.AppendOpenTurn(t, 1)
 
@@ -177,6 +214,11 @@ func TestPrepareContinuableCapturesTheSamePrefix(t *testing.T) {
 	}
 	if len(spec.Seed) != 3 {
 		t.Fatalf("该贡献 3 条种子，实际 %d 条", len(spec.Seed))
+	}
+	// 起点得跟着种子一起走：可续那条路比一次性那条多两场排演（描述符那一轮、
+	// 派发策略那一轮），两场都走真会话那道种子校验，少了它两场都过不去。
+	if spec.SeedBaseSeq != base {
+		t.Fatalf("种子起点该是 %d，实际 %d", base, spec.SeedBaseSeq)
 	}
 }
 

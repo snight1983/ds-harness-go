@@ -490,9 +490,13 @@ func TestDriveOnceStopsAtThePostBarrier(t *testing.T) {
 // ---- 熄火与不熄火 ----
 
 func TestReadFoldedLatchesFaultPermanently(t *testing.T) {
-	// 一条读不动的负载：折不动就永久熄火，而且**此后一次都不再折**。
+	// 同一条记录被删了两遍：折不动就永久熄火，而且**此后一次都不再折**。
 	world := newRuntimeWorld(t)
-	world.seed(`{"version":1,"operation":"delete","id":"ghost"}`)
+	world.seed(
+		createJSON(atRecordJSON),
+		`{"version":1,"operation":"delete","id":"schedule-2"}`,
+		`{"version":1,"operation":"delete","id":"schedule-2"}`,
+	)
 
 	world.drive()
 	if !world.faulted() {
@@ -667,7 +671,10 @@ func TestDispatchUnderClaimLatchesFaultWhenTheLogBreaksUnderTheClaim(t *testing.
 	world.seed(createJSON(atRecordJSON))
 	world.now = mustParseInstant(t, "2026-08-30T13:00:00.000Z")
 	world.owner.onMaintenance = func() {
-		world.seed(`{"version":1,"operation":"delete","id":"ghost"}`)
+		world.seed(
+			`{"version":1,"operation":"delete","id":"schedule-2"}`,
+			`{"version":1,"operation":"delete","id":"schedule-2"}`,
+		)
 	}
 
 	world.drive()

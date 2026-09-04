@@ -160,8 +160,13 @@ type ContinuableCreateRequest struct {
 type ContinuableCreateSpec struct {
 	// Seed 是要拿来给孩子会话做种的、父日志上那段已完成回合的前缀；
 	// nil 表示一个全新的孩子。持久契约和 [github.com/snight1983/ds-harness-go/harness/agent.CreateOptions]
-	// 的 Seed 一样：从 seq 0 起连续、无损 JSON、成对闭合。
+	// 的 Seed 一样：从 SeedBaseSeq 起连续、无损 JSON、成对闭合。
 	Seed []sessionlog.Event
+
+	// SeedBaseSeq 是 Seed 第一条应有的 seq；默认 0。
+	//
+	// 新增: 理由见 [github.com/snight1983/ds-harness-go/harness/agent.CreateOptions.BaseSeq]。
+	SeedBaseSeq int
 }
 
 // StopReason 说的是一次子 agent 运行为什么结束。

@@ -141,12 +141,6 @@ func (f *fakeFS) addFile(path string) {
 	f.files[f.canonical(path)] = true
 }
 
-func (f *fakeFS) alias(from, to string) {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
-	f.aliases[from] = to
-}
-
 func (f *fakeFS) failResolve(path string, err error) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()

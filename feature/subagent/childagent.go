@@ -11,11 +11,11 @@ package subagent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/snight1983/ds-harness-go/feature/interaction/userapproval"
 	"github.com/snight1983/ds-harness-go/feature/preset/agentpresets"
+	"github.com/snight1983/ds-harness-go/feature/subagent/internal/childseed"
 	"github.com/snight1983/ds-harness-go/harness/agent"
 	coresession "github.com/snight1983/ds-harness-go/harness/session"
 	"github.com/snight1983/ds-harness-go/harness/systemprompt"
@@ -292,29 +292,14 @@ func CaptureDelegatedPolicyOverrides(approval *userapproval.Service) DelegatedPo
 //
 // 源: packages/subagent/subagent/src/child-agent.ts:249-268（appendDelegatedPolicyOverrides）
 //
-// 新增: DSH 调的是 `childSession.append(type, data)`。Go 的
-// [github.com/snight1983/ds-harness-go/harness/session.Session.Append] 收的是一条 Data 已经是
-// json.RawMessage 的事件，所以负载在这里先编一次。
-// [github.com/snight1983/ds-harness-go/feature/interaction/userapproval.SetPolicy] 那条自由函数用不上：它写的
-// PolicyData 不带 Source，而 `delegation` 这个来源正是这几笔和一次运行期切换的
-// 唯一区别。
+// 新增: 追加本身落在 [github.com/snight1983/ds-harness-go/feature/subagent/internal/childseed] 里，
+// 因为进程内驱动那边要用同一份判断去排演种子。这里只把 [DelegatedPolicyOverrides]
+// 拆开——那个结构体是 DSH 的公开面（`src/index.ts` 转发过它），所以它留在这个包上。
 func AppendDelegatedPolicyOverrides(
 	childSession *coresession.Session,
 	overrides DelegatedPolicyOverrides,
 ) error {
-	if overrides.ApprovalPolicy == "" {
-		return nil
-	}
-	data, err := json.Marshal(userapproval.PolicyData{
-		Policy: overrides.ApprovalPolicy,
-		Source: userapproval.PolicySourceDelegation,
-	})
-	if err != nil {
-		// 走不到：PolicyData 两个字段都是字符串。照实转出去比断言它不会失败诚实。
-		return err
-	}
-	_, err = childSession.Append(sessionlog.Event{Type: userapproval.EventPolicy, Data: data})
-	return err
+	return childseed.AppendPolicy(childSession, overrides.ApprovalPolicy)
 }
 
 // ChildCreateInputs 是每一次进程内孩子创建都共有的身份与血统输入。

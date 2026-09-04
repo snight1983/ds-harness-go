@@ -207,7 +207,7 @@ func TestContextPressureProjectsForwardAndReactsToCompaction(t *testing.T) {
 		if !sessionlog.IsSurfaceEvent(event) {
 			continue
 		}
-		fold, err := foldSurfaceTokens(nodes, event)
+		fold, err := foldSurfaceTokens(nodes, event, 0)
 		if err != nil {
 			t.Fatalf("折不进来：%v", err)
 		}

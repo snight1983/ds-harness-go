@@ -46,6 +46,17 @@ type DisposedObserver func(session *Session)
 // 这次已经提交的追加。观察者 panic 被逐个兜住记日志。
 //
 // 持久化插件就挂在这上面——所以它不能阻塞，热路径不为 I/O 等待，缓冲是插件自己的事。
+//
+// 新增: **递进来的这条事件要当只读的。** 它的 Data 字节和日志里那一条是同一份，
+// 每个观察者拿到的又都是同一份——改它等于改日志，而且会连带改到别的观察者手里
+// 那一条。要留着或者要改就先
+// [github.com/snight1983/ds-harness-go/sessionlog.Event.Clone]。这条契约和
+// [Session.Events] 那一条逐字相同，理由也相同：Go 里没有 deepFreeze，
+// 本仓库每一处 json.RawMessage 都是这么约定的。
+//
+// 这里**不**替观察者复制一份。这是流式的热路径——一次响应每个 token 增量就是
+// 一条 assistant/chunk，而挂在这条广播上的观察者有七八个，逐个复制等于把每一份
+// 负载抄七八遍。留着它们共享一份，是拿一条写在文档里的约束换掉这份开销。
 type EventObserver func(session *Session, event sessionlog.Event)
 
 // FlushObserver 是要等的耐久检查点。

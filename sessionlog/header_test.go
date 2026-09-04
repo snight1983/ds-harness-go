@@ -28,7 +28,7 @@ func TestSessionHeaderDropsItsAbsentOptionalFields(t *testing.T) {
 
 	full := SessionHeader{
 		Version: FormatVersion, ID: "s2", CreatedAt: 8,
-		WorkspaceID: "ws-1", ParentSession: "s1", SeedLength: 3,
+		WorkspaceID: "ws-1", ParentSession: "s1", SeedLength: 3, SeedBaseSeq: 40,
 		Origin: OriginSubagent, DelegationDepth: 1, AgentPreset: "coder",
 	}
 	line, err := json.Marshal(full)
@@ -41,6 +41,72 @@ func TestSessionHeaderDropsItsAbsentOptionalFields(t *testing.T) {
 	}
 	if back != full {
 		t.Fatalf("往返之后不一样了：\n想要 %#v\n实际 %#v", full, back)
+	}
+}
+
+// 血统边界是一个绝对 seq，不是一个下标：一段从被弹过头的父日志上分出来的 seed
+// 不从 0 起，拿 SeedLength 当下标切会把一批属于孩子自己的事件当成继承来的丢掉。
+func TestSeedSuffixMeasuresTheBoundaryFromTheLogStart(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		events []Event
+		header SessionHeader
+		want   []int
+	}{
+		"没有 seed 时整段都归自己": {
+			events: []Event{{Seq: 0}, {Seq: 1}},
+			want:   []int{0, 1},
+		},
+		"从 0 起的日志按条数切": {
+			events: []Event{{Seq: 0}, {Seq: 1}, {Seq: 2}},
+			header: SessionHeader{SeedLength: 2},
+			want:   []int{2},
+		},
+		"弹过头的日志按绝对 seq 切": {
+			events: []Event{{Seq: 40}, {Seq: 41}, {Seq: 42}},
+			header: SessionHeader{SeedBaseSeq: 40, SeedLength: 2},
+			want:   []int{42},
+		},
+		// 弹掉的那一截正好把 seed 吃干净了：剩下的全是自己的活，不是一次失败。
+		"边界落在日志起点之前": {
+			events: []Event{{Seq: 44}, {Seq: 45}},
+			header: SessionHeader{SeedBaseSeq: 40, SeedLength: 2},
+			want:   []int{44, 45},
+		},
+		// 反过来，日志短得还没长过边界：一条属于自己的都还没有。
+		"边界落在日志末尾之后": {
+			events: []Event{{Seq: 40}},
+			header: SessionHeader{SeedBaseSeq: 40, SeedLength: 5},
+			want:   nil,
+		},
+		"空日志": {header: SessionHeader{SeedLength: 3}, want: nil},
+	}
+	for name, each := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := SeedSuffix(each.events, each.header)
+			if len(got) != len(each.want) {
+				t.Fatalf("该剩 %d 条，实际 %d 条", len(each.want), len(got))
+			}
+			for index, event := range got {
+				if event.Seq != each.want[index] {
+					t.Fatalf("第 %d 条该是 seq %d，实际 %d", index, each.want[index], event.Seq)
+				}
+			}
+		})
+	}
+}
+
+func TestSeedBoundarySeqAddsTheBaseToTheLength(t *testing.T) {
+	t.Parallel()
+
+	// 旧存档没有 SeedBaseSeq，读回来是 0——那时候边界恰好就等于条数本身。
+	if got := SeedBoundarySeq(SessionHeader{SeedLength: 3}); got != 3 {
+		t.Fatalf("旧存档的边界该是 3，实际 %d", got)
+	}
+	if got := SeedBoundarySeq(SessionHeader{SeedBaseSeq: 40, SeedLength: 3}); got != 43 {
+		t.Fatalf("边界该是 43，实际 %d", got)
 	}
 }
 

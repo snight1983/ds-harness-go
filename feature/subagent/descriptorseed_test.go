@@ -18,7 +18,7 @@ func TestSeedDescriptorTurnAppendsTheRecordToAnInheritedPrefix(t *testing.T) {
 	}
 	descriptor := continuableInput()
 
-	seed, err := SeedDescriptorTurn("child", inherited, descriptor)
+	seed, err := SeedDescriptorTurn("child", inherited, 0, descriptor)
 	if err != nil {
 		t.Fatalf("做种失败：%v", err)
 	}
@@ -42,9 +42,9 @@ func TestSeedDescriptorTurnAppendsTheRecordToAnInheritedPrefix(t *testing.T) {
 	}
 }
 
-// 序号由会话自己盖上，从 0 起连续——一次冷恢复读的就是这份日志。
+// 序号由会话自己盖上，从 baseSeq 起连续——一次冷恢复读的就是这份日志。
 func TestSeedDescriptorTurnStampsContiguousSequenceNumbers(t *testing.T) {
-	seed, err := SeedDescriptorTurn("child", nil, continuableInput())
+	seed, err := SeedDescriptorTurn("child", nil, 0, continuableInput())
 	if err != nil {
 		t.Fatalf("做种失败：%v", err)
 	}
@@ -55,9 +55,31 @@ func TestSeedDescriptorTurnStampsContiguousSequenceNumbers(t *testing.T) {
 	}
 }
 
+// 父日志被弹过头时那段前缀不从 0 起：漏掉 baseSeq 会让这场排演当场被种子校验拒掉，
+// 于是一个本该分叉成功的孩子建不出来。
+func TestSeedDescriptorTurnStampsFromANonZeroBaseSeq(t *testing.T) {
+	const baseSeq = 40
+	inherited := []sessionlog.Event{
+		{Seq: baseSeq, Type: sessionlog.EventTurnStart, Data: data(t, sessionlog.TurnStartData{Turn: 1})},
+		{Seq: baseSeq + 1, Type: sessionlog.EventTurnEnd, Data: data(t, sessionlog.TurnEndData{
+			Turn: 1, Reason: sessionlog.CompletedTurnEnd{},
+		})},
+	}
+
+	seed, err := SeedDescriptorTurn("child", inherited, baseSeq, continuableInput())
+	if err != nil {
+		t.Fatalf("做种失败：%v", err)
+	}
+	for index, event := range seed {
+		if want := baseSeq + index; event.Seq != want {
+			t.Fatalf("第 %d 条的序号该是 %d，实际 %d", index, want, event.Seq)
+		}
+	}
+}
+
 // 描述符那条记录不给模型看：它上不了表面，所以带不上表面操作。
 func TestSeedDescriptorTurnKeepsTheRecordOffTheSurface(t *testing.T) {
-	seed, err := SeedDescriptorTurn("child", nil, continuableInput())
+	seed, err := SeedDescriptorTurn("child", nil, 0, continuableInput())
 	if err != nil {
 		t.Fatalf("做种失败：%v", err)
 	}
@@ -71,7 +93,7 @@ func TestSeedDescriptorTurnRejectsAMalformedPrefix(t *testing.T) {
 	broken := []sessionlog.Event{
 		{Seq: 7, Type: sessionlog.EventTurnStart, Data: data(t, sessionlog.TurnStartData{Turn: 1})},
 	}
-	if _, err := SeedDescriptorTurn("child", broken, continuableInput()); err == nil {
+	if _, err := SeedDescriptorTurn("child", broken, 0, continuableInput()); err == nil {
 		t.Fatal("序号不连续的前缀该被拒")
 	}
 }

@@ -9,10 +9,12 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/snight1983/ds-harness-go/adapter/datastore"
 	"github.com/snight1983/ds-harness-go/feature/persistence"
+	coresession "github.com/snight1983/ds-harness-go/harness/session"
 	"github.com/snight1983/ds-harness-go/scope"
 	"github.com/snight1983/ds-harness-go/sessionlog"
 )
@@ -41,6 +43,30 @@ func Test这个存储既没有原始字节也没有按会话的位置(t *testing
 	}
 	if _, ok := store.Locate(testMeta("anyone")); ok {
 		t.Error("Locate 该恒假")
+	}
+}
+
+// 后端先建、编排器后建，所以编排器建不起来时那道介质已经开着了。平时收它的是
+// [persistence.Coordinator.Install] 那条排空路径，而这一次它压根没生出来——不在
+// 这里收掉，连接池就一直占着，而且没有第二个人拿得到它。
+func Test编排器建不起来时那道介质要跟着收掉(t *testing.T) {
+	dsn, namespace := freshMedium(t)
+	config, db := mediumConfig(t, dsn, namespace)
+
+	sessions, err := coresession.NewStore(coresession.StoreOptions{})
+	if err != nil {
+		_ = db.Close()
+		t.Fatalf("造活会话表失败：%v", err)
+	}
+	// 负的存档条数上限是编排器自己拒的，后端那一步已经过去了。
+	if _, err := New(t.Context(), Deps{Sessions: sessions}, Config{
+		Medium: config, MaxStoredEvents: -1,
+	}); err == nil {
+		t.Fatal("负的存档条数上限该拒")
+	}
+	// database/sql 把「这个池已经关了」报成一个没导出的哨兵，只比得了话。
+	if err := db.PingContext(t.Context()); err == nil || !strings.Contains(err.Error(), "closed") {
+		t.Fatalf("那道介质该已经收掉了，ping 报的却是 %v", err)
 	}
 }
 

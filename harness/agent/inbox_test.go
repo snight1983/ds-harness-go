@@ -177,6 +177,38 @@ func TestNewInboxClampsASeedBoundaryPastTheLog(t *testing.T) {
 	}
 }
 
+// TestNewInboxMeasuresTheSeedBoundaryFromTheLogStart 日志被弹掉一截之后，血统边界
+// 那个条数和下标差着一个起点。拿它直接当下标切会每弹掉一条就多跳过一条属于本会话
+// 的收件箱改动——一批已经排好队的待办凭空消失，而且没有任何地方会报错。
+func TestNewInboxMeasuresTheSeedBoundaryFromTheLogStart(t *testing.T) {
+	// 这个会话当初从 seq 40 起、继承了 2 条，边界因此在 42。后来 40、41 被弹掉了，
+	// 现在日志从 42 起——继承来的那一段已经不在，剩下的两条改动全归它自己。
+	header := sessionlog.SessionHeader{
+		ID: "trimmed", WorkspaceID: testWorkspaceID, SeedBaseSeq: 40, SeedLength: 2,
+	}
+	splice := func(seq int, body string) sessionlog.Event {
+		return sessionlog.Event{
+			Seq:  seq,
+			Type: EventInboxSpliced,
+			Data: data(t, SplicedData{Target: NextTurn, Inserted: []llm.Message{text(body)}}),
+		}
+	}
+	live, err := session.RestoreSession("trimmed",
+		[]sessionlog.Event{splice(42, "自己的活儿一"), splice(43, "自己的活儿二")},
+		42, header, fixedClock())
+	if err != nil {
+		t.Fatalf("恢复会话失败：%v", err)
+	}
+
+	inbox, err := NewInbox(live, InboxNotifications{})
+	if err != nil {
+		t.Fatalf("造收件箱失败：%v", err)
+	}
+	if got := inbox.NextTurn(); len(got) != 2 {
+		t.Fatalf("两条改动都该被重放，实际重放出 %d 条", len(got))
+	}
+}
+
 // TestInboxListsAreCopies 交出去的切片改不动投影。
 func TestInboxListsAreCopies(t *testing.T) {
 	inbox, _ := newInbox(t, InboxNotifications{})

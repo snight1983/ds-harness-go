@@ -1,10 +1,10 @@
 # Go 包文档映射
 
-本表把每个可发布 Go 包映射到一篇主文档。`go run ./internal/devtools/doccheck` 会检查遗漏、重复、陈旧包、文件不存在、侧栏遗漏和本地链接失效。`go list ./...` 能看到但被 Git 明确忽略的临时目录不属于发布包，不进入本表。
+本表把**每一个** Go 包映射到一篇主文档，`internal/` 里的门禁工具和 `cmd/` 里的可执行文件也在内——它们不对外发布，但改动它们的人同样要能找到对应的文档。`go run ./internal/devtools/doccheck` 会检查包注释缺失、映射遗漏、重复、陈旧包、文件不存在、侧栏遗漏和本地链接失效。唯一的例外是 `go list ./...` 能看到、但被 Git 明确忽略的临时目录，它们不进入本表。
 
 | Go 包 | 主文档 |
 |---|---|
-| `github.com/snight1983/ds-harness-go/adapter/datastore/dbtest` | [持久化抽象层](modules/datastore.md) |
+| `github.com/snight1983/ds-harness-go/adapter/datastore/internal/dbtest` | [持久化抽象层](modules/datastore.md) |
 | `github.com/snight1983/ds-harness-go/adapter/datastore/kvstore` | [持久化抽象层](modules/datastore.md) |
 | `github.com/snight1983/ds-harness-go/adapter/datastore/sessionstore` | [持久化抽象层](modules/datastore.md) |
 | `github.com/snight1983/ds-harness-go/adapter/datastore` | [持久化抽象层](modules/datastore.md) |
@@ -17,7 +17,6 @@
 | `github.com/snight1983/ds-harness-go/attachment` | [附件与图片](modules/attachment.md) |
 | `github.com/snight1983/ds-harness-go/cmd/llmmockserver` | [LLM 测试与回放](modules/llm-testing.md) |
 | `github.com/snight1983/ds-harness-go/credentials` | [凭据](modules/credentials.md) |
-| `github.com/snight1983/ds-harness-go/example/minimalhost` | [嵌入 Go 服务](embedding.md) |
 | `github.com/snight1983/ds-harness-go/feature/checkpointpolicy` | [Session](modules/session.md) |
 | `github.com/snight1983/ds-harness-go/feature/compaction/basic` | [上下文压缩](modules/compaction.md) |
 | `github.com/snight1983/ds-harness-go/feature/compaction/toolresultpruner` | [上下文压缩](modules/compaction.md) |
@@ -57,7 +56,8 @@
 | `github.com/snight1983/ds-harness-go/feature/subagent/controltool` | [多 Agent](modules/subagent.md) |
 | `github.com/snight1983/ds-harness-go/feature/subagent/forkinprocess` | [多 Agent](modules/subagent.md) |
 | `github.com/snight1983/ds-harness-go/feature/subagent/inprocessdriver` | [多 Agent](modules/subagent.md) |
-| `github.com/snight1983/ds-harness-go/feature/subagent/providertest` | [多 Agent](modules/subagent.md) |
+| `github.com/snight1983/ds-harness-go/feature/subagent/internal/childseed` | [多 Agent](modules/subagent.md) |
+| `github.com/snight1983/ds-harness-go/feature/subagent/internal/providertest` | [多 Agent](modules/subagent.md) |
 | `github.com/snight1983/ds-harness-go/feature/subagent/reporttool` | [多 Agent](modules/subagent.md) |
 | `github.com/snight1983/ds-harness-go/feature/subagent/spawninprocess` | [多 Agent](modules/subagent.md) |
 | `github.com/snight1983/ds-harness-go/feature/subagent/subagenttool` | [多 Agent](modules/subagent.md) |

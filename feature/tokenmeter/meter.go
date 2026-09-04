@@ -11,12 +11,15 @@
 package tokenmeter
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 
+	coresession "github.com/snight1983/ds-harness-go/harness/session"
 	"github.com/snight1983/ds-harness-go/llm"
+	"github.com/snight1983/ds-harness-go/scope"
 	"github.com/snight1983/ds-harness-go/sessionlog"
 	"github.com/snight1983/ds-harness-go/sessionlog/projection"
 )
@@ -61,6 +64,13 @@ type stepMark struct {
 type replayState struct {
 	// consumedEvents 是已经折进来的事件条数，同时充当 [Measurement.LogRevision]。
 	consumedEvents int
+	// baseSeq 是折这一段时那份日志的起点。
+	//
+	// 新增: 上游没有这一条——它的日志从 0 起、一条不删，起点是常数。本仓库的日志
+	// 会从最老的一头被弹掉一截（见 docs/session-log-limit.md），起点一变，
+	// consumedEvents 这个条数就不再指向同一条事件了。记下来是为了发现这件事，
+	// 见 [TokenMeter.sync]。
+	baseSeq int
 	// header 是最新那份请求头（已规范化）。
 	header sessionlog.EpochHeader
 	// hasHeader 说明有没有见过请求头。
@@ -145,11 +155,46 @@ func RegisterProjections(registry *projection.Registry) (func(), error) {
 	return func() { once.Do(rollback) }, nil
 }
 
+// Sessions 是本服务要的那道会话退场广播。
+//
+// 新增: 收接口不收 [github.com/snight1983/ds-harness-go/harness/session.Store]
+// 这个具体类型，理由和 compaction/basic 的 Sessions 一样：把用到的那一面写出来，
+// 读的人一眼看见本服务到底碰了那张表的什么。
+type Sessions interface {
+	// OnDisposed 登记一个「一个会话退场了」的观察者。
+	OnDisposed(
+		ctx context.Context, owner *scope.Scope, observer coresession.DisposedObserver,
+	) (func(context.Context) error, error)
+}
+
+// Install 把这份缓存接到会话退场那条边上，返回把它摘下来的函数。
+//
+// 新增: 整条是本仓库自有的。DSH 那份缓存是 `WeakMap<Session, ReplayState>`，会话
+// 对象一被回收那格就跟着没了，所以那边没有这个装配点。Go 的映射按
+// [sessionlog.SessionID] 归档，键是个值、不会自己消失——没有这条边，一台长期在跑
+// 的服务每量过一个会话就多留一张**随会话长度线性增长**的表面节点表，只增不减。
+// 成例是 compaction/basic.Install。
+//
+// 它和 [RegisterProjections] 是两件事：那个登记的是三个 O(1) 的投影单元，
+// 这个收的是本服务自己那份 O(表面) 的重放状态。
+func Install(ctx context.Context, owner *scope.Scope, meter *TokenMeter, sessions Sessions) (func(context.Context) error, error) {
+	switch {
+	case meter == nil:
+		return nil, errors.New("token 计量器：装它要有一个计量器")
+	case sessions == nil:
+		return nil, errors.New("token 计量器：装它要有一道会话退场广播")
+	}
+	return sessions.OnDisposed(ctx, owner, func(live *coresession.Session) {
+		meter.Forget(live.ID())
+	})
+}
+
 // Forget 丢掉一个会话缓着的重放状态。
 //
 // 新增: DSH 那边这份缓存是 `WeakMap<Session, ReplayState>`——会话对象一被回收，
 // 它那格就跟着没了。Go 的映射按 [sessionlog.SessionID] 归档，键是个值，不会自己消失，
-// 所以关掉一个会话的一方要来说一声。不说也只是白占一格内存，读不出错。
+// 所以关掉一个会话的一方要来说一声。装配走 [Install]；不说也只是白占一格内存，
+// 读不出错。
 func (m *TokenMeter) Forget(id sessionlog.SessionID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -236,15 +281,20 @@ func (m *TokenMeter) sync(view projection.SessionView) (*replayState, error) {
 	id := view.ID()
 	events := view.Events()
 
+	baseSeq := sessionlog.LogBaseSeq(events)
 	state, tracked := m.states[id]
 	// 新增: DSH 按会话对象的身份缓存，一个从存储里重新装出来的会话天然是另一个键。
 	// Go 按 [sessionlog.SessionID] 缓存，那样两次装配会撞在同一格上。日志变短是这件事
 	// 唯一看得见的形态（一份日志只会往后长），撞上就从头重放。
-	if tracked && state.consumedEvents > len(events) {
+	//
+	// 新增: 起点变了也要重放。consumedEvents 是个条数，它指的是「从 baseSeq 数起
+	// 的第 n 条」；日志被弹过头之后（见 docs/session-log-limit.md）同一个条数指向的
+	// 是另一条事件，而只看长度是发现不了的——弹掉三条又追加五条，长度反而是长的。
+	if tracked && (state.consumedEvents > len(events) || state.baseSeq != baseSeq) {
 		tracked = false
 	}
 	if !tracked {
-		state = &replayState{}
+		state = &replayState{baseSeq: baseSeq}
 		m.states[id] = state
 	}
 
@@ -301,7 +351,7 @@ func (m *TokenMeter) foldEvent(view projection.SessionView, state *replayState, 
 	var surface surfaceTokenFold
 	folded := sessionlog.IsSurfaceEvent(event)
 	if folded {
-		fold, err := foldSurfaceTokens(state.surface, event)
+		fold, err := foldSurfaceTokens(state.surface, event, state.baseSeq)
 		if err != nil {
 			return err
 		}
@@ -416,13 +466,16 @@ func (m *TokenMeter) estimateProviderAssistant(
 		}
 		seen[seq] = struct{}{}
 
-		// DSH 那边直接 `session.events[seq]!`——日志里 seq 就是下标。这里同样按
-		// 下标取，但先验一下界：Go 的越界是 panic，而这条路上的输入来自日志。
-		if seq < 0 || seq >= len(events) {
+		// DSH 那边直接 `session.events[seq]!`——它的日志从 0 起、一条不删，seq 就是
+		// 下标。本仓库的日志会从最老的一头被弹掉一截（见 docs/session-log-limit.md），
+		// 那个式子会取到隔壁那条上去，于是这一步的账被悄悄算成别人的。换算走
+		// [sessionlog.SeqIndex]，它减完还核一遍 seq 对不对得上。
+		index, ok := sessionlog.SeqIndex(events, seq)
+		if !ok {
 			return 0, fmt.Errorf("token 计量器：seq %d 的 assistant/message 引的来源 %d 不在日志里",
 				event.Seq, seq)
 		}
-		source := events[seq]
+		source := events[index]
 		if source.Type != sessionlog.EventAssistantChunk {
 			return 0, fmt.Errorf("token 计量器：seq %d 的 assistant/message 引的来源 %d 不是 assistant/chunk",
 				event.Seq, seq)

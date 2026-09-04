@@ -51,7 +51,7 @@
 
 依赖应显式传入，不要通过全局变量隐藏。构造函数返回的注销、Dispose 或 Close 句柄要由创建方保存。
 
-前 10 步中不需要外部介质的那部分，有一份可编译、可运行的版本在 `example/minimalhost`。它不是生产模板（没有存储后端、持久化和协议入口），但它保证这份装配顺序不会和代码各走各的。
+前 10 步中不需要外部介质的那部分，`harness.New` 就是它的可编译、可运行版本。它不是生产模板（没有存储后端、持久化和协议入口），但它保证这份装配顺序不会和代码各走各的。「外部宿主真的调得动它」这件事由 `internal/devtools/consumercheck` 守着：那道门禁在仓库**外面**建一个模块，只用导出的构造函数、导出的选项字段和一个外部自己实现的模型适配器把同一份闭环拼出来，任何一次收窄导出面的改动都会在那里编译不过。
 
 ## 事件词汇
 
@@ -95,6 +95,8 @@
 创建新 Agent 时，Agent ID 与 Session ID 必须一致。恢复流程应先读取并校验持久化事件，再创建活 Session、Inbox 和 Agent Loop。
 
 事件日志是权威事实。状态缓存只是加速恢复：缓存不可用时必须能够回退到事件重放。
+
+但重放的对象是**现存的那一段日志**，不是全部历史——一个会话的事件超过上限时，最老的一段会被删掉（见 `docs/session-log-limit.md`）。所以宿主要接受两件事：一是恢复出来的状态可能残缺（最后一次更新落在被删区间里的那些），二是**残缺不阻断读**，不要把它当成一次失败去重试或者拒绝这个会话。日志里事件的序号也因此不再从 0 起，宿主拿序号去定位时要用仓库提供的换算，不要当成数组下标。
 
 当前仓库提供 `feature/persistence.Store` / `Backend`、`WriteBehind`、恢复原语和 `Coordinator`。宿主为 `Coordinator` 注入具体 `Backend` 与 `harness/session.Store`，再调用 `Install` 接上创建、事件、Flush 和释放观察者。`Coordinator.Prepare` 返回带释放语义的 `harness/session.Preparation`；接入 Agent Loop 时仍需由装配层把 Preparation 的发布/释放和后端 `List` 适配到消费方接口。
 
@@ -155,7 +157,7 @@
 ## 当前限制
 
 - 模块路径是 `ds-harness-go`，不是一个可被 `go get` 解析的地址。外部宿主接入时要在自己的 `go.mod` 里写一条 `replace ds-harness-go => <本仓库路径>`（或者把本仓库作为 workspace 成员）。这是有意的：模块名不跟着某个托管地址走。
-- 没有顶层 Builder，宿主需要显式连接组件。参照实现见 `example/minimalhost`。
+- `harness.New` 只装得出上面第 10 步为止那段不碰外部介质的闭环；存储后端、持久化和协议入口仍要宿主显式连接，没有一个把这些也一并包办的顶层 Builder。
 - 没有内置生产会话持久化 Backend；`Coordinator` 只负责编排，不决定介质。
 - 没有任意代码执行、Shell、本地终端或本地文件工具。
 - PostgreSQL 集成测试需要真实数据库连接。

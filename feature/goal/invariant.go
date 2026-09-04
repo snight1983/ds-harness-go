@@ -18,7 +18,7 @@ import (
 // 源: packages/goal/goal/src/invariant.ts:29-37 (applyChecked)
 //
 // 新增: DSH 那个 applyChecked 收一个 fail 回调、就地报掉。这里交回错误，和
-// [github.com/snight1983/ds-harness-go/schedule.ValidateStream] 的理由一样：它因此可以脱离不变量注册表
+// [github.com/snight1983/ds-harness-go/feature/schedule.ValidateStream] 的理由一样：它因此可以脱离不变量注册表
 // 单独用——离线校验一份日志，或者在写之前自己先验一遍——而 [RegisterInvariants]
 // 只是把这个错接到 [invariants.Fail] 上。
 //

@@ -600,7 +600,7 @@ flowchart TD
 |---|---|
 | `harness/agentloop` | 走 `Prepare`/`Enter`/`Announce` 三步把会话折进 agent 的登记；追加事件；听 disposed |
 | `feature/persistence` | **唯一一个把四组观察者全登记上的**：created 建档、event 收事件、flush 落盘、disposed 收尾；恢复时走 `PrepareRestored` |
-| `compaction` / `context/instructions` | 听 event，据此维护自己的增量状态 |
+| `compaction` / `feature/context/instructions` | 听 event，据此维护自己的增量状态 |
 | `acp` / `sdk` / `goal` / `subagent` / `schedule` | 听 event 往外推通知；在各自的检查点上调刷盘 |
 | `sessionquery` | **还没接上**——见下 |
 

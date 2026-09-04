@@ -8,7 +8,6 @@
 // 源: packages/core/session/src/request-header.ts
 // 源: packages/core/session/src/chunk-rows.ts
 // 源: packages/core/session/src/invariant.ts
-// 源: packages/core/session/src/json.ts
 //
 // # 这里只有词汇，服务不在这里
 //
@@ -46,8 +45,9 @@
 // 下面每一条都是 DSH 用 TypeScript 或 JS 运行时的机制解决的问题，
 // 而 Go 有它自己的答案。
 //
-//   - json.ts 整份（JsonValue、isJsonValue、snapshotJsonValue）→ encoding/json。
-//     那份文件从头到尾在防 JS 对象图的危险：伪造的原型、取值器、稀疏数组、
+//   - packages/util/values/src/index.ts 里的 JSON 那一摊（JsonValue、isJsonValue、
+//     snapshotJsonValue）→ encoding/json。
+//     那几个函数从头到尾在防 JS 对象图的危险：伪造的原型、取值器、稀疏数组、
 //     环、-0、非有限数。这些在 Go 里要么根本不存在（没有原型、没有取值器、
 //     切片不稀疏），要么 encoding/json 自己就会拒（环报错、NaN 与 Inf 报错）。
 //     snapshotJsonValue 那个「验一遍顺手脱钩」的动作就是 json.Marshal：

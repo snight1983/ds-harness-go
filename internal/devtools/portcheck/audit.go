@@ -359,7 +359,7 @@ func collectProvenanceDensity(goRoot string) ([]packageProvenance, error) {
 				switch {
 				case reAdded.MatchString(comment.Text):
 					stats.added++
-				case reSource.MatchString(comment.Text):
+				case reSourceLine.MatchString(comment.Text):
 					stats.sources++
 				}
 			}

@@ -62,6 +62,18 @@ func violationOf(t *testing.T, action func()) *invariants.Error {
 	return caught
 }
 
+// brokenDeleteEvents 造一段真的坏了的日志：同一条记录被删了两遍。
+//
+// 不用「指向一个从没建过的 id」那种写法：那一种在本仓库读成「它的 create 被 FIFO
+// 弹掉了」而被跳过（见 [FoldEvents]），所以它验不出违规来。
+func brokenDeleteEvents() []sessionlog.Event {
+	return []sessionlog.Event{
+		changeEvent(createJSON(atRecordJSON)),
+		changeEvent(`{"version":1,"operation":"delete","id":"schedule-2"}`),
+		changeEvent(`{"version":1,"operation":"delete","id":"schedule-2"}`),
+	}
+}
+
 // ---- ValidateStream ----
 
 func TestValidateStreamAcceptsAWellFormedStream(t *testing.T) {
@@ -92,10 +104,30 @@ func TestValidateStreamHonorsSeedLength(t *testing.T) {
 			changeEvent(createJSON(atRecordJSON)),
 			changeEvent(createJSON(atRecordJSON)),
 		},
-		SeedLength: 1,
+		Header: seededHeader(1),
 	}
 	if err := ValidateStream(stream); err != nil {
 		t.Fatalf("继承来的那一段本该跳过：%v", err)
+	}
+}
+
+// 边界是绝对 seq：一份被弹过头的日志上，拿 SeedLength 当下标切会把继承来的那条
+// 留在流里，于是这条不变量对着一段本不归它管的历史报「重用的 id」。
+func TestValidateStreamMeasuresTheBoundaryFromTheLogStart(t *testing.T) {
+	// 这个会话当初从 seq 40 起、继承了 1 条，边界因此在 41。后来 40 被弹掉了，
+	// 现在日志从 41 起——继承来的那一段已经不在，两条都归它自己。切晚一条会把那次
+	// create 当成继承来的丢掉，于是紧跟着的 delete 变成一条指向空处的改动。
+	create := changeEvent(createJSON(atRecordJSON))
+	remove := changeEvent(`{"version":1,"operation":"delete","id":"schedule-2"}`)
+	stream := Stream{
+		Events: []sessionlog.Event{
+			{Seq: 41, Type: EventChange, Data: create.Data},
+			{Seq: 42, Type: EventChange, Data: remove.Data},
+		},
+		Header: sessionlog.SessionHeader{SeedBaseSeq: 40, SeedLength: 1},
+	}
+	if err := ValidateStream(stream); err != nil {
+		t.Fatalf("这两条都归它自己，本该验得过：%v", err)
 	}
 }
 
@@ -136,9 +168,7 @@ func TestRegisterInvariantsSweepsAlreadyLoadedStreams(t *testing.T) {
 	// 这里响，而不是等下一次追加。
 	registry := registryOf(t)
 	loaded := func() []Stream {
-		return []Stream{{Events: []sessionlog.Event{
-			changeEvent(`{"version":1,"operation":"delete","id":"ghost"}`),
-		}}}
+		return []Stream{{Events: brokenDeleteEvents()}}
 	}
 	violation := violationOf(t, func() {
 		_, _ = RegisterInvariants(t.Context(), registry, loaded,
@@ -171,9 +201,7 @@ func TestRegisterInvariantsChecksSubsequentStreams(t *testing.T) {
 	observer(Stream{Events: []sessionlog.Event{changeEvent(createJSON(atRecordJSON))}})
 	// 坏的流当场抛。
 	violationOf(t, func() {
-		observer(Stream{Events: []sessionlog.Event{
-			changeEvent(`{"version":1,"operation":"delete","id":"ghost"}`),
-		}})
+		observer(Stream{Events: brokenDeleteEvents()})
 	})
 
 	// 注销之后那条订阅必须真的退掉：留着等于让一个已经卸掉的包还在否决别人的写入。

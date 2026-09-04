@@ -82,6 +82,7 @@ func TestOptionalFacetsAskTheTypeNotTheValue(t *testing.T) {
 	var typed *fullStub
 	backend := Backend(typed)
 
+	//lint:ignore SA4023 这个比较**恒为假**正是本行要钉的前提：装了类型化 nil 的接口不等于 nil
 	if backend == nil {
 		t.Fatalf("前提就错了：装了类型化 nil 的接口不该等于 nil")
 	}

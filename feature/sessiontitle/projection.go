@@ -66,7 +66,12 @@ func projectionDefinition() projection.Definition[titleState] {
 		Init:         func() titleState { return titleState{} },
 		Apply:        applyTitle,
 		DecodeState:  projection.StrictDecoder[titleState](),
-		View:         func(state titleState) any { return TitleView{Title: state.Title} },
+		// 这里逐字段挑，不用 TitleView(state) 那个转换。两个类型今天字段一样，
+		// 但它们**要往两个方向长**：状态那边以后会加上标题的来历，视图这边有意
+		// 不给（见上面）。写成转换就是把这条分岔钉成一次编译错误。
+		//
+		//lint:ignore S1016 见上
+		View: func(state titleState) any { return TitleView{Title: state.Title} },
 	}
 }
 

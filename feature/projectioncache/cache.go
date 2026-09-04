@@ -380,8 +380,18 @@ func (c *Cache) Observe(live LiveSession, event sessionlog.Event) {
 //
 // 新增: DSH 那边是即发即忘，Go 这边同步写完并把失败交回调用方，理由见包文档
 // 第 3 条。记账无论写成没写成都丢掉——会话已经走了，留着只是泄漏。
+//
+// 新增: 顺手也把这个会话在注册表那边的单元格扔掉（[projection.Registry.Forget]）。
+// DSH 的单元格挂在 `WeakMap<Session, UnitCell>` 上，会话对象一被回收就跟着没了；
+// 本仓库按会话身份存，那格得有人来删。这里是唯一一处同时握着注册表、又知道
+// 「这个会话不再是活的」的地方——不删的话，一台长期在跑的服务每接一个会话就多
+// 留一份**每个单元一份**的状态，只增不减。
+//
+// 次序不能反：[Cache.Write] 要从注册表读这份状态才写得出最后那份检查点。
 func (c *Cache) Detach(ctx context.Context, live LiveSession) error {
 	err := c.Write(ctx, live)
+
+	c.registry.Forget(live.ID())
 
 	c.mu.Lock()
 	defer c.mu.Unlock()

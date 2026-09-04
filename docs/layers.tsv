@@ -3,7 +3,7 @@
 # 低档不许 import 高档，由 internal/devtools/layercheck 校验。
 # 各档是什么、为什么档位不按目录名判，见 internal/devtools/layercheck/doc.go。
 adapter/datastore	adapter
-adapter/datastore/dbtest	adapter
+adapter/datastore/internal/dbtest	adapter
 adapter/datastore/kvstore	adapter
 adapter/datastore/sessionstore	adapter
 adapter/domainjobs	adapter
@@ -15,7 +15,6 @@ adapter/textstore	adapter
 attachment	contract
 cmd/llmmockserver	cmd
 credentials	contract
-example/minimalhost	cmd
 feature/checkpointpolicy	feature
 feature/compaction	feature
 feature/compaction/basic	feature
@@ -56,7 +55,8 @@ feature/subagent	feature
 feature/subagent/controltool	feature
 feature/subagent/forkinprocess	feature
 feature/subagent/inprocessdriver	feature
-feature/subagent/providertest	feature
+feature/subagent/internal/childseed	feature
+feature/subagent/internal/providertest	feature
 feature/subagent/reporttool	feature
 feature/subagent/spawninprocess	feature
 feature/subagent/subagenttool	feature

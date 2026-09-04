@@ -35,7 +35,7 @@ ImageInput -> Store.ValidateImage -> Store.SaveImage -> ImageRef
 
 ## 落地实现
 
-`attachment/imagestore` 是 `Store` 在本仓库的实现。它建在 `fs` 那条文件系统接缝上，所以换成对象存储是装配时的事。
+`adapter/imagestore` 是 `Store` 在本仓库的实现。它建在 `fs` 那条文件系统接缝上，所以换成对象存储是装配时的事。
 
 它的办法是**内容寻址**：字节的哈希既是名字，也是唯一的判据。
 
@@ -90,4 +90,4 @@ sha256:<哈希>  ← 这就是 ImageRef.ID，也是它在介质上的落点
 - `attachment/admission.go`
 - `attachment/types.go`
 - `attachment/error.go`
-- `attachment/imagestore/`
+- `adapter/imagestore/`

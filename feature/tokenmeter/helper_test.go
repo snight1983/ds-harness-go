@@ -30,8 +30,14 @@ func (s *fakeSession) NextSeq() int {
 
 // newSession 造一个假会话，事件的 seq 就是它们的下标。
 func newSession(events ...sessionlog.Event) *fakeSession {
+	return trimmedSession(0, events...)
+}
+
+// trimmedSession 造一个假会话，日志的起点是 base：一份从最老的一头被弹掉一截的
+// 日志（见 docs/session-log-limit.md）读回来就是这个样子，seq 不再等于下标。
+func trimmedSession(base int, events ...sessionlog.Event) *fakeSession {
 	for index := range events {
-		events[index].Seq = index
+		events[index].Seq = base + index
 	}
 	return &fakeSession{id: "s", events: events}
 }

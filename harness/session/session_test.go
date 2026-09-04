@@ -347,6 +347,30 @@ func TestASeedMayStartAboveZero(t *testing.T) {
 	}
 }
 
+// 建会话时把起点盖进头里，是「日志被弹过头之后血统边界还换算得回来」这件事的
+// 唯一依据：SeedLength 只是个条数，少了起点谁都算不出边界落在哪一条上。
+func TestANewSessionStampsTheLogStartIntoItsHeader(t *testing.T) {
+	seed := seedFrom(500, userEvent(t, "你好"))
+	session, err := NewSession("s", Options{Seed: seed, BaseSeq: 500})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := session.Header().SeedBaseSeq; got != 500 {
+		t.Fatalf("头上的起点该是 500，实际 %d", got)
+	}
+
+	// 恢复那条路不盖：那份头是当初存下来的，它自己带着建会话那天的起点。日志这时候
+	// 已经被弹掉一截，拿现在的起点覆盖回去会把血统边界整体推后。
+	stored := session.Header()
+	restored, err := RestoreSession("s", seedFrom(504, userEvent(t, "后来")), 504, stored, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := restored.Header().SeedBaseSeq; got != 500 {
+		t.Fatalf("恢复出来的头该留着当初那个 500，实际 %d", got)
+	}
+}
+
 func TestASeedEventThatFailsValidationStopsTheConstruction(t *testing.T) {
 	// 逐条那道检查在构造里就跑，不是等到表面转移才发现。
 	seed := []sessionlog.Event{{Seq: 0, Data: json.RawMessage(`{}`)}}
