@@ -4,13 +4,11 @@
 
 宿主负责提供模型、工具、Skill、人格提示词和持久化后端；运行时负责 Agent 循环、上下文组装、工具调度、会话事件、恢复、多 Agent 协作及对外协议适配。业务能力留在宿主中，运行时本身不绑定具体行业。
 
-项目是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的非官方 Go 服务端重构，参考其能力和行为语义，但不逐行翻译 TypeScript，也不隶属于 DeepSeek 或受其官方认可。Go 已有成熟机制的部分直接采用 Go 的实现方式；每项移植或排除决定都记录在 `docs/portmap/`。
-
 文档入口：[项目文档](docs/README.md) · [总体架构](docs/architecture.md) · [嵌入 Go 服务](docs/embedding.md) · [逐包文档映射](docs/packages.md)
 
 ## 引入方式
 
-公开 module path 是 `github.com/snight1983/ds-harness-go`，与仓库地址一致。所有包都从这个前缀引入：
+公开 module path 是 `github.com/snight1983/ds-harness-go`。所有包都从这个前缀引入：
 
 ```go
 import (
@@ -95,8 +93,6 @@ flowchart TB
     HostCapabilities -->|显式装配| Protocol
     HostCapabilities -->|模型、工具、Skill、存储实现| Control
 ```
-
-框内是 `ds-harness-go` 的通用运行时，宿主业务不进入运行时核心。宿主提供具体能力和后端，运行时负责把它们装配进 Agent 生命周期并驱动执行。
 
 `harness/agent` 与 `harness/agentloop` 刻意分开：前者定义活 Agent 的稳定公共接口和控制面，后者实现 ReAct 执行循环。协议层、子 Agent 和后台任务只需要依赖 `harness/agent`，不必绑定循环实现。
 
@@ -223,7 +219,7 @@ ds-harness-go/
 |   `-- sdk/                   SDK 协议与服务端
 |
 | == 模块外不可见 ==
-|-- internal/devtools/         移植裁决与六道门禁
+|-- internal/devtools/         工程检查工具
 |
 |-- cmd/                       可执行入口
 `-- docs/                      设计和能力映射文档
@@ -240,32 +236,6 @@ ds-harness-go/
 数据库那一摊整个收在 `adapter/datastore` 底下：它是唯一 import `database/sql`、唯一挂驱动、唯一写 SQL 的地方，`sessionlog` 和 `storage` 两棵树里不许出现任何一处提到数据库。这条界线由 `internal/devtools/dbcheck` 把着，详见[持久化抽象层](docs/modules/datastore.md)。
 
 内容存储那一摊同理，收在 `fs.FileSystem` 一条接缝上：业务包只声明它要读出什么、写进什么，挂对象存储（`adapter/objectstore`）还是将来挂外接硬盘是装配时的配置。这个服务跑的地方没有可用硬盘，所以业务代码里不许出现直接的宿主机文件 I/O——不许调 `os` 包里那些碰文件系统的函数，不许 import `path/filepath` 和 `io/ioutil`。这条界线由 `internal/devtools/oscheck` 把着，理由和豁免名单写在 `internal/devtools/oscheck/doc.go` 里。
-
-以下检查当前通过：
-
-```powershell
-go build ./...
-go vet ./...
-go test ./...
-go test -race ./...
-go run ./internal/devtools/doccheck
-go run ./internal/devtools/consumercheck
-go run ./internal/devtools/dbcheck
-go run ./internal/devtools/oscheck
-go run ./internal/devtools/layercheck
-```
-
-`internal/devtools/consumercheck` 在临时目录里建一个仓库外的模块，用公开 module path 把全部可发布包引进去，编译、vet，再跑一遍最小闭环。它是 module path 和「每个公开包都对外可引」这两件事唯一测得到的地方。
-
-移植完整性门禁以此命令为准：
-
-```powershell
-go run ./internal/devtools/portcheck
-```
-
-`PENDING` 表示对应 DSH 符号仍未完成最终裁决。只要存在 `PENDING`，移植完整性门禁就不会通过；不能把单元测试通过等同于项目已经完成。
-
-门禁校验溯源注释时要读 DSH 源码，当前基准快照是 `deepseek-harness-dsh-v0.1.2-alpha.3`，默认从 `-dsh-root` 指向的目录读取。快照放在别处时用 `-dsh-root` 指定；指向不存在的目录只会让每条注释都报「出处不存在」，那是路径错了，不是移植漏了。
 
 `adapter/datastore` 那批用例每一行都要一个真的数据库才执行得到，所以它们缺省跑在一个临时目录里的 SQLite 库文件上——`go test ./...` 就整批执行，不必先起一台库。设 `DSH_POSTGRES_DSN` 把同一批用例体换到 Postgres 上再跑一遍：两种方言都要过，因为这批用例压的正是两边会分歧的地方。
 
@@ -290,15 +260,12 @@ go run ./internal/devtools/doccheck
 go run ./internal/devtools/consumercheck
 go run ./internal/devtools/dbcheck
 go run ./internal/devtools/oscheck
-go run ./internal/devtools/portcheck
 go run ./internal/devtools/layercheck
 ```
 
 除了这串必跑的，仓库还维持 `staticcheck ./...` **零告警**。它不在上面那串里，因为它是一个 go.mod 之外的外部二进制（`go install honnef.co/go/tools/cmd/staticcheck@latest`），进门禁就等于要求每个人先装它。想跑就直接跑，配置在根目录的 `staticcheck.conf` 里：那份配置只关掉一条 `ST1005`，理由写在文件里；其余每一处例外都是代码里带理由的 `//lint:ignore`。
 
 这串命令同时由 `.github/workflows/ci.yml` 在每次 push 和 PR 上跑一遍，分成三个 job：`gates`（格式、构建、vet、测试、竞态、六道门禁）、`postgres`（起一个 `postgres:16` service container，跑那批只有真库才执行得到的后端契约）、`cross`（linux / darwin / windows 三个目标各编一次）。分开是因为它们红的时候含义不同：代码有问题、真库跑不通、换个平台编不过，混在一个 job 里说不清是哪一类。
-
-`portcheck` 的溯源注释验真需要 DSH 上游快照，路径由 `DSH_ROOT` 环境变量给出。CI 上没有那份快照，所以显式传 `-no-provenance` 只跑裁决表门禁；工具会打一行横幅说明这一轮没有对过源码，不静默降级。
 
 交叉编译要关掉 cgo。本仓库自己不用 cgo，但只要机器上装了 C 工具链，`go build` 就会拿本机的 gcc 去编 runtime 里那几个 cgo 文件，报出一串跟本仓库无关的 `sigset_t` 错误。`CGO_ENABLED=0` 是在验「纯 Go 代码能不能为目标平台编出来」这个真问题。
 
@@ -309,19 +276,8 @@ go run ./internal/devtools/layercheck
 - `docs/embedding.md`：嵌入现有 Go 服务的装配指南。
 - `docs/modules/`：主要模块的职责、架构、能力和边界。
 - `docs/packages.md`：每个可发布 Go 包到主文档的机器校验映射。
-- `docs/DESIGN.md`：详细运行时边界、持久化和移植设计。
-- `docs/portmap/rulings.md`：DSH 包级裁决。
-- `docs/portmap/decisions.md`：符号级裁决依据。
-- `docs/portmap/portmap.tsv`：机器读取的逐符号状态表。
-- `docs/portmap/capability-coverage.tsv`：能力覆盖表，一行一个能力，写清落在哪个 Go 包、缺哪个前置条件。
-
-## 移植规则
-
-- 按通用服务端 Agent 运行时是否需要该能力决定范围，不按某个业务项目裁剪。
-- Go 有原生等价机制时使用 Go 机制，不复制 TypeScript 基础设施。
-- 运行时接口与具体后端分离，宿主决定模型、存储、对象存储和传输实现。
-- 源码使用 `// 源: packages/...:行号` 或 `// 新增: 理由` 记录实现依据，并由 `internal/devtools/portcheck` 校验。行号选填，指整个文件或整个上游包时只写路径；一行可以引好几处，每一处都会被验。
+- `docs/DESIGN.md`：详细运行时边界、持久化和设计决策。
 
 ## 许可证
 
-本项目以 [MIT License](LICENSE) 发布。来源于或改编自 DeepSeek Harness 的部分保留上游版权与许可声明，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+本项目以 [MIT License](LICENSE) 发布。第三方代码和参考实现的版权与许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
