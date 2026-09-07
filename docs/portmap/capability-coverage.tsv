@@ -130,7 +130,7 @@ Web壳的SPA静态文件服务器，通过显式index入口返回构建好的前
 Web HTTP与upgrade route注册插件，启动node:http服务器并管理具名路由表，提供fallback处理器席位	host/webserver	不需要	—	缺前置：起本机子进程的能力
 遥测、反馈确认与DeepSeek提供方共用的匿名身份，按harness home生成UUID v4并持久化	identity/anonymous-user-id	不需要	—	缺前置：本机家目录持久化身份文件。且遥测身份不属运行时职责
 由插件注册的用户命令注册表，供交互式UI适配器使用	interaction/commands	需要	feature/interaction/commands	
-通过ctx.permissionPresets提供面向用户的权限预设组合沙箱与审批	interaction/permission-presets	需要	（未落地）	缺口：权限预设组合（沙箱与审批的成组配置）没有 Go 包。前提 1 多用户并发要它
+通过ctx.permissionPresets提供面向用户的权限预设组合沙箱与审批	interaction/permission-presets	需要	feature/interaction/permissionpresets	缺一角：捆包里只剩审批策略一个旋钮。沙箱那一整支（sandbox/*、shell/*-sandbox）本仓库判为不需要，DSH 那两条默认预设也照沙箱模式起名，所以 Go 这边不带默认表，预设表必填
 模型侧ask_user_question工具，基于ctx.userQuestions实现	interaction/tool-ask-user	需要	feature/interaction/askuser	
 与通道无关的一次性审批seam，request返回allowed-once/rejected/cancelled/unavailable	interaction/user-approval	需要	feature/interaction/userapproval tools	
 用户交互Service Definition，定义ctx.userQuestions与提供方注册	interaction/user-questions	需要	feature/interaction/userquestions	
@@ -178,7 +178,7 @@ OpenTelemetry遥测后端，支持FULL、FEEDBACK_ONLY、DISABLED三种模式	se
 通过LLM总结所有用户消息的会话标题提供方	session/session-title-all-prompts-llm	需要	feature/sessiontitle/sessiontitlellm	
 通过LLM总结第一条用户消息的会话标题提供方	session/session-title-first-prompt-llm	需要	feature/sessiontitle/sessiontitlellm	
 模型支持的会话标题提供方共享实现	session/session-title-llm	需要	feature/sessiontitle/sessiontitlellm	
-turnOutline 投影单元，给出全日志每个已开始轮次的 turn/start seq 与有界提示词、最终回复预览，支撑整会话轮次导航与向后分页定位	session/session-turn-outline	需要	（未落地）	缺口：sessionlog/projection 没有 turnOutline 单元。零前置条件，纯投影；几千轮的会话客户端要能跳到第 300 轮
+turnOutline 投影单元，给出全日志每个已开始轮次的 turn/start seq 与有界提示词、最终回复预览，支撑整会话轮次导航与向后分页定位	session/session-turn-outline	需要	feature/turnoutline	
 用户设置Service Definition，管理按namespace分节的schema默认值、组合base与用户层解析	settings/settings	需要	harness/agentdefaultmodel settings	
 基于YAML/JSON文件的settings提供方，支持外部编辑热发布、并发写锁、YAML注释保留	settings/settings-file	不需要	—	缺前置：本机文件系统
 本地 bash 执行器，通过 subprocess 提供前台和后台 shell 执行能力	shell/bash-local	不需要	—	缺前置：起本机子进程的能力
@@ -219,13 +219,13 @@ Windows ACL 沙箱消费的底层 Win32 进程库，独家持有 restricted-proc
 限定所有者范围的持久 PTY seam，通过具名后端路由终端操作	terminal/terminal	不需要	—	缺前置：交互式 TTY
 为 ctx.terminals 提供的持久 shell 后端，在共享沙箱策略下启动交互式 shell	terminal/terminal-bash	不需要	—	缺前置：交互式 TTY
 面向模型的终端工具（terminal_open、terminal_send、terminal_read 等），支持后台模式	terminal/tool-terminal	不需要	—	缺前置：交互式 TTY
-**上游已删。**为 ACP 快照测试提供无密钥层、规范化器、启动器和测试套件工厂	test-support/acp-snapshot	需要	（未落地）	上游已删，继任者 test-support/session-snapshot 也没落地，缺口合并到那一条
-共享挂载 agent loop 测试的先决依赖（LLM、会话、提示词、工具、agent）	test-support/agent-loop-testkit	需要	（未落地）	缺口：按序挂载 LLM／会话／提示词／工具／agent 的测试脚手架没有，loop 逻辑目前无法隔离测
+**上游已删。**为 ACP 快照测试提供无密钥层、规范化器、启动器和测试套件工厂	test-support/acp-snapshot	需要	（未落地）	上游已删，继任者 test-support/session-snapshot 落在 sessionlog/snapshot 上，缺口合并到那一条
+共享挂载 agent loop 测试的先决依赖（LLM、会话、提示词、工具、agent）	test-support/agent-loop-testkit	需要	harness/harnesstest	—
 为客户端 UI 功能测试提供 jsdom 运行时，含真实 Cordis Context 和生产 slot 注册表	test-support/client-runtime	不需要	—	缺前置：jsdom／DOM 与 cordis
 可编脚本的 OpenAI 兼容 HTTP 服务器，无需密钥即可测试 LLM 适配器和 agent 循环	test-support/llm-mock-server	需要	cmd/llmmockserver llm/mockserver	
 从已记录会话日志回放 LLM 模型流，使快照测试无需 API 密钥	test-support/llm-replay	需要	feature/replay	
-通过 Cordis Loader 与 cordis.yml 启动应用的共享子进程冒烟 harness，runFixtureTurn 驱动一次完整任务并返回最终文本与用量	test-support/loader-smoke	需要	（未落地）	缺口：「能启动、能跑完一轮、能关停」的端到端冒烟脚手架没有
-无密钥已记录会话测试的共享支持：封闭 manifest、类型化身份脱敏、规范化、workspace 比较、fixture 保护，以及 headless、SDK、ACP 与 Web 的协议适配器	test-support/session-snapshot	需要	（未落地）	缺口：会话日志快照三件套——清单化夹具、身份脱敏、期望输出归一化。没有归一化，带时间戳和 ID 的日志没法做快照比对。它的 workspace 文件快照那部分不要（前置是本机文件系统）
+通过 Cordis Loader 与 cordis.yml 启动应用的共享子进程冒烟 harness，runFixtureTurn 驱动一次完整任务并返回最终文本与用量	test-support/loader-smoke	需要	harness/smoketest	子进程启动那一半没有：Loader、cordis.yml 和 src／lib 两条启动路径在 Go 里都不存在
+无密钥已记录会话测试的共享支持：封闭 manifest、类型化身份脱敏、规范化、workspace 比较、fixture 保护，以及 headless、SDK、ACP 与 Web 的协议适配器	test-support/session-snapshot	需要	sessionlog/snapshot	三件套齐了：清单、身份脱敏、归一化。workspace 文件快照那部分不要（前置是本机文件系统）；协议适配器和测试套件工厂也没有——它们起子进程、且绑死 vitest
 面向模型的todo_write工具，agent的完整任务列表每次调用整体替换	todo/tool-todo	需要	feature/todo	
 TypeScript项目分析器和模型驱动的Typert代码生成器	typert/generator	不需要	—	缺前置：TypeScript 编译期类型信息。Go 侧用 reflect 加代码生成
 生成的Typert产物的Loader集成，发现并注册贡献项	typert/loader	不需要	—	缺前置：cordis Loader 与 package.json 清单
@@ -249,11 +249,11 @@ Web访问能力seam的Service Definition，定义WebRuntime接口与提供方注
 DeepSeek Anthropic兼容Messages API搜索提供方，触发原生web_search服务器工具	web/web-search-deepseek	不需要	—	缺前置：DeepSeek 官方 API key
 Exa搜索端点提供方，返回高亮摘要映射为规范结果	web/web-search-exa	不需要	—	缺前置：Exa API key
 Perplexity OpenAI兼容搜索提供方，生成答案与引用映射	web/web-search-perplexity	不需要	—	缺前置：Perplexity API key
-Host 侧 ctx.webhookRuntime：受信任程序化 webhook 规则的注册表，唯一内置动作是在 Web Workspace 中创建普通根 Session	webhook/webhook	需要	（未落地）	缺口：规则运行时（外部事件→工作区／预设／模型／权限→开会话跑提示词，fire-and-forget）。零本机前置，依赖的东西全有。现在运行时只能被人从协议层叫醒
+Host 侧 ctx.webhookRuntime：受信任程序化 webhook 规则的注册表，唯一内置动作是在 Web Workspace 中创建普通根 Session	webhook/webhook	需要	feature/webhook	缺一角：没有任何 provider 适配器。签名校验、HTTP 路由、回 202 归 webhook/webhook-github 那一层，它还没落地，所以现在只能由装配方自己造投递来叫它
 带签名验证的 GitHub webhook 适配器，在注入的 ctx.webServer 上注册一条精确 HTTP 路由，投影提供方无关的交付并立即返回 202	webhook/webhook-github	抄形状	（未落地）	缺口：随 webhook/webhook 一起缺。要抄的是 HMAC 验签→解事件→交给规则运行时这个形状，不绑 HTTP 框架；凭据取用挂到 credentials 的归属校验上
 面向模型的ralph工具，运行固定的前台工作流把目标依次交给多个全新子agent	workflow/tool-ralph	需要	feature/workflow/toolralph	
 面向模型的workflow工具，运行扇出subagent的JavaScript编排脚本并返回脚本最终值	workflow/tool-workflow	不需要	—	缺前置：JavaScript 编排引擎（workflow-worker-thread 出局），Go 侧没有产出方
-工作流seam定义脚本、运行、结果、错误和事件契约，worker-thread是当前引擎实现	workflow/workflow	需要	（未落地）	缺口：工作流接缝（脚本／运行／结果／错误／事件契约与生命周期观察器）。feature/workflow/toolralph 是挂在它上面的工具，接缝本身没有
+工作流seam定义脚本、运行、结果、错误和事件契约，worker-thread是当前引擎实现	workflow/workflow	需要	feature/workflow	缺一角：只有接缝没有引擎。脚本正文、meta 校验、组合子那套 API 都留给实现方兑现，本仓库不带产出方；Ralph 不经过这条接缝，它的编排写死在循环里
 WorkflowEngine实现，每次运行使用Node worker thread隔离脚本执行	workflow/workflow-worker-thread	不需要	—	缺前置：单进程独占（本仓库要多实例并发）
 Workspace实体注册表，持久化workspace记录、顺序、会话归属索引，支持创建/删除/排序/归档操作	workspace/workspace	需要	feature/workspace	
 SQL 方言底座：把键值与日志映射成表，Postgres 与 SQLite 共用一套语句	—	本仓库自有	adapter/datastore	替代 storage/storage-sqlite。服务端无磁盘，后端定 Postgres

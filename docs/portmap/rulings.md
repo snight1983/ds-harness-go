@@ -307,13 +307,13 @@ JS 运行时自己的缺口：没有 UUID（安全上下文外 `crypto.randomUUI
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `test-support/session-snapshot` | 需要 | **`acp-snapshot` 的继任者**，上游把它扩成了通用的会话日志快照核心，ACP 只是它的一个协议适配器。要的是三样：清单化的夹具、身份脱敏（`identity redaction`）、期望输出归一化——没有归一化，任何带时间戳和 ID 的会话日志都没法做快照比对。**它的 workspace 文件快照那部分不要**（二进制文件、符号链接、空目录），那部分的前置是本机文件系统 |
+| `test-support/session-snapshot` | 需要 | **`acp-snapshot` 的继任者**，上游把它扩成了通用的会话日志快照核心，ACP 只是它的一个协议适配器。要的是三样：清单化的夹具、身份脱敏（`identity redaction`）、期望输出归一化——没有归一化，任何带时间戳和 ID 的会话日志都没法做快照比对。**它的 workspace 文件快照那部分不要**（二进制文件、符号链接、空目录），那部分的前置是本机文件系统。<br><br>**已落地在 `sessionlog/snapshot`**，三样齐了：`ParseManifest` 读那张归属声明，`RedactIDs` 把标识换成按类型编号的记号，`Normalize` 归零时钟、把请求头膨胀换成记号、不看落盘边界重打包分块。没有移的有四处：workspace 文件快照（如上）；headless／SDK／ACP／Web 四个协议适配器和那个 vitest 套件工厂（都要起子进程，且绑死一个 JS 测试框架）；整套 cwd 归一化（上游把宿主绝对路径钉在会话头上，本仓库那一格是不透明的 `WorkspaceID`，macOS 的 `/private` 别名和 Windows 的长短路径两种拼法在这里都无从谈起）；JSON-RPC 转写稿归一化（跟着子进程一起没有移）。另有一处与上游不同：上游的记号编号跟着 JS 对象的插入顺序走，Go 的 map 迭代顺序是随机的，照抄会让同一份日志压两次得到两套编号，所以改成按键名字典序认领——编号和上游对不上，但它是确定的，而确定正是这个包存在的理由 |
 | `test-support/acp-snapshot` | 需要 | **上游已删**，扩成了 `test-support/session-snapshot`。原判理由：ACP快照测试harness。"launchAcpTestAgent启动器、通过SDK客户端收集会话、runScenario驱动、normalizer + scrubber + defineAcpSnapshotSuite"。如果你用ACP，需要能运行集成测试验证round-trip行为。这个工具让你在不连真model下跑完整agent回合（见下）。 |
-| `test-support/agent-loop-testkit` | 需要 | agent loop测试依赖挂载工具。"mountAgentLoopTestDependencies按序挂LLM、session、system-prompt、tools、agent"。你需要能在单元/集成测试中隔离地测试loop逻辑。这直接支持"跨天活跨进程活下来"的持久化测试。 |
+| `test-support/agent-loop-testkit` | 需要 | agent loop测试依赖挂载工具。"mountAgentLoopTestDependencies按序挂LLM、session、system-prompt、tools、agent"。你需要能在单元/集成测试中隔离地测试loop逻辑。这直接支持"跨天活跨进程活下来"的持久化测试。<br><br>**已落地在 `harness/harnesstest`**，三处与上游不同：上游把五样挂到 cordis 上下文上、函数本身返回 void，本仓库没有那张服务表，于是显式交回一份结构体；多透了作用域与时钟两项配置——作用域在 Go 里是显式的值，而真时钟会让同一毫秒里落的两条事件拿到相同时间戳、快照比对因此不稳；日志默认丢掉而不是走 `slog.Default()`，因为一次 `go test ./...` 里这套骨架会被立起来上千次，默认那个 logger 会把用例真正的失败信息淹掉 |
 | `test-support/client-runtime` | **不需要** | cordis + jsdom 的浏览器测试脚手架，前置是 DOM |
 | `test-support/llm-mock-server` | 需要 | 可编脚本OpenAI兼容mock HTTP服务器。"行为脚本(connection_reset/stream_disconnect/.../success/tool_call_success)、时序与内容控制"。这是**不连真模型情况下跑完整round-trip**的工具——正是你需要的。它让"跨天活"的测试不依赖API key和配额。 |
 | `test-support/llm-replay` | 需要 | 无密钥快照测试的LLM回放插件。"根据已记录session JSONL fixture重建模型流、installLlmReplay返回ReplayHandle"。这是**不连真模型跑回合**的主要方式——用既有fixture驱动测试，省掉真实API成本。条目"首次调用顺序脚本绑定假设串行委托、只有普通loop分片和标记本地压缩输出能派生"——限制在"什么场景能用"，不是"用不了"。 |
-| `test-support/loader-smoke` | 需要 | 烟雾测试harness。"resolveExampleLaunch、runLoaderSmoke、runFixtureTurn单轮驱动"。这是"启动 + 执行single turn + 查收output"的端到端脚手架。你需要它验证"应用能启动、能跑、能shutdown"的完整周期。 |
+| `test-support/loader-smoke` | 需要 | 烟雾测试harness。"resolveExampleLaunch、runLoaderSmoke、runFixtureTurn单轮驱动"。这是"启动 + 执行single turn + 查收output"的端到端脚手架。你需要它验证"应用能启动、能跑、能shutdown"的完整周期。**那条断言链已落地在 `harness/smoketest`**；子进程那一半没有移：上游启动的是一棵 `cordis.yml` 装出来的树，靠 `DSH_EXAMPLE_MODE` 在「tsx 跑 src」和「node 跑 lib」之间二选一，Go 里没有 Loader、没有那份配置文件，也没有源码态与构建态两条启动路径。剩下的「驱一轮、收最终文本和用量」和宿主是不是子进程无关，那部分照抄了，包括那道「看见自己那条消息进收件箱才开始记账」的闸。 |
 
 ### `examples/`（3）— 抄形状 3 · **整支上游已删**
 
@@ -369,7 +369,7 @@ JS 运行时自己的缺口：没有 UUID（安全上下文外 `crypto.randomUUI
 | 包 | 裁决 | 理由 |
 |---|---|---|
 | `interaction/commands` | 需要 | 用户命令注册表，前提3交互场景 |
-| `interaction/permission-presets` | 需要 | 权限预设管理，前提1多用户并发 |
+| `interaction/permission-presets` | 需要 | 权限预设管理，前提1多用户并发。**落地时缺一角**：DSH 的 `PresetSpec` 捆 `sandbox` + `approval` 两个旋钮，且构造函数在执行器不约束时直接抛。沙箱那一整支（`sandbox/*`、`shell/bash-sandbox`、`shell/pwsh-sandbox`）本仓库全判为不需要，所以 Go 版本只捆审批策略一个旋钮。DSH 那两条默认预设（`workspace-write`、`danger-full-access`）**两个键都是照沙箱模式起的名**，照抄等于给用户看一个名叫「完全访问」却根本不管文件访问的选项，所以 Go 这边不带默认表，预设表必填。计划模式没有折进来当第二个旋钮——DSH 是刻意把它挡在这个捆包外面的。剩下一个旋钮时这张表仍然不多余：部署方起名的档位单、钉进新会话的默认选择、捆包打平手时保住用户意图的那条日志事实、界面投影、`/permission` 命令，以及 webhook 那一侧要的可命名手柄 |
 | `interaction/tool-ask-user` | 需要 | ask_user_question 工具，前提3用户反问 |
 | `interaction/user-approval` | 需要 | 审批 seam，前提3审批流程 |
 | `interaction/user-questions` | 需要 | 用户交互 seam 定义，提供 ask() API |
@@ -551,7 +551,7 @@ JS 运行时自己的缺口：没有 UUID（安全上下文外 `crypto.randomUUI
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `webhook/webhook` | **需要** | 规则运行时：一条规则把「什么外部事件」映射到「用哪个工作区、哪个预设、哪个模型、哪套权限，开一个会话跑什么提示词」，fire-and-forget。**零本机前置**，需要的东西（`workspace`／`agent-presets`／`agent-default-model`／`permission-presets`／`session-title`）我们全有。这是一块实打实的缺口：现在的运行时只能被人从协议层叫醒 |
+| `webhook/webhook` | **需要** | 规则运行时：一条规则把「什么外部事件」映射到「用哪个工作区、哪个预设、哪个模型、哪套权限，开一个会话跑什么提示词」，fire-and-forget。**零本机前置**，需要的东西（`workspace`／`agent-presets`／`agent-default-model`／`permission-presets`／`session-title`）我们全有。**已落地在 `feature/webhook`**，四处与上游不同：六个 cordis 服务改成五个窄接口加一个函数接缝（改标题那件事接口两头对不上）；会话与工作区的归属事实由装配方注入，本包不自己去查；失败记录多一个「回滚失败」维度，让「为什么开不成」和「收拾现场时又出了什么问题」分两条报；工作区路径的绝对路径断言删掉了——那条路径交给 `fs` 解析，而它背后可以是对象存储 |
 | `webhook/webhook-github` | **抄形状** | GitHub 的签名校验与事件路由。要抄的是形状（HMAC 验签 → 解事件 → 交给规则运行时），不是这个包——它绑在 `host/webserver` 上，而本仓库不强制宿主用哪个 HTTP 框架。凭据取用要挂到 `credentials` 的归属校验上，理由同 `mcp/mcp-client` 那条 |
 
 ### `acp/`（1）— 需要 1

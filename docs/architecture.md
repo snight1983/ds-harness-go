@@ -8,7 +8,7 @@
 
 ## 分层
 
-99 个包按角色分成七档。**箭头是允许的 import 方向，反过来就是错的**——这不是一张示意图，档位表写在 [`layers.tsv`](layers.tsv) 里，加一条反方向的 import 会让 `internal/devtools/layercheck` 变红。
+106 个包按角色分成七档。**箭头是允许的 import 方向，反过来就是错的**——这不是一张示意图，档位表写在 [`layers.tsv`](layers.tsv) 里，加一条反方向的 import 会让 `internal/devtools/layercheck` 变红。
 
 ```mermaid
 flowchart TB
@@ -20,9 +20,9 @@ flowchart TB
         Assembly["assembly　1 个<br/>harness：按顺序把下面这些拼起来"]
         Protocol["protocol　4 个<br/>对外线协议：ACP · MCP · SDK"]
         Adapter["adapter　10 个<br/>生产后端实现：数据库 · 对象存储 · 模型适配"]
-        Feature["feature　51 个<br/>能力：压缩 · 上下文 · 多 Agent · 作业 · Skill …"]
-        RuntimeTier["runtime　5 个<br/>运行期本身：Agent · Loop · 活会话 · 提示词"]
-        Contract["contract　16 个<br/>对外门面：llm · tools · scope · sessionlog · storage · fs …"]
+        Feature["feature　55 个<br/>能力：压缩 · 上下文 · 多 Agent · 作业 · Skill …"]
+        RuntimeTier["runtime　7 个<br/>运行期本身：Agent · Loop · 活会话 · 提示词"]
+        Contract["contract　17 个<br/>对外门面：llm · tools · scope · sessionlog · storage · fs …"]
 
         Cmd --> Assembly
         Assembly --> Protocol
@@ -77,7 +77,7 @@ flowchart TB
 |---|---|---|---|
 | 档 | 七档各自 | 上面那张表 | `layercheck` 判 import 方向 |
 | 模块 | `docs/modules` 下每一篇 | 定位、架构、生命周期与并发、失败语义、**能力边界**、对应的 DSH 能力、相关源码 | `doccheck` 缺一节变红 |
-| 包 | 全部 99 个包 | 包注释末尾一节「不做什么」，3 到 6 条，逐条指出不负责什么、各归谁 | `doccheck` 缺这一节变红 |
+| 包 | 全部 106 个包 | 包注释末尾一节「不做什么」，3 到 6 条，逐条指出不负责什么、各归谁 | `doccheck` 缺这一节变红 |
 
 最后一行是这三级里最容易漏的一级，也是**唯一一级说的全是否定句**。理由：一个包该干什么，读它的导出符号大致读得出来；**不该**干什么读不出来——那是当初做决定时排除掉的东西，不写下来就只活在写的人脑子里，下一个人照着「这里加一下最方便」就把它加进来了。
 
@@ -243,7 +243,7 @@ flowchart LR
 
 ## 模块关系
 
-这里只列主干，全部 99 个包到文档的映射在 [`packages.md`](packages.md) 里，由 `internal/devtools/doccheck` 校验。
+这里只列主干，全部 106 个包到文档的映射在 [`packages.md`](packages.md) 里，由 `internal/devtools/doccheck` 校验。
 
 | 文档模块 | 覆盖的主要包 |
 |---|---|
@@ -259,7 +259,7 @@ flowchart LR
 | [多 Agent](modules/subagent.md) | `feature/subagent/*` |
 | [存储、文件与附件](modules/storage.md) | `storage/*`、`fs/*`、`attachment`、`credentials` |
 | [持久化抽象层](modules/datastore.md) | `adapter/datastore` 及其 `kvstore`、`sessionstore` |
-| [后台作业](modules/jobs.md)、[长期目标](modules/goal.md)、[耐久提醒](modules/schedule.md)、[Ralph 工作流](modules/ralph.md) | `feature/jobs/*`、`feature/goal/*`、`feature/schedule`、`feature/workflow/*` |
+| [后台作业](modules/jobs.md)、[长期目标](modules/goal.md)、[耐久提醒](modules/schedule.md)、[工作流与 Ralph](modules/ralph.md) | `feature/jobs/*`、`feature/goal/*`、`feature/schedule`、`feature/workflow/*` |
 | [ACP 接入](modules/acp.md)、[MCP 客户端](modules/mcp.md)、[SDK 协议与服务端](modules/sdk.md) | `protocol/*` |
 | [移植与文档门禁工具](modules/migration-tools.md) | `internal/devtools/*` |
 

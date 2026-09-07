@@ -213,7 +213,15 @@ func (l *AgentLoop) prepare(
 		}
 		detachSession = detach
 
-		detach, err = l.deps.Agents.Enter(built, l.agentForScope(owner.Key()))
+		// 这个转换必须显式写出来：agentForScope 交出的是 *ReactLoopAgent，直接塞进
+		// agent.Agent 那个入参，一个「没找到」的空指针会变成一个**非 nil 的接口值**。
+		// 那样每一个顶层 agent 都会被记成「有主的」，[agent.Registry.Roots] 从此
+		// 永远是空的，[agent.Registry.IsOwnedBy] 也认不出顶层。
+		var parent agent.Agent
+		if live := l.agentForScope(owner.Key()); live != nil {
+			parent = live
+		}
+		detach, err = l.deps.Agents.Enter(built, parent)
 		if err != nil {
 			return agent.Handle{}, err
 		}

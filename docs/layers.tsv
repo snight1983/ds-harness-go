@@ -30,6 +30,7 @@ feature/guard/repeattoolreminder	feature
 feature/guard/timeoutpolicy	feature
 feature/interaction/askuser	feature
 feature/interaction/commands	feature
+feature/interaction/permissionpresets	feature
 feature/interaction/userapproval	feature
 feature/interaction/userquestions	feature
 feature/jobs	feature
@@ -64,6 +65,9 @@ feature/telemetry	feature
 feature/timeout	feature
 feature/todo	feature
 feature/tokenmeter	feature
+feature/turnoutline	feature
+feature/webhook	feature
+feature/workflow	feature
 feature/workflow/toolralph	feature
 feature/workspace	feature
 fs	contract
@@ -72,7 +76,9 @@ harness	assembly
 harness/agent	runtime
 harness/agentdefaultmodel	runtime
 harness/agentloop	runtime
+harness/harnesstest	runtime
 harness/session	runtime
+harness/smoketest	runtime
 harness/systemprompt	runtime
 internal/devtools/capmap	cmd
 internal/devtools/consumercheck	cmd
@@ -95,6 +101,7 @@ protocol/sdk/sdkserver	protocol
 scope	contract
 sessionlog	contract
 sessionlog/projection	contract
+sessionlog/snapshot	contract
 settings	contract
 spill	contract
 storage	contract

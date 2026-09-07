@@ -200,6 +200,29 @@ Session ID 与 Agent ID 在运行时必须一致。
 
 `feature/sessionquery/querytool` 把受授权的查询能力暴露给模型。宿主必须提供权限检查，不能让模型凭 Session ID 越权读取。
 
+## 回合大纲
+
+一个几千回合的会话，客户端不可能把事件全装在手里。`feature/turnoutline` 折出一份**只有大纲的目录**：每个回合一行，带着它的跳转坐标和两段预览。客户端凭它把所有回合都列出来，点哪一行就照那个坐标去取那一段事件。
+
+```mermaid
+flowchart LR
+    subgraph L["日志（几千条事件）"]
+        E1["turn/start"] --> E2["user/message"] --> E3["assistant/message ×N"] --> E4["turn/end"]
+    end
+    L --> F["turnoutline 折叠"]
+    F --> O["大纲一行<br/>回合号 · 跳转坐标 · 提示词预览 · 回复预览"]
+    O --> C["客户端列表<br/>没加载的回合也列得出来"]
+```
+
+两处取舍值得说明：
+
+| 决定 | 为什么 |
+|---|---|
+| 跳转坐标记的是**回合开始**那条事件，不是那句提示词 | 回合开始写在提示词前面。往回翻到它，整个回合都在窗口里；翻到提示词，边界本身反而漏在外面 |
+| 助手说的话先存草稿，回合结束才写进大纲 | 一个回合里助手可能说很多次，列表要的是最后那次。中途改草稿不惊动客户端，于是一个回合最多推三次：开始、提示词、定稿 |
+
+预览按**字**收，不按字节收——两个预算量的是列表卡片上放得下几行字，一行中文按字节算会在三分之一处就被砍断。
+
 ## 统计、标题和遥测
 
 | 包 | 能力 |
@@ -272,6 +295,7 @@ Session 模块不负责：
 | 通过LLM总结所有用户消息的会话标题提供方 | `session/session-title-all-prompts-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
 | 通过LLM总结第一条用户消息的会话标题提供方 | `session/session-title-first-prompt-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
 | 模型支持的会话标题提供方共享实现 | `session/session-title-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
+| turnOutline 投影单元，给出全日志每个已开始轮次的 turn/start seq 与有界提示词、最终回复预览，支撑整会话轮次导航与向后分页定位 | `session/session-turn-outline` | 需要 | `feature/turnoutline` | — |
 | 无损 JSON 校验、分离式快照、深度冻结、JSON 结构相等与封闭联合的穷尽失败 | `util/values` | Go 已有等价物 | `sessionlog` | 整包在防 JS 对象图的危险（伪造原型、取值器、稀疏数组、环、-0、非有限数），Go 里要么不存在要么 encoding/json 自己就拒。逐条对照写在 sessionlog/doc.go |
 
 ## 相关源码
@@ -284,6 +308,7 @@ Session 模块不负责：
 | `sessionlog/projection/` | 当前状态计算注册表 |
 | `feature/projectioncache/` | 当前状态检查点缓存 |
 | `feature/checkpointpolicy/` | 持久化时机 |
+| `feature/turnoutline/` | 整会话回合大纲 |
 | [`feature/sessionquery/`](sessionquery.md) | 会话与事件查询 |
 
 ## 深入阅读

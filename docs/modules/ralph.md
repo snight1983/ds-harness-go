@@ -1,8 +1,15 @@
-# Ralph 工作流
+# 工作流与 Ralph
 
 ## 定位
 
-`feature/workflow/toolralph` 实现固定的多轮子 Agent 工作流：父 Agent 发起一个目标，控制器按轮创建子 Agent、收集报告、决定是否继续，并把最终结果作为工具结果返回。
+这一篇覆盖两个包，一个是**接缝**，一个是**跑在这类接缝上的那件事**：
+
+| 包 | 是什么 |
+|---|---|
+| `feature/workflow` | 编排工作流的能力接缝：一次运行怎么开工、怎么结清、中途往外说什么。只有契约 |
+| `feature/workflow/toolralph` | 固定的多轮子 Agent 工作流。父 Agent 发起一个目标，控制器按轮创建子 Agent、收集报告、决定是否继续，最终结果作为工具结果返回 |
+
+**这个仓库里没有工作流引擎。**上游那台引擎跑的是 JavaScript 编排脚本、载体是一条 Node worker 线程，两样这里都没有，所以引擎和它那件通用脚本工具都裁掉了。留下的是接缝本身和 Ralph——Ralph 不读脚本，它的编排是写死的。
 
 ## 架构
 
@@ -29,6 +36,44 @@ Controller
 3. 等待子 Agent 结算，解析本轮报告。
 4. 报告要求继续时进入下一轮；完成时返回最终答案。
 5. 任一轮失败、取消或超过轮次上限时生成明确终态。
+
+## 工作流接缝
+
+一段编排交给引擎，引擎一路往外说它在干什么。**说话的那条线和控制那条线是分开的**：
+
+```mermaid
+flowchart LR
+    C["调用方"] -->|"开工：编排 + 身份 + 父 Agent"| E["引擎"]
+    E -->|"活的运行句柄<br/>要结果 · 取消 · 处置"| C
+    E -.只观察.-> O["观察方<br/>界面 · 遥测 · 审计"]
+```
+
+虚线那一侧只看得见**发生了什么**，看不见那个运行句柄。所以一个装了观察者的插件不可能取消别人的运行——这是接缝上最要紧的一条分工。
+
+六条边围着一次运行凑成一份账：
+
+```mermaid
+flowchart TB
+    S["开始<br/>身份验过了"] --> P["进了一个阶段"]
+    P --> L["说了一句话"]
+    L --> AS["派出一个子 Agent"]
+    AS --> AE["那个子 Agent 结清了"]
+    AE --> N["结束<br/>为什么停 · 派了几个"]
+```
+
+阶段只是**进度分组**，对执行结构一个字都没说；派出与结清按序号配对，无论怎么停都得配上。
+
+这份账由本包自己的运行期检查看着，五条：
+
+| 查什么 | 不查会怎样 |
+|---|---|
+| 一次运行的身份自始至终不变 | 中途改名，观察方按 id 聚合时一次运行会裂成两次 |
+| 派出与结清逐条配对，身份一致 | 界面上留下永远转圈的子 Agent |
+| 收尾时不许有挂着的子 Agent | 引擎在被强杀那条路上偷懒不补结清，没人发现 |
+| 报的派出数不小于真看见的 | 计数对不上，用量统计悄悄少算 |
+| 完成的不带失败描述，没完成的必须带 | 一次静默的失败——说失败了却说不出为什么 |
+
+Ralph 不经过这条接缝：它的编排就是一个循环，没有脚本、没有引擎。接缝留着是因为观察方可以先于引擎存在，将来补一台 Go 引擎不必推翻已经装上去的观察者。
 
 ## 生命周期与并发
 
@@ -59,10 +104,11 @@ Controller
 |---|---|---|---|---|
 | 基于已配置provider的面向模型委派工具，前台或后台执行subagent任务 | `subagent/tool-subagent` | 需要 | `feature/workflow/toolralph` | 缺一角：子 agent 的模型选择授权表。descriptor.go 的 AgentProvider／AgentModel 是装配期定死的，模型自己挑不了，也没有「许挑哪几条路由」的授权表。补的入口：工具 schema 加 provider／model／reasoning_effort，授权表以 subagent/model-selection-policy 事件进日志（只进日志不进模型历史），配一个投影单元读回来 |
 | 面向模型的ralph工具，运行固定的前台工作流把目标依次交给多个全新子agent | `workflow/tool-ralph` | 需要 | `feature/workflow/toolralph` | — |
+| 工作流seam定义脚本、运行、结果、错误和事件契约，worker-thread是当前引擎实现 | `workflow/workflow` | 需要 | `feature/workflow` | 缺一角：只有接缝没有引擎。脚本正文、meta 校验、组合子那套 API 都留给实现方兑现，本仓库不带产出方；Ralph 不经过这条接缝，它的编排写死在循环里 |
 
 ## 相关源码
 
-- `feature/workflow/toolralph/config.go`
-- `feature/workflow/toolralph/loop.go`
-- `feature/workflow/toolralph/report.go`
-- `feature/workflow/toolralph/tool.go`
+| 目录 | 装的是什么 |
+|---|---|
+| `feature/workflow/` | 接缝：开工请求与运行句柄、六条生命周期边、带码失败、那条运行期检查 |
+| `feature/workflow/toolralph/` | Ralph 工具：轮次循环、每轮报告、配置与工具描述 |

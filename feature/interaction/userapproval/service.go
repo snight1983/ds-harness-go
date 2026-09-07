@@ -202,6 +202,17 @@ func (s *Service) OverrideOf(log Log) (Policy, bool) {
 	return EffectivePolicy(log.Events())
 }
 
+// DefaultPolicy 交出这个部署给「没有自己切过策略的会话」定的那个默认值。
+//
+// 源: packages/interaction/user-approval/src/index.ts:280-283（`this.config.policy ?? 'ask'`）
+//
+// 新增: DSH 那边别的包直接读 `ctx.approval.config.policy`——那是一个公开字段。
+// Go 里配置在 [New] 里就归一化进了服务自己（空串折成 [PolicyAsk]），所以这一份
+// 由一个方法交出去。读它的是那些**没有日志**也要求值的地方，例如
+// [github.com/snight1983/ds-harness-go/feature/interaction/permissionpresets] 那个
+// 投影单元：它手上只有折出来的旋钮状态，没有会话，[Service.PolicyFor] 用不上。
+func (s *Service) DefaultPolicy() Policy { return s.policy }
+
 // PolicyFor 交出这条会话此刻的有效策略：它自己的覆盖，没有就用部署默认值。
 //
 // 源: packages/interaction/user-approval/src/index.ts:278-287

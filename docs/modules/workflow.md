@@ -140,6 +140,7 @@ flowchart LR
 | 为未来创建的live根agent提供三个会话范围内的工具管理持久提醒 | `schedule/schedule` | 需要 | `feature/schedule` | — |
 | 基于已配置provider的面向模型委派工具，前台或后台执行subagent任务 | `subagent/tool-subagent` | 需要 | `feature/workflow/toolralph` | 缺一角：子 agent 的模型选择授权表。descriptor.go 的 AgentProvider／AgentModel 是装配期定死的，模型自己挑不了，也没有「许挑哪几条路由」的授权表。补的入口：工具 schema 加 provider／model／reasoning_effort，授权表以 subagent/model-selection-policy 事件进日志（只进日志不进模型历史），配一个投影单元读回来 |
 | 面向模型的ralph工具，运行固定的前台工作流把目标依次交给多个全新子agent | `workflow/tool-ralph` | 需要 | `feature/workflow/toolralph` | — |
+| 工作流seam定义脚本、运行、结果、错误和事件契约，worker-thread是当前引擎实现 | `workflow/workflow` | 需要 | `feature/workflow` | 缺一角：只有接缝没有引擎。脚本正文、meta 校验、组合子那套 API 都留给实现方兑现，本仓库不带产出方；Ralph 不经过这条接缝，它的编排写死在循环里 |
 
 ## 相关源码
 
@@ -152,8 +153,9 @@ flowchart LR
 | `feature/goal/goalrounddriver/` | 空闲续推驱动 |
 | `feature/goal/goaltool/`、`feature/goal/goalcommand/` | 模型工具与宿主命令入口 |
 | `feature/schedule/` | 耐久计划、时间解析和投递运行时 |
+| `feature/workflow/` | 工作流能力接缝：开工请求、运行句柄、六条生命周期边 |
 | `feature/workflow/toolralph/` | 固定多轮子 Agent 工作流 |
 
 ## 深入阅读
 
-[后台作业](jobs.md) · [长期目标](goal.md) · [耐久提醒](schedule.md) · [Ralph 工作流](ralph.md)
+[后台作业](jobs.md) · [长期目标](goal.md) · [耐久提醒](schedule.md) · [工作流与 Ralph](ralph.md)

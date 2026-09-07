@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/snight1983/ds-harness-go/harness/agent"
+	"github.com/snight1983/ds-harness-go/harness/harnesstest"
 	"github.com/snight1983/ds-harness-go/harness/session"
 	"github.com/snight1983/ds-harness-go/harness/systemprompt"
 	"github.com/snight1983/ds-harness-go/llm"
@@ -50,33 +51,26 @@ type factoryWorld struct {
 }
 
 // newFactoryWorld 造一个舞台，此时还没有工厂。
+//
+// 那五样先决依赖走 [harnesstest.Mount]——它停在循环之前，正好是本文件要验的那一步。
 func newFactoryWorld(t *testing.T) *factoryWorld {
 	t.Helper()
 
-	owner := rootScope(t)
-	agents, err := agent.NewRegistry(agent.RegistryOptions{})
-	if err != nil {
-		t.Fatalf("造 agent 注册表失败：%v", err)
-	}
-	toolRuntime, err := tools.NewRuntime(tools.Options{})
-	if err != nil {
-		t.Fatalf("造工具运行时失败：%v", err)
-	}
 	// OmitHarnessIdentity: 那段宿主身份和本文件要验的东西没有关系，而它会在每一次
 	// 装配里多出一段文本。
-	prompts, err := systemprompt.NewRegistry(context.Background(), owner,
-		systemprompt.Options{OmitHarnessIdentity: true})
-	if err != nil {
-		t.Fatalf("造系统提示词注册表失败：%v", err)
-	}
+	deps := harnesstest.Mount(t, harnesstest.Options{
+		SystemPrompt: systemprompt.Options{OmitHarnessIdentity: true},
+		Logger:       quietLogger(),
+		Now:          fixedClock(),
+	})
 
 	world := &factoryWorld{
-		owner:   owner,
-		agents:  agents,
-		store:   newStore(t),
-		models:  llm.NewRuntime(llm.RuntimeOptions{}),
-		tools:   toolRuntime,
-		prompts: prompts,
+		owner:   deps.Scope,
+		agents:  deps.Agents,
+		store:   deps.Sessions,
+		models:  deps.Models,
+		tools:   deps.Tools,
+		prompts: deps.SystemPrompt,
 	}
 	world.deps = Deps{
 		Agents:       world.agents,
@@ -1048,6 +1042,31 @@ func TestCreatePublishesIntoBothRegistries(t *testing.T) {
 	}
 	if live.Options().Model != "m-1" {
 		t.Errorf("路由没带上：%#v", live.Options())
+	}
+}
+
+// TestCreateRegistersATopLevelAgentAsOwnerless 钉住从工厂自己那个作用域造出来的
+// agent 是**顶层**的。
+//
+// 源: packages/core/agent-loop/src/index.ts:580-587
+//
+// 单独一条用例的理由：查这个 agent 在不在表上，查不出「它记在谁名下」。而顶层这
+// 件事是 Go 特有的一处易错——查作用域那一步交出来的是具体类型，直接塞进接口入参，
+// 一个「没找到」会变成非 nil 的接口值，于是每一个 agent 都成了有主的，
+// [agent.Registry.Roots] 永远空着。这条从消费方那一侧验，不看实现怎么写。
+func TestCreateRegistersATopLevelAgentAsOwnerless(t *testing.T) {
+	t.Parallel()
+
+	world := newFactoryWorld(t)
+	loop := world.install(t, Config{})
+	world.create(t, loop, "造出来的")
+
+	roots := world.agents.Roots()
+	if len(roots) != 1 || roots[0].ID() != "造出来的" {
+		t.Fatalf("顶层 agent 该恰好是它一个：%v", roots)
+	}
+	if !world.agents.IsOwnedBy("造出来的", nil) {
+		t.Error("它该记在「没有主」名下")
 	}
 }
 

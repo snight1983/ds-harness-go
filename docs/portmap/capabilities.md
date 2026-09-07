@@ -766,10 +766,12 @@ DSH 已经做完了，不需要我们设计。
 
 ### 这张表当场问出来的三件事
 
-1. **需要 83 个里，8 个没有任何 Go 落点。**`interaction/permission-presets`、
-   `session/session-turn-outline`、`webhook/webhook`、`workflow/workflow`，
-   加上四个测试脚手架（`agent-loop-testkit`／`loader-smoke`／`session-snapshot`／已删的 `acp-snapshot`）。
-   前四个都是**零本机前置**——不是做不了，是还没做。
+1. **需要 83 个里，1 个没有任何 Go 落点，就是上游自己已经删掉的 `acp-snapshot`。**
+   它的继任者 `session-snapshot` 落在 `sessionlog/snapshot` 上，缺口合并进那一条。
+   **正经能力一条不剩**：原先同在这一栏的 `session/session-turn-outline`、`workflow/workflow`、
+   `interaction/permission-presets`、`webhook/webhook` 都已落地，`agent-loop-testkit` 落在
+   `harness/harnesstest` 上，`loader-smoke` 的那条断言链落在 `harness/smoketest` 上——
+   它起子进程的那一半没有移，Go 里没有 Loader、没有那份配置文件，也没有源码态与构建态两条启动路径。
 2. **抄形状 23 个里，10 个完全未落地。**`experimental/agent-team` 那套 peer mailbox＋CAS 任务板、
    `credentials/authorization` 的可恢复授权流程、`llm/deepseek-llm-api-extensions` 的附加请求字段注册表，
    都在里面。另有三个 `api/` 控制器是**落了一半**：`api/session-controller` 只有 `session/prompt`，

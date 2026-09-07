@@ -35,7 +35,7 @@
 | 上下文与压缩 | [运行时上下文](modules/context.md)、[上下文压缩](modules/compaction.md) |
 | 设置与组合 | [运行时设置](modules/settings.md)、[部署级默认模型](modules/agentdefaultmodel.md)、[Agent 预设与 Persona](modules/presets.md) |
 | 计划与人工介入 | [计划与待办](modules/planning.md)、[用户交互](modules/interaction.md)、[运行时 Guard](modules/guards.md) |
-| 后台执行 | [后台作业](modules/jobs.md)、[长期目标](modules/goal.md)、[耐久提醒](modules/schedule.md)、[Ralph 工作流](modules/ralph.md) |
+| 后台执行 | [后台作业](modules/jobs.md)、[长期目标](modules/goal.md)、[耐久提醒](modules/schedule.md)、[工作流与 Ralph](modules/ralph.md) |
 | 会话读侧 | [Session 查询](modules/sessionquery.md)、[Workspace](modules/workspace.md) |
 | 数据接缝 | [文件系统](modules/filesystem.md)、[附件与图片](modules/attachment.md)、[凭据](modules/credentials.md)、[大结果外置](modules/spill.md) |
 | 外部协议 | [SDK 协议与服务端](modules/sdk.md)、[ACP 接入](modules/acp.md)、[MCP 客户端](modules/mcp.md) |

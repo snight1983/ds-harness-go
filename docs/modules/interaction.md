@@ -2,7 +2,7 @@
 
 ## 定位
 
-`interaction` 把四类人机交互拆开：斜杠命令、结构化提问、工具审批，以及模型主动调用的 `ask_user` 工具。它们共用 Session 与作用域，但保持不同的协议和失败语义。
+`interaction` 把五类人机交互拆开：斜杠命令、结构化提问、工具审批、权限预设，以及模型主动调用的 `ask_user` 工具。它们共用 Session 与作用域，但保持不同的协议和失败语义。
 
 ## 架构
 
@@ -10,6 +10,7 @@
 用户输入 ----------------------> commands.Runtime
 模型 ask_user 工具 ------------> userquestions.Service -> Provider
 工具执行审批 ------------------> userapproval.Service -> Answerer
+用户挑一个权限档位 ------------> permissionpresets.Service -> userapproval
 计划评审等结构化意图 ----------> userquestions.Intent
 ```
 
@@ -26,6 +27,37 @@ Provider 代表具体 UI、协议桥或宿主回调。没有 Provider、调用�
 ## 审批
 
 `userapproval.Service` 按作用域查找 `Answerer`，支持 `ask` 与 `never` 策略，以及每个会话的事件化覆盖。每次请求使用唯一 `RequestID`，`asked` 与 `decided` 必须配对；审批结果进入工具管线，但不能绕过工具自身校验。
+
+## 权限预设
+
+预设是给用户看的**档位**：部署方起好名字、写好说明，用户按名字挑一档，而不是自己去拨底层的审批开关。
+
+```text
+                 ┌──────────────── 部署方配的一张表 ────────────────┐
+                 │  guarded   每次动手前先问     → 审批开关 = ask    │
+                 │  trusted   放手做，不再打断   → 审批开关 = never  │
+                 └────────────────────────────────────────────────┘
+                                      │
+        用户挑一档 ───────────────────>│
+                                      ▼
+                     ①记下「他挑的是哪个名字」   ②把审批开关拨过去
+                                      │                  │
+                                      └────────┬─────────┘
+                                               ▼
+                                          会话日志（唯一的账）
+                                               │
+                     界面回读 <─────────────────┘
+```
+
+为什么①要单独记一笔：两个档位完全可以拨出同一个开关值。只看开关的话，用户刚点的那一项会被显示成旁边那一项。记下名字，他挑的那一下才保得住。
+
+拨不出任何一档的开关组合（比如用户直接改了底层开关）会被显示成 `custom`。它只是一个**显示用**的当前值，不是一个能挑的档位。
+
+三条边界：
+
+- 本包一个权限判定都不做，真正拦人的是审批那一层。
+- 开关走它自己那条正规写路径，本包不绕过去直接改日志。
+- 这个 Go 版本的档位只捆**审批**一个开关。DSH 那边还捆一个沙箱模式，沙箱那一整支本仓库判为不需要（理由见 [文件系统](filesystem.md)），所以也不带 DSH 那两条照沙箱起名的默认档位——表由部署方自己配，必填。
 
 ## 生命周期与并发
 
@@ -54,6 +86,7 @@ Provider 代表具体 UI、协议桥或宿主回调。没有 Provider、调用�
 | 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
 |---|---|---|---|---|
 | 由插件注册的用户命令注册表，供交互式UI适配器使用 | `interaction/commands` | 需要 | `feature/interaction/commands` | — |
+| 通过ctx.permissionPresets提供面向用户的权限预设组合沙箱与审批 | `interaction/permission-presets` | 需要 | `feature/interaction/permissionpresets` | 缺一角：捆包里只剩审批策略一个旋钮。沙箱那一整支（sandbox/*、shell/*-sandbox）本仓库判为不需要，DSH 那两条默认预设也照沙箱模式起名，所以 Go 这边不带默认表，预设表必填 |
 | 模型侧ask_user_question工具，基于ctx.userQuestions实现 | `interaction/tool-ask-user` | 需要 | `feature/interaction/askuser` | — |
 | 与通道无关的一次性审批seam，request返回allowed-once/rejected/cancelled/unavailable | `interaction/user-approval` | 需要 | `feature/interaction/userapproval` | — |
 | 用户交互Service Definition，定义ctx.userQuestions与提供方注册 | `interaction/user-questions` | 需要 | `feature/interaction/userquestions` | — |
@@ -64,3 +97,4 @@ Provider 代表具体 UI、协议桥或宿主回调。没有 Provider、调用�
 - `feature/interaction/userquestions/`
 - `feature/interaction/askuser/`
 - `feature/interaction/userapproval/`
+- `feature/interaction/permissionpresets/`

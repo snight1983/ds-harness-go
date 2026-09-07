@@ -455,6 +455,25 @@ flowchart LR
 
 ---
 
+## 要验循环怎么装起来，得先有一副不含循环的骨架
+
+装配这件事本身就有一堆要验的东西：同一个注册表上装两个循环会不会撞、装到一半失败时前面那几样拆不拆得干净、缺了某一样报的是不是那句话。这些用例的**被测对象就是那一步装配**，所以脚手架必须停在循环之前——一个连循环一起装好的脚手架把它们要验的那一步替它们做掉了。
+
+```mermaid
+flowchart LR
+    subgraph KIT["harness/harnesstest：脚手架"]
+        M["模型运行时<br/>（没登记适配器）"]
+        S["会话存储"]
+        P["提示词注册表"]
+        T["工具运行时<br/>（没装工具）"]
+        A["agent 注册表<br/>（造法那一格空着）"]
+    end
+    KIT -->|"用例自己决定装不装、怎么装"| L["循环"]
+    ASM["harness.New：生产装配"] -.->|"一步到位，连循环一起"| DONE["装好的成品"]
+```
+
+三处刻意留空——适配器、工具、造法——是这副骨架和 `harness.New` 唯一的区别。空着是因为这三样正是用例要编排的东西：写死一个假适配器，用例第一件事就是把它拆掉。
+
 ## 能力边界
 
 - **不定义任何具体工具或 skill。** 工具行为是提供方的事。
@@ -474,6 +493,7 @@ flowchart LR
 | 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
 |---|---|---|---|---|
 | agent唯一具体实现和循环驱动器，驱动会话、轮次和步骤的生命周期 | `core/agent-loop` | 需要 | `harness/agentloop` | — |
+| 共享挂载 agent loop 测试的先决依赖（LLM、会话、提示词、工具、agent） | `test-support/agent-loop-testkit` | 需要 | `harness/harnesstest` | — |
 
 ## 相关源码
 
@@ -486,6 +506,8 @@ flowchart LR
 | `harness/agentloop/runtimecontext.go` | 运行期上下文投影 | 236 |
 | `harness/agentloop/doc.go` | 包说明与移植决定 | 41 |
 | `harness/agentloop/constants.go` | 并行工具上限的默认值 | 13 |
+| `harness/harnesstest/dependencies.go` | 那副不含循环的骨架：五样先决依赖与拆除链 | 191 |
+| `harness/harnesstest/doc.go` | 脚手架说明与它刻意不做的那几件事 | 33 |
 
 ---
 

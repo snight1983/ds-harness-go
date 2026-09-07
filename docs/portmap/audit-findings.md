@@ -4,7 +4,7 @@
 
 这五份都不是判决，是**工作队列**：每一条要么改代码、要么在裁决表的 `note` 列写明为什么它是对的。
 
-裁决表 11194 行，其中 PORTED 且填了 `go_ref` 的 1484 条。
+裁决表 11194 行，其中 PORTED 且填了 `go_ref` 的 1569 条。
 
 ## 一、kind 对不上（最强信号）
 
@@ -41,6 +41,8 @@
 | subagent/subagent-fork-in-process | `Config` | `forkinprocess.New` | 上游是 interface，Go 侧是 func（该是 type）（裁决表已有理由：只有 providerName 一个字段，Go 里它就是 New 的第一个形参；默认值改由 forkinprocess.DefaultProviderName 给。理由同 subagent/subagent-spawn-in-process 那条。） |
 | subagent/subagent-spawn-in-process | `Config` | `spawninprocess.New` | 上游是 interface，Go 侧是 func（该是 type）（裁决表已有理由：只有 providerName 一个字段，Go 里它就是 New 的第一个形参。为一个字符串包一个结构体是 schemastery 逼出来的形状，不是 Go 的：那个默认值改由 spawninprocess.DefaultProviderName 给。） |
 | test-support/llm-mock-server | `ConcreteMockLlmBehavior` | `mockserver.IsConcreteBehavior` | 上游是 type，Go 侧是 func（该是 type）（裁决表已有理由：TS 靠 Exclude 把 random 从类型里剔掉，Go 只有一种 Behavior，这条区分落成一个谓词，用在随机权重的校验上。） |
+| workflow/workflow | `WorkflowError` | `workflow.NewError` | 上游是 class，Go 侧是 func（该是 type）（裁决表已有理由：上游是 HarnessError 的子类，派生出来只为把 name 改成 WorkflowError——那个字段在 JS 里是用来认错误来源的。Go 认错误靠 errors.Is / errors.As 加那个码，多派生一个类型反而会让上游那句 errors.As(err, &target)（target 是 *llm.Error）失配。所以这里不新造类型，构造函数直接交 llm.Error，身份由码承担；成例见 subagent.NewError。） |
+| workflow/workflow | `WorkflowErrorCode` | `workflow.fatalCodes` | 上游是 type，Go 侧是 var（该是 type）（裁决表已有理由：十一个致命码的联合类型，只在 TS 编译期成立。Go 里码本身是 workflow.CodeScriptParse 那一组导出常量（取值逐条照抄，线上可见），而这个联合真正的用途是 workflow.IsFatal 在运行期判「该不该打断脚本」，所以落成一张集合。成例见 attachment.imageAdmissionCodes。集合不导出：判据的唯一入口是 IsFatal，把表也放出去等于让调用方能绕过它。） |
 | workspace/workspace | `WorkspaceMoveInvalidError` | `workspace.CodeMoveInvalid` | 上游是 class，Go 侧是 const（该是 type）（裁决表已有理由：DSH 的三个具名错误类在 Go 里塌成 [workspace.Error] 上的一个分类码，用 errors.Is 分辨；见 workspace/error.go。） |
 | workspace/workspace | `WorkspaceOrderInvalidError` | `workspace.CodeOrderInvalid` | 上游是 class，Go 侧是 const（该是 type）（裁决表已有理由：同 src/entity.ts:19：具名错误类塌成分类码。） |
 | workspace/workspace | `WorkspaceUnknownSessionError` | `workspace.CodeUnknownSession` | 上游是 class，Go 侧是 const（该是 type）（裁决表已有理由：同 src/entity.ts:19：具名错误类塌成分类码。） |
@@ -52,8 +54,8 @@
 
 | 上游包 | 上游符号 | go_ref | 说明 |
 |---|---|---|---|
-| attachment/attachment | `ImageAdmissionErrorCode` | `attachment.imageAdmissionCodes` | 非导出的一段：imageAdmissionCodes（裁决表已有理由：桶文件转发，定义处见 src/error.ts:16。） |
 | attachment/attachment | `ImageAdmissionErrorCode` | `attachment.imageAdmissionCodes` | 非导出的一段：imageAdmissionCodes（裁决表已有理由：TS 里是那九个准入码的联合类型，只在编译期成立。Go 里对应的是一张集合，因为这组码真正的用途是 IsImageAdmissionError 在运行期查表分类，而不是约束某个字段的取值。） |
+| attachment/attachment | `ImageAdmissionErrorCode` | `attachment.imageAdmissionCodes` | 非导出的一段：imageAdmissionCodes（裁决表已有理由：桶文件转发，定义处见 src/error.ts:16。） |
 | context/session-reference | `stringifyTagSafeJson` | `sessionref.stringifyTagSafeJSON` | 非导出的一段：stringifyTagSafeJSON（裁决表已有理由：关掉 Go 自己的 HTML 转义，只做 DSH 做的那一件事，否则字节预算对不上） |
 | goal/tool-goal | `completionAuthority` | `goaltool.Controller.completionAuthority` | 非导出的一段：completionAuthority（裁决表已有理由：同 requireDirectHuman：上游的 export 是 TS 跨文件可见性，不是公开面。Go 里挂成 Controller 的方法，因为它要读 Controller 上那份策略配置。） |
 | goal/tool-goal | `goalToolExecution` | `goaltool.Controller.execution` | 非导出的一段：execution（裁决表已有理由：ctx.agents.currentInitiator() 换成挂在 ctx 上的 agent.CurrentInitiator。） |
@@ -104,6 +106,7 @@
 | session/session-persistence | `SessionPreparations` | `persistence.preparations` | 非导出的一段：preparations（裁决表已有理由：准备池：冷读共享、独占预留、就绪条目按最近使用淘汰。不导出——它是编排器的内脏。DSH 靠 JS Map 的插入顺序当 LRU 队列，Go 的 map 没有顺序，所以另立一条 order 切片：那个顺序是语义，淘汰谁全看它。另外每一次状态转移都要拿锁，因为 Go 这边池子会被好几条 goroutine 同时碰。） |
 | session/session-persistence | `observeQueuedAbort` | `persistence.awaitShared` | 非导出的一段：awaitShared（裁决表已有理由：等一件共享的活儿干完，中途允许这一个等待方自己走掉而不连累其余人。DSH 是给 AbortSignal 挂监听再拆掉；Go 里就是 select 两个通道，另加一句「两边都就绪时不看运气」——一件已经干完的活儿就是干完了。） |
 | session/session-title | `titleProjectionDefinition` | `sessiontitle.projectionDefinition` | 非导出的一段：projectionDefinition（裁决表已有理由：标题那个投影单元。不导出：上游那个 export 是 TS 的跨文件可见性，index.ts 里它自己在 :337 登记自己，session-title 包外一个调用方都没有（全快照 grep 确认）。Go 里它是 sessiontitle/projection.go:62 的一个包内函数，装配方够得着的只有导出的 sessiontitle.RegisterProjection（projection.go:113）——登记这件事只留一个口子，是因为 DSH 那边登记裹在 ctx.inject(['sessionProjections']) 里、投影服务不在场就跳过，Go 没有那个容器，「在不在场」就是装配方手上有没有那张注册表，于是它必须是一次显式调用。） |
+| session/session-turn-outline | `TurnOutlineState` | `turnoutline.outlineState` | 非导出的一段：outlineState（裁决表已有理由：折叠状态不导出：它里面那份草稿是宿主这一侧的账，视图交出去的只有 Turns（[]Entry）。包外拿得到的是投影注册表里那份视图，没有第二条路要看见这个结构体。） |
 | subagent/subagent | `ActivationObserver` | `subagent.activationObserver` | 非导出的一段：activationObserver（裁决表已有理由：只在包内用，所以不导出。） |
 | subagent/subagent | `ActivationTerminal` | `subagent.activationTerminal` | 非导出的一段：activationTerminal（裁决表已有理由：只在包内用，所以不导出。） |
 | subagent/subagent | `LifecycleEmitter` | `subagent.lifecycleEmitter` | 非导出的一段：lifecycleEmitter（裁决表已有理由：只在包内用，所以不导出；对外那面是 Runtime.OnStart／OnEnd 这几条登记路。） |
@@ -111,6 +114,20 @@
 | subagent/subagent | `createActivationObserver` | `subagent.newActivationObserver` | 非导出的一段：newActivationObserver（裁决表已有理由：同 createLifecycleEmitter：上游的 export 是跨文件可见性。它造的 *activationObserver 本身就不导出，构造器自然也不导出。） |
 | subagent/subagent | `createLifecycleEmitter` | `subagent.newLifecycleEmitter` | 非导出的一段：newLifecycleEmitter（裁决表已有理由：上游 export 只为让 index.ts 跨文件调用，subagent 包外没有调用方。Go 里不导出，理由同 lifecycleEmitter 自己；对外那面是 Runtime.OnStart／OnEnd 这几条登记路。） |
 | subagent/subagent | `observeRun` | `subagent.observeRun` | 非导出的一段：observeRun（裁决表已有理由：同 createLifecycleEmitter：上游的 export 是跨文件可见性。它把一次 Run 裹上生命周期播报，只由 Runtime 在起子 Agent 时调用，不导出。） |
+| test-support/session-snapshot | `normalizeSessionLog` | `snapshot.flattenRecord` | 非导出的一段：flattenRecord（裁决表已有理由：上游 export 出来是给同包的 normalize.ts 和 suite.ts 跨文件调用；Go 里包内跨文件天然共享符号，对外只有 Normalize 一个入口就够了。多导出一个「压平一行」等于把内部的行格式当成 API 承诺出去。） |
+| test-support/session-snapshot | `normalizeSessionLog` | `snapshot.flattenRecord` | 非导出的一段：flattenRecord（裁决表已有理由：上游 export 出来是给同包的 normalize.ts 和 suite.ts 跨文件调用；Go 里包内跨文件天然共享符号，对外只有 Normalize 一个入口就够了。多导出一个「压平一行」等于把内部的行格式当成 API 承诺出去。） |
+| test-support/session-snapshot | `normalizeSessionSnapshot` | `snapshot.normalizeOne` | 非导出的一段：normalizeOne（裁决表已有理由：同上不导出。而且「压一份日志」对外本就没有意义：记号编号必须一次收一整个场景才保得住父子那条线，单独放出这个入口只会招人把那条线压断。） |
+| test-support/session-snapshot | `normalizeSessionSnapshot` | `snapshot.normalizeOne` | 非导出的一段：normalizeOne（裁决表已有理由：同上不导出。而且「压一份日志」对外本就没有意义：记号编号必须一次收一整个场景才保得住父子那条线，单独放出这个入口只会招人把那条线压断。） |
+| test-support/session-snapshot | `scrubRequestHeaders` | `snapshot.tokenizeRequestHeader` | 非导出的一段：tokenizeRequestHeader（裁决表已有理由：同 scrubSystemPrompts：三种开关组合在 Go 里由 Options 表达，函数不导出。） |
+| test-support/session-snapshot | `scrubRequestHeaders` | `snapshot.tokenizeRequestHeader` | 非导出的一段：tokenizeRequestHeader（裁决表已有理由：同 scrubSystemPrompts：三种开关组合在 Go 里由 Options 表达，函数不导出。） |
+| test-support/session-snapshot | `scrubSessionSnapshot` | `snapshot.repack` | 非导出的一段：repack（裁决表已有理由：它是 Normalize 内部的一步（换记号之后、交出去之前重打包并抹掉事件信封），不是一个独立的对外能力。） |
+| test-support/session-snapshot | `scrubSessionSnapshot` | `snapshot.repack` | 非导出的一段：repack（裁决表已有理由：它是 Normalize 内部的一步（换记号之后、交出去之前重打包并抹掉事件信封），不是一个独立的对外能力。） |
+| test-support/session-snapshot | `scrubSystemPrompts` | `snapshot.tokenizeRequestHeader` | 非导出的一段：tokenizeRequestHeader（裁决表已有理由：上游三个 scrub 函数（system／tools／两者）是同一段代码的三种开关组合，Go 里那三种组合由 Options 的两个字段表达，函数本身不必导出。） |
+| test-support/session-snapshot | `scrubSystemPrompts` | `snapshot.tokenizeRequestHeader` | 非导出的一段：tokenizeRequestHeader（裁决表已有理由：上游三个 scrub 函数（system／tools／两者）是同一段代码的三种开关组合，Go 里那三种组合由 Options 的两个字段表达，函数本身不必导出。） |
+| test-support/session-snapshot | `scrubToolSchemas` | `snapshot.tokenizeRequestHeader` | 非导出的一段：tokenizeRequestHeader（裁决表已有理由：同 scrubSystemPrompts：三种开关组合在 Go 里由 Options 表达，函数不导出。） |
+| test-support/session-snapshot | `scrubToolSchemas` | `snapshot.tokenizeRequestHeader` | 非导出的一段：tokenizeRequestHeader（裁决表已有理由：同 scrubSystemPrompts：三种开关组合在 Go 里由 Options 表达，函数不导出。） |
+| webhook/webhook | `createWebhookSession` | `webhook.Runtime.createSession` | 非导出的一段：createSession（裁决表已有理由：上游的 export 是跨文件可见性（index.ts 要调它）。Go 里它是 Runtime 的方法，进得去的唯一一条路是规则交回一份 SessionRequest，包外没有调用方，所以不导出。） |
+| workflow/workflow | `WorkflowErrorCode` | `workflow.fatalCodes` | 非导出的一段：fatalCodes（裁决表已有理由：十一个致命码的联合类型，只在 TS 编译期成立。Go 里码本身是 workflow.CodeScriptParse 那一组导出常量（取值逐条照抄，线上可见），而这个联合真正的用途是 workflow.IsFatal 在运行期判「该不该打断脚本」，所以落成一张集合。成例见 attachment.imageAdmissionCodes。集合不导出：判据的唯一入口是 IsFatal，把表也放出去等于让调用方能绕过它。） |
 | workspace/workspace | `WorkspaceEntity` | `workspace.entity` | 非导出的一段：entity（裁决表已有理由：[workspace.Workspace] 唯一的实现，只由登记册构造。） |
 | workspace/workspace | `WorkspaceEntityHost` | `workspace.entityHost` | 非导出的一段：entityHost（裁决表已有理由：DSH 那边导出了但入口没再转发，消费方其实看不见它；Go 里一个包就是一层，不导出即可。） |
 
@@ -120,7 +137,7 @@
 
 拿一个带判别字段的结构体接住一整族 TS 判别联合是本仓库的既定做法，所以**塌缩本身不是错**。要查的是：那个 Go 类型的注释里有没有写明并进来了哪几个上游形态、判别字段是什么、以及上游靠类型窄化保证的那些约束在 Go 里由谁来保证。
 
-共 77 组 / 189 条。
+共 82 组 / 200 条。
 
 | go_ref | 条数 | 并进来的上游符号 |
 |---|---|---|
@@ -136,6 +153,7 @@
 | `llm.ResolvedRetryPolicy` | 3 | `ResolvedAlwaysRetryPolicy`(interface)、`ResolvedNormalRetryPolicy`(interface)、`ResolvedRetryPolicy`(type) |
 | `llm.RetryPolicyConfig` | 3 | `AlwaysRetryPolicyConfig`(interface)、`NormalRetryPolicyConfig`(interface)、`RetryPolicyConfig`(type) |
 | `sessiontitlellm.Config` | 3 | `Config`(type)、`Config`(type)、`SessionTitleLlmConfig`(interface) |
+| `snapshot.tokenizeRequestHeader` | 3 | `scrubRequestHeaders`(function)、`scrubSystemPrompts`(function)、`scrubToolSchemas`(function) |
 | `subagent.ListEntry` | 3 | `SubagentListEntry`(type)、`SubagentListEntry`(STALE:reexport-type)、`SubagentListEntry`(STALE:type) |
 | `subagent.SnapshotDescriptor` | 3 | `snapshotSubagentDescriptor`(function)、`snapshotSubagentDescriptor`(function)、`snapshotSubagentDescriptor`(function) |
 | `tools.Result` | 3 | `ToolExecutionFailure`(interface)、`ToolExecutionResult`(type)、`ToolExecutionSuccess`(interface) |
@@ -166,6 +184,7 @@
 | `llm.Runtime` | 2 | `LlmRuntime`(class)、`LlmRuntime`(default) |
 | `mcp.Config` | 2 | `Config`(type)、`StreamableHttpConfig`(interface) |
 | `openaicompat.ModelProfile` | 2 | `PiAiModelProfile`(interface)、`PiAiReasoningEfforts`(type) |
+| `permissionpresets.Service` | 2 | `PermissionPresetService`(class)、`PermissionPresetService`(default) |
 | `projection.CheckpointRow` | 2 | `ProjectionCheckpointRow`(interface)、`checkpointRow`(const) |
 | `projectioncache.Identity` | 2 | `CheckpointIdentity`(type)、`checkpointIdentity`(const) |
 | `projectioncache.Record` | 2 | `CheckpointRecord`(type)、`checkpointRecord`(const) |
@@ -199,12 +218,15 @@
 | `tools.ApprovalRequest` | 2 | `ApprovalRequest`(interface)、`ApprovalRequestEvent`(interface) |
 | `tools.AssertObjectSchema` | 2 | `ObjectJsonSchema`(type)、`assertObjectJsonSchema`(function) |
 | `tools.ValidateValue` | 2 | `validateArgs`(function)、`validateJsonSchemaValue`(function) |
+| `turnoutline.RegisterProjection` | 2 | `apply`(function)、`turnOutlineProjectionDefinition`(const) |
 | `userquestions.Request` | 2 | `AskUserQuestionRequest`(interface)、`AskUserQuestionRequestEvent`(interface) |
+| `webhook.Runtime` | 2 | `WebhookRuntime`(class)、`WebhookRuntime`(default) |
+| `workflow.Engine` | 2 | `WorkflowEngine`(class)、`WorkflowEngine`(default) |
 | `workspace.WorkspaceID` | 2 | `WorkspaceId`(type)、`WorkspaceId`(type) |
 
 ## 四、溯源密度偏低的包
 
-全仓 4493 条 `// 源:` / 127995 行非测试代码 = **35.1 条/千行**。低于 25 条/千行的列在下面。
+全仓 4673 条 `// 源:` / 133207 行非测试代码 = **35.1 条/千行**。低于 25 条/千行的列在下面。
 
 密度低不等于写错了，它只说明这段代码多半是照着记忆写的而不是照着源码写的——**这一份指的是该去哪儿细读，不是哪一行有 bug**。两类包已排除：本仓自造的 `internal/devtools/`，以及包文档里写了 `新增:` 且全包零条 `源:` 的包——后者已经在最显眼的地方交代过自己整份是新写的。
 
@@ -213,6 +235,8 @@
 | fs/fstest | 485 | 1 | 2 | 2.1 |
 | storage/storagetest | 1161 | 10 | 4 | 8.6 |
 | adapter/domainjobs | 1463 | 13 | 13 | 8.9 |
+| harness/harnesstest | 224 | 4 | 5 | 17.9 |
+| sessionlog/snapshot | 1186 | 22 | 8 | 18.5 |
 | feature/replay | 1639 | 39 | 15 | 23.8 |
 
 ## 五、包文档有毛病的包
@@ -221,7 +245,7 @@
 
 本仓库的写法是每份文件顶上一条 `本文件的作用：…`，和 `package` 子句之间空一行隔开；包文档另写，多数落在 `doc.go` 里。少掉那个空行，Go 就把文件说明当成了整个包的文档——**编译器不会说话，`go doc` 也照样有输出，只是讲的是某一份文件而不是这个包**。这一种自己是看不出来的，只能靠这份报告。
 
-全仓 99 个包，有毛病的 0 个。
+全仓 106 个包，有毛病的 0 个。
 
 没有发现。
 
