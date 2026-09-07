@@ -1,14 +1,14 @@
 # ds-harness-go
 
-`ds-harness-go` 是一个面向服务端的 Go Agent 运行时，目标是作为组件嵌入现有 Go 服务。
+`ds-harness-go` 是可嵌入现有 Go 服务的 Agent 运行时。
 
-宿主负责提供模型、工具、Skill、人格提示词和持久化后端；运行时负责 Agent 循环、上下文组装、工具调度、会话事件、恢复、多 Agent 协作及对外协议适配。业务能力留在宿主中，运行时本身不绑定具体行业。
+宿主提供模型、工具、Skill、人格提示词和持久化后端；运行时提供 Agent 循环、上下文组装、工具调度、会话事件、恢复、多 Agent 协作及协议适配。
 
 文档入口：[项目文档](docs/README.md) · [总体架构](docs/architecture.md) · [嵌入 Go 服务](docs/embedding.md) · [逐包文档映射](docs/packages.md)
 
 ## 引入方式
 
-公开 module path 是 `github.com/snight1983/ds-harness-go`。所有包都从这个前缀引入：
+Module path：`github.com/snight1983/ds-harness-go`
 
 ```go
 import (
@@ -16,18 +16,6 @@ import (
     "github.com/snight1983/ds-harness-go/sessionlog"
 )
 ```
-
-分发走标准 Go 模块代理，不提供 vendor 目录、不提供单独发布的子模块——`cmd/` 下的可执行文件和 `internal/devtools/` 下的门禁工具是 `package main`，`internal/` 下的包按语言规则外部进不来（除了 `internal/devtools/`，还有几个只给自家子树用的：测试夹具 `adapter/datastore/internal/dbtest` 与 `feature/subagent/internal/providertest`，以及 `feature/subagent/internal/childseed`），其余 84 个包全部对外可引。
-
-**尚未打稳定版本 tag。** 在打 tag 之前，外部宿主用 `replace` 指到本地检出：
-
-```
-require github.com/snight1983/ds-harness-go v0.0.0
-
-replace github.com/snight1983/ds-harness-go => ../ds-harness-go
-```
-
-「仓库外面引得进来」这件事在仓库内部是验不出来的：`go build ./...` 解析 import 走的是主模块自己的 module 行，module path 写错了内部照样全绿，外部调用方才会撞上 `package ... is not in std`。所以它有一道单独的门禁，见下面的开发与核验。
 
 ## 项目边界
 
@@ -42,7 +30,7 @@ replace github.com/snight1983/ds-harness-go => ../ds-harness-go
 | 能力 | 主要包 |
 |---|---|
 | Agent 生命周期与 ReAct 循环 | [Agent](docs/modules/agent.md)、[Agent Loop](docs/modules/agentloop.md) |
-| 系统提示词与工具运行时 | [Skill、提示词与预设](docs/modules/skill.md)、[Tools](docs/modules/tools.md) |
+| 系统提示词、人格预设与工具运行时 | [系统提示词](docs/modules/systemprompt.md)、[预设](docs/modules/presets.md)、[Tools](docs/modules/tools.md) |
 | 模型抽象、OpenAI 兼容协议、重试与计量 | [LLM](docs/modules/llm.md) |
 | 模型响应录制与回放 | `feature/replay`、`llm/mockserver` |
 | 会话事件、持久化接口、当前状态整理与恢复原语 | [Session](docs/modules/session.md) |
@@ -53,7 +41,7 @@ replace github.com/snight1983/ds-harness-go => ../ds-harness-go
 | 多 Agent、派生、续行与控制 | [多 Agent](docs/modules/subagent.md) |
 | 后台任务、定时、目标与固定工作流 | [后台任务、目标与工作流](docs/modules/workflow.md) |
 | SDK JSON-RPC、ACP 与 MCP 适配 | [协议适配](docs/modules/protocol.md) |
-| 可替换存储、对象存储、附件与凭据 | [存储、文件与附件](docs/modules/storage.md) |
+| 可替换存储、数据库与对象存储 | [存储、文件与附件](docs/modules/storage.md) |
 | 设置、凭据、附件与工作区 | `settings`、`credentials`、`attachment`、`feature/workspace` |
 
 ## 架构
@@ -93,8 +81,6 @@ flowchart TB
     HostCapabilities -->|显式装配| Protocol
     HostCapabilities -->|模型、工具、Skill、存储实现| Control
 ```
-
-`harness/agent` 与 `harness/agentloop` 刻意分开：前者定义活 Agent 的稳定公共接口和控制面，后者实现 ReAct 执行循环。协议层、子 Agent 和后台任务只需要依赖 `harness/agent`，不必绑定循环实现。
 
 ### 一轮对话
 
@@ -138,7 +124,7 @@ sequenceDiagram
     Session->>Persistence: 按持久化策略写入事件和检查点
 ```
 
-会话事件日志是状态的权威来源。Inbox 变化、用户消息、步骤、模型调用和工具结果都通过事件表达；内存对象是根据这些事件整理出的当前状态。进程重启后，运行时由持久化事件重建会话、Inbox 和模型历史。
+会话状态以事件日志为准；进程重启后从持久化事件重建会话、Inbox 和模型历史。
 
 ### 接口与实现分离
 
@@ -150,11 +136,7 @@ sequenceDiagram
 | `feature/persistence.Store` | `adapter/datastore/sessionstore` 或宿主自己的会话后端 |
 | `protocol/sdk/sdkserver` | 宿主自己的传输层与进程模型 |
 
-运行时不通过接口名称推断部署方式。`fs` 是文件能力抽象，不等于访问服务器本地磁盘；`protocol/sdk/sdkserver` 提供协议服务能力，不强制宿主采用指定 HTTP 框架。模型、存储、对象存储和传输实现均由宿主选择。
-
 ## 包结构
-
-顶层十八个目录分成五档，档位写在 `docs/layers.tsv` 里，由 `internal/devtools/layercheck` 强制：**低档不许 import 高档**。目录名只是给人读的索引，把一个包挪进 `feature/` 不会让它变成能力包，只会让门禁按能力包的规矩查它。
 
 ```text
 ds-harness-go/
@@ -225,22 +207,6 @@ ds-harness-go/
 `-- docs/                      设计和能力映射文档
 ```
 
-完整包列表以 `go list ./...` 的输出为准，逐包到文档的映射在 [`docs/packages.md`](docs/packages.md) 里，由 `internal/devtools/doccheck` 校验。
-
-每个包的包注释末尾都有一节「不做什么」，3 到 6 条，逐条写这个包不负责什么、那件事归哪个包。这一节是**强制**的，缺了 `doccheck` 就变红。理由是一个包该干什么、读它的导出符号大致读得出来，**不该**干什么读不出来——那是当初排除掉的东西，不写下来就只活在写的人脑子里，下一个人照着「这里加一下最方便」就把它加了进来。
-
-## 当前状态
-
-项目仍处于开发阶段：核心运行时和主要扩展包已经落地，但尚未发布稳定版本，也尚未提供一行代码完成全部装配的顶层 Builder。会话持久化提供接口、写后队列、恢复原语和活会话协调器（`persistence.Coordinator`），落盘实现在 `adapter/datastore/sessionstore`；连接池由装配方 `sql.Open` 出来传进去，驱动仍是部署期的选择。换别的介质就自己实现 `persistence.Backend`。宿主需要按自身需求显式创建并连接各组件。
-
-数据库那一摊整个收在 `adapter/datastore` 底下：它是唯一 import `database/sql`、唯一挂驱动、唯一写 SQL 的地方，`sessionlog` 和 `storage` 两棵树里不许出现任何一处提到数据库。这条界线由 `internal/devtools/dbcheck` 把着，详见[持久化抽象层](docs/modules/datastore.md)。
-
-内容存储那一摊同理，收在 `fs.FileSystem` 一条接缝上：业务包只声明它要读出什么、写进什么，挂对象存储（`adapter/objectstore`）还是将来挂外接硬盘是装配时的配置。这个服务跑的地方没有可用硬盘，所以业务代码里不许出现直接的宿主机文件 I/O——不许调 `os` 包里那些碰文件系统的函数，不许 import `path/filepath` 和 `io/ioutil`。这条界线由 `internal/devtools/oscheck` 把着，理由和豁免名单写在 `internal/devtools/oscheck/doc.go` 里。
-
-`adapter/datastore` 那批用例每一行都要一个真的数据库才执行得到，所以它们缺省跑在一个临时目录里的 SQLite 库文件上——`go test ./...` 就整批执行，不必先起一台库。设 `DSH_POSTGRES_DSN` 把同一批用例体换到 Postgres 上再跑一遍：两种方言都要过，因为这批用例压的正是两边会分歧的地方。
-
-CI 上再设 `DSH_REQUIRE_POSTGRES=1`，声明「这一轮就是要跑真库」；此时缺 DSN 会失败而不是悄悄退回 SQLite——service container 没起来正是长那个样子，不拦住的话一整批本该压两种方言的用例只压了一种。
-
 ## 开发与核验
 
 ```powershell
@@ -263,12 +229,6 @@ go run ./internal/devtools/oscheck
 go run ./internal/devtools/layercheck
 ```
 
-除了这串必跑的，仓库还维持 `staticcheck ./...` **零告警**。它不在上面那串里，因为它是一个 go.mod 之外的外部二进制（`go install honnef.co/go/tools/cmd/staticcheck@latest`），进门禁就等于要求每个人先装它。想跑就直接跑，配置在根目录的 `staticcheck.conf` 里：那份配置只关掉一条 `ST1005`，理由写在文件里；其余每一处例外都是代码里带理由的 `//lint:ignore`。
-
-这串命令同时由 `.github/workflows/ci.yml` 在每次 push 和 PR 上跑一遍，分成三个 job：`gates`（格式、构建、vet、测试、竞态、六道门禁）、`postgres`（起一个 `postgres:16` service container，跑那批只有真库才执行得到的后端契约）、`cross`（linux / darwin / windows 三个目标各编一次）。分开是因为它们红的时候含义不同：代码有问题、真库跑不通、换个平台编不过，混在一个 job 里说不清是哪一类。
-
-交叉编译要关掉 cgo。本仓库自己不用 cgo，但只要机器上装了 C 工具链，`go build` 就会拿本机的 gcc 去编 runtime 里那几个 cgo 文件，报出一串跟本仓库无关的 `sigset_t` 错误。`CGO_ENABLED=0` 是在验「纯 Go 代码能不能为目标平台编出来」这个真问题。
-
 关键文档：
 
 - `docs/README.md`：文档站首页和完整模块导航。
@@ -280,4 +240,4 @@ go run ./internal/devtools/layercheck
 
 ## 许可证
 
-本项目以 [MIT License](LICENSE) 发布。第三方代码和参考实现的版权与许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+本项目以 [MIT License](LICENSE) 发布。第三方许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
