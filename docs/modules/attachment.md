@@ -84,6 +84,15 @@ sha256:<哈希>  ← 这就是 ImageRef.ID，也是它在介质上的落点
 - 不把附件存储等同于文件系统。
 - 保留期与加密由 Store 背后那套介质负责。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 持久附件服务边界，规范化并持久提交图片 | `attachment/attachment` | 需要 | `attachment` | — |
+| dsh-attachment本地实现，对象存放在DSH_HOME/attachments | `attachment/attachment-local` | 不需要 | `adapter/imagestore` | 服务端替代实现见 adapter/imagestore；缺前置：本机文件系统 |
+
 ## 相关源码
 
 - `attachment/attachment.go`

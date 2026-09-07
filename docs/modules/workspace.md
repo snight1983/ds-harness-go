@@ -55,6 +55,15 @@ Workspace 实体 / 排序 / 归档会话
 - `Persistence` 只用于确认 Session 归属，不是 Workspace 自己的数据库实现。
 - 跨进程一致性取决于 `storage/domain` Facility 后端。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| Host 的 ctx.workspaceController 与 Client workspace namespace，负责 Workspace 增删改序、Session 重排与归档、完整 Workspace 投影跟随，并拥有选目录 seam | `api/workspace-controller` | 抄形状 | `feature/workspace` | 缺口：断线重连安全的 baseline＋增量状态传输（WorkspaceBaseline／WorkspaceFollowSink）没有 |
+| Workspace实体注册表，持久化workspace记录、顺序、会话归属索引，支持创建/删除/排序/归档操作 | `workspace/workspace` | 需要 | `feature/workspace` | — |
+
 ## 相关源码
 
 - `feature/workspace/registry.go`

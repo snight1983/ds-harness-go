@@ -61,4 +61,19 @@
 // DSH 留了一个空的 installer，好让「这里确实什么都不查」在一份组装出来的不变量清单里
 // 显式可见。Go 这边没有那种清单，所以只留下 [PackageName]——一个包要在注册表里占住
 // 自己的所有权，得先有名字——而没有 RegisterInvariants。原因见 invariant.go。
+//
+// # 不做什么
+//
+//   - **不管谁来读它。**哪个 agent 入口在什么时候取这份选择、取到之后怎么用，是那些
+//     入口自己的事；本包不认识任何宿主、任何传输层，也不持有任何 agent。
+//   - **不做模型路由，也不管凭据。**只交出提供方键和模型标识，找不找得到那个提供方是
+//     [github.com/snight1983/ds-harness-go/llm] 的事。
+//   - **不提供设置的存储后端。**这份选择怎么落盘归
+//     [github.com/snight1983/ds-harness-go/settings] 和挂在它下面的后端；没挂设置服务时
+//     装配那一份就是冻住的答案。
+//   - **不覆盖 agent 自带的显式选择。**它只是「没自带选择时用哪个」，一个 agent 自己的
+//     [github.com/snight1983/ds-harness-go/harness/agent.ModelSelection] 优先。
+//   - **没有不变量要注册。**每一个可变的值在被读到之前，已经被设置登记那一层的
+//     [validateSettings] 审过一遍了，所以本包在
+//     [github.com/snight1983/ds-harness-go/invariants] 里只占一个名字。
 package agentdefaultmodel

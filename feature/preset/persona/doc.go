@@ -27,4 +27,18 @@
 //
 // 新增: DSH 的 `apply` 靠 `ctx.effect` 和 ctx 的生命周期各自撤销两处登记，[Install]
 // 把它们收成一个撤销函数，撤起来是登记的逆序。
+//
+// # 不做什么
+//
+//   - **不授予工具、权限或者任何外部能力。**它只往提示词注册表登记一段人设，模型
+//     能干什么一个字都没改。
+//   - **不拥有那个槽位。**`deployment:persona` 由
+//     [github.com/snight1983/ds-harness-go/harness/systemprompt.NewRegistry] 无条件登记，本包只是
+//     往另一层再放一份去遮蔽它。
+//   - **不决定装在哪一层。**是遮蔽掉部署方那份、还是同层重名当场报错，取决于装配方
+//     交进来的那个 owner 作用域。
+//   - **不渲染，也不插值。**`{{...}}` 的解算和整份提示词怎么拼归
+//     [github.com/snight1983/ds-harness-go/harness/systemprompt]，本包只递一段正文和两个开关进去。
+//   - **不转发提示词注册表的常量。**段名和次序 import 一次那个包就有，转发一层只会
+//     给同一个东西起第二个名字。
 package persona

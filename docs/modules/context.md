@@ -56,6 +56,16 @@
 - 不维护长期向量记忆或全文检索索引。
 - 时间读数是上下文提示，不是调度器；耐久提醒由 `schedule` 负责。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 为会话加载工作区指令文件（AGENTS.md/CLAUDE.md），在第一步或文件变更时注入 | `context/agent-instructions` | 需要 | `feature/context/instructions` | — |
+| 把其他会话作为有界只读快照供模型消费的跨会话上下文 | `context/session-reference` | 需要 | `feature/context/sessionref` | — |
+| 可选的持久上下文，包含当前时间、浏览器时区和经过时长 | `context/time-context` | 需要 | `feature/context/timecontext` | — |
+
 ## 相关源码
 
 - `feature/context/instructions/`

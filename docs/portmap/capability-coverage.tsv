@@ -1,0 +1,274 @@
+能力	DSH出处包	要不要	落在哪个Go包	缺口说明
+Agent Client Protocol仅自动化JSON-RPC服务器，通过stdio驱动harness agent	acp/acp	需要	protocol/acp	
+Typert RPC endpoint提供Host侧ctx.typertGateway与Client侧ctx.remote服务	api/gateway	抄形状	（未落地）	缺口：Host 侧能力注册＋Client 侧贡献项挂载这套双侧协议形状没有对应物
+双侧BFF为Host Remote能力提供客户端外观，包含Goal Remote与插件清单	api/remotes	抄形状	（未落地）	缺口：双侧 BFF 与身份解析没有对应物
+Host 的 ctx.sessionController 服务与生成的 Client session／skills／fileReferences namespace，负责会话生命周期与历史、模型目录、工作区路径打开、可调用 skill 发现与文件引用	api/session-controller	抄形状	protocol/sdk/sdkprotocol	缺口：sdkprotocol 只有 session/prompt。create／resume／fork／rename／list／search／cancel／select-model／update-queue 与历史分页、实时投影推送都没有
+浏览器配置界面的 Host Remote 属主，提供脱敏 settings 与凭据元数据读取、不回传密钥的写入，并在 Host 桌面打开 settings 或 preset 位置	api/settings-controller	抄形状	credentials settings	缺口：credentials 有归属校验，没有「凭据可列出、可引用、读回来打码」这条脱敏读路径
+Host 的 ctx.workspaceController 与 Client workspace namespace，负责 Workspace 增删改序、Session 重排与归档、完整 Workspace 投影跟随，并拥有选目录 seam	api/workspace-controller	抄形状	feature/workspace	缺口：断线重连安全的 baseline＋增量状态传输（WorkspaceBaseline／WorkspaceFollowSink）没有
+持久附件服务边界，规范化并持久提交图片	attachment/attachment	需要	attachment	
+dsh-attachment本地实现，对象存放在DSH_HOME/attachments	attachment/attachment-local	不需要	adapter/imagestore	服务端替代实现见 adapter/imagestore；缺前置：本机文件系统
+供多个bin共用的启动粘合层，提供配置路径解析、环境加载、Profile机制、Loader结算与启动失败处理	boot/app-boot	不需要	—	缺前置：交互式 TTY
+dsh启动器交给引导应用的命令行参数接口，提供参数快照读取与退出请求	boot/cmdline	不需要	—	缺前置：桌面启动器进程（入参走 argv）。服务端入参走 HTTP
+纯自动化 ACP stdio 应用 profile 组合包，在 base 之上设 coding persona 与默认模型路由，命令提供方接受调用后才启动 ACP bridge	bundle/acp-app	抄形状	harness protocol/acp	走 HTTP 不走 stdio，进程外壳那半不要。ACP 场景关掉 session-title-llm 这条取舍已记在裁决里
+共享dsh核心profile组合包，插入全部基础插件（适配器、持久化、策略、settings等），作为所有profile的第一层	bundle/base	抄形状	harness	抄的是 86 行有序挂载这份顺序，落在 harness/assemble.go
+一次性任务组合包，提供编码persona和工具模式，禁用HMR，仅创建一个新Agent执行任务后退出	bundle/headless	抄形状	harness	DSH 自陈的第二份最小可跑定义，并入 harness 的装配顺序
+SDK stdio 应用 profile 组合包，在 base 之上设 coding persona，命令提供方接受调用后才启动 JSON-RPC server	bundle/sdk-app	抄形状	harness protocol/sdk/sdkserver	走 HTTP 不走 stdio JSON-RPC，要的只是「协议服务端／进程生命周期」的分界
+不含共享 base 的独立双工具 SDK profile，只公布按平台选择的持久 shell 与 str_replace_editor，会话存为未压缩 JSONL，模型从 SDK 初始化请求选	bundle/sdk-minimal	抄形状	harness	快照里唯一一份作者亲口说「完整」的最小树，33 行，作为 harness 装配顺序的下界
+浏览器表层组合包，挂载Web宿主行、客户端插件、前端dist服务和web-runtime粘合，支持浏览器打开与URL打印	bundle/web-app	抄形状	（未落地）	不缺：里面挂的 webserver／web-runtime 全判了不需要
+协议消费层，挂载ctx.connection并管理客户端与主机间的HTTP/WebSocket通信	client/connection	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+为通过脚本加载的客户端插件提供热重载	client/hmr	不需要	—	缺前置：浏览器运行时与前端构建链
+偏好设置以locale.preference存储，支持中英文切换及本地化文案注册	client/locale	不需要	—	缺前置：浏览器 navigator 与桌面 UI 设置文件
+浏览器端ESM loader实现，管理插件bundle的懒加载和依赖解析	client/modules	不需要	—	缺前置：浏览器 ESM 模块加载器
+**上游已删。**客户端cordis启动与对象服务，拥有Session/Workspace列表和运行时投影	client/runtime	不需要	—	缺前置：浏览器运行时。且上游已删，拆成 client/store＋client/ui-session，两个仍在浏览器侧
+不依赖 React 的浏览器 observable 与 snapshot store，负责同步与 animation-frame 发布、基于 Immer 的更新、浅比较与可选浏览器持久化	client/store	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+agent preset的各表层，包括选择、标签、管理分区和复制对话框	client/ui-agent-preset	不需要	—	缺前置：本机文件系统、桌面 UI 宿主
+浏览器审批界面，按 Agent 作用域发布每个待处理权限请求、接管 Conversation composer、渲染关联工具详情，并把用户决定回送等待中的 Host 请求	client/ui-approval	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+对话UI的附件呈现，支持输入框草稿图片栏、拖放和灯箱	client/ui-attachment	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+仅当构建为official时填充sidebar.brand和conversation.hero.brand	client/ui-brand-official	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+浏览器 Chat target，渲染 transcript 节点与详情、历史图片、操作、本地化与滚动位置恢复，并直接折叠打包的 assistant 历史 run	client/ui-chat	不需要	llm	服务端替代实现见 llm；缺前置：浏览器运行时（DOM／ESM／React）
+客户端命令API，提供/命令source与派发，支持popupSelect和带参claim	client/ui-commands	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+会话领域骨架、聊天视图、编辑器与输入区，支持压缩、消息、待处理交互	client/ui-conversation	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+产出文件与可点击文件引用属主	client/ui-deliverables	不需要	—	缺前置：本机文件系统、浏览器运行时（DOM／ESM／React）
+应用内目录浏览界面，提供浏览式选取交互	client/ui-directory-picker-browse	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+原生目录选择界面，调用Host操作系统选择框	client/ui-directory-picker-native	不需要	—	缺前置：起本机子进程的能力、桌面 UI 宿主
+Goal界面插件，条带与投影goal状态	client/ui-goal	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+输入触发流水线，支持/与@检测、分组菜单和pick路由	client/ui-input-trigger	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+Web后台任务展示，列出运行中和已完成的任务	client/ui-jobs	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+外壳插件，提供三栏AppFrame和主题呈现器	client/ui-layout	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+单条消息反馈插件，提供Like/Dislike和备注	client/ui-message-feedback	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+模型选择插件，两个入口共用会话级目录	client/ui-model-selection	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+权限界面，包括设置行和/permission命令装饰	client/ui-permission-presets	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+Plan mode状态徽章和控制插件	client/ui-plan	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+纯React原子组件，包括按钮、菜单、Toast、Markdown和终端卡片	client/ui-primitives	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+统一的Web@file与@session source	client/ui-reference	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+负责React渲染层，安装slot渲染器并hydrate启动DOM	client/ui-renderer	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+会话头部的活动 Schedule 提醒只读目录，读完整 schedule 投影，不发 RPC 也不做 mutation	client/ui-schedule	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+Session Controller 状态的 React 与 Slot adapter，在 root scope 提供 Session 列表与待处理交互 hook、物化逐会话 hook 与 prop，不接管 transport 或生命周期	client/ui-session	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+设置领域底座，提供ctx.settingsScope和slot声明	client/ui-settings	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+设置外壳、无特定功能文案与引导namespace	client/ui-settings-general	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+模型设置与产品引导插件，提供Models页面和首次运行步骤	client/ui-settings-models	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+Web设置中的只读插件列表标签页	client/ui-settings-plugin-inventory	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+插件设置分区及其配置标签页，为用户插件展示可编辑卡片	client/ui-settings-plugins	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+侧边栏外壳插件，负责品牌行、New Session操作和Settings seat	client/ui-sidebar	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+skill调用source的浏览器端，支持/name触发和工具行展示	client/ui-skill	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+Slot注册表纯核心，提供SlotCore和四share组件props类型	client/ui-slots	不需要	—	缺前置：cordis 组件系统（Slot 注册表、declaration epoch）
+Web subagent功能属主，提供页头谱系导航和编辑器行为	client/ui-subagent	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+主题插件，基于--dsw-token的实时主题与持久化偏好	client/ui-theme	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+Client工具展示插件，渲染root和子调用的keyed slot分发	client/ui-tool	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+Trajectory渲染按轮次组织的事件记录表	client/ui-trajectory	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+Web提问功能插件，渲染问题卡片和答案选择	client/ui-user-questions	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+将持久化顶层工作流运行重建为独立Chat节点	client/ui-workflow-run	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+共享Workspace浏览器与选择器插件，支持添加、重命名、搜索	client/ui-workspace	不需要	—	缺前置：本机文件系统、浏览器运行时（DOM／ESM／React）
+Web启动内核，分两阶段挂载客户端	client/web	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+代码运行时 Service Definition，定义异步绑定执行模型编写的程序	code-runtime/code-runtime	不需要	—	缺前置：无
+CPython 子进程代码运行时实现，通过 fd 3 JSON-lines 协议交互	code-runtime/code-runtime-python	不需要	—	缺前置：起本机子进程的能力
+Node worker 线程代码运行时实现，支持 TypeScript 并提供隔离与预算	code-runtime/code-runtime-worker-thread	不需要	—	缺前置：单进程独占（本仓库要多实例并发）
+通过/compact命令提供面向用户的手动压缩控制	compaction/command-compact	不需要	—	不缺前置：压缩由 feature/compaction 按阈值自动跑，手动 /compact 只是便利入口，推后。要补时是加一条命令注册，不动已有代码
+Service Definition定义压缩做什么，判定历史过大并摘要为单个表层节点	compaction/compaction	需要	feature/compaction	
+基础压缩后端，使用token压力和摘要器实现压缩	compaction/compaction-basic	需要	feature/compaction/basic	
+不依赖模型的工具结果剪枝服务，改写超大结果为头部加尾部	compaction/compaction-tool-result-pruner	需要	feature/compaction/toolresultpruner	
+为会话加载工作区指令文件（AGENTS.md/CLAUDE.md），在第一步或文件变更时注入	context/agent-instructions	需要	feature/context/instructions	
+文件引用发现seam和@file语法，为UI提供文件补全	context/file-reference	不需要	—	缺前置：模型可访问的工作区文件系统（tool-fs 不装）
+ctx.fileReferences的本地文件系统实现，为每个agent维护有界的工作区索引	context/file-reference-local	不需要	—	缺前置：本机文件系统
+把其他会话作为有界只读快照供模型消费的跨会话上下文	context/session-reference	需要	feature/context/sessionref	
+可选的持久上下文，包含当前时间、浏览器时区和经过时长	context/time-context	需要	feature/context/timecontext	
+可选的持久上下文，记录agent进程所在的tmux session/window/pane及布局	context/tmux-context	不需要	—	缺前置：交互式 TTY
+定义agent接口、注册表和事件词汇，驱动程序消费方面向此处定义的Agent编程	core/agent	需要	harness/agent	
+为新建agent提供部署级的默认模型选择	core/agent-default-model	需要	harness/agentdefaultmodel	
+agent唯一具体实现和循环驱动器，驱动会话、轮次和步骤的生命周期	core/agent-loop	需要	harness/agentloop tools	
+声明模型看到的工具呈现方式（native/code/both）	core/agent-tool-presentation	不需要	—	缺前置：code 呈现模式要的 codeRuntime（已判不要）。只剩 native 一个取值，而 native 本来就是默认
+带作用域的注册原语，为每个存活agent创建一个作用域	core/scope	需要	scope	
+事件溯源的会话日志和内存存储，为agent保留全部交互历史	core/session	需要	harness/session sessionlog	
+系统提示词组装注册表，按作用域收集段落、工具schema和变量	core/system-prompt	需要	harness/systemprompt	
+工具注册表与执行流水线，定义工具schema、执行和呈现方式	core/tools	需要	tools	
+授权Service Definition，拥有凭据对话及生命周期	credentials/authorization	抄形状	（未落地）	缺口：OAuth 与人工授权流程。DSH 自陈「flow 不可恢复」是浏览器进程的限制，与前提 3、4 相撞，服务端要自己的可恢复流程
+凭据Service Definition，配置引用与授权记录分离存储	credentials/credentials	需要	credentials	
+文件型凭据提供方，四层来源优先级	credentials/credentials-local	不需要	—	缺前置：本机文件系统
+为 agent 提供远程 Linux 沙箱执行环境，托管文件系统与进程生命周期	e2b/e2b	不需要	—	缺前置：起本机子进程的能力、桌面 UI 宿主、浏览器运行时（DOM／ESM／React）
+实现在 E2B 沙箱上运行的文件系统操作适配器	e2b/fs-e2b	不需要	—	缺前置：起本机子进程的能力
+在 E2B 沙箱中执行子进程和 PTY 的提供方	e2b/subprocess-e2b	不需要	—	缺前置：起本机子进程的能力
+**上游已删。**通过 JSON-RPC stdio 提供 ACP 自动化服务器应用，支持会话管理和语义检查点	examples/acp-demo	抄形状	harness	上游已删，换成 bundle/acp-app 的 patch 清单。价值在装配顺序，不在代码
+**上游已删。**最小 agent 主干组合包，包含 LLM、会话、提示词、工具、skill、loop 等固定服务集	examples/agent-spine-demo	抄形状	harness	上游已删，换成 bundle/base 与 bundle/sdk-minimal。价值在装配顺序，不在代码
+**上游已删。**只包含 bin 的应用，通过 JSON-RPC stdio 为 SDK 客户端启动外部 cordis.yml 配置	examples/jsonrpc-demo	抄形状	harness	上游已删，换成 bundle/sdk-app 的 patch 清单。价值在装配顺序，不在代码
+隐式Root Agent Teams领域，维护Lead/teammate roster、持久peer mailbox与共享任务DAG	experimental/agent-team	抄形状	（未落地）	缺口：全仓库唯一的持久 peer mailbox＋版本化共享任务板（expectedRevision CAS、任务 DAG、Quiet／Wakeup 两档投递）
+在 base 之上启用 Agent Teams 的私有 profile 层，插入 Team domain 与 Team 作用域工具，禁用名称重叠的全局 continuable-child 控制项，保留一次性 delegation	experimental/agent-team-profile	不需要	—	缺前置：单进程独占（本仓库要多实例并发）
+Agent Teams 的私有 Web 层，在浏览器显示 Team roster、任务板与 teammate 导航	experimental/agent-team-web-profile	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）、单进程独占（本仓库要多实例并发）
+Web 会话页头的 Agent Teams 面板，检查当前 roster、管理共享任务板并导航到 teammate 会话	experimental/client-ui-agent-team	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+把运行中的 Host 与浏览器 Client 接进 Chrome DevTools，提供双侧 Console context、Host Sources 与调试、fetch 采集、共享 Cordis 树与独立于 CDP 的查询 API	experimental/inspector	不需要	—	缺前置：起本机子进程的能力、桌面 UI 宿主
+ctx.agentTeams的scoped模型适配器，在每个隐式Lead和持久teammate scope安装协作工具	experimental/tool-agent-team	抄形状	（未落地）	缺口：随 agent-team 一起缺。工具形状（发消息／领任务／改任务带 expectedRevision）待接缝重写后再挂
+VFS 镜像打包器，把一份合成 profile 变成浏览器 worker 可挂载的 gzip 基础 tar，并把数据目录变成按序应用的 overlay tar	experimental/webworker-packer	不需要	—	缺前置：本机文件系统
+浏览器 worker 宿主，整棵 harness 插件树跑在一个 dedicated Web Worker 里，边下载边解压 VFS 镜像挂进内存，经 postMessage HTTP 隧道服务页面	experimental/webworker-runtime	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+动态双半插件的浏览器半执行器，负责评估浏览器端闭包源码、装载为活插件、处理运行编排与RPC回调	extensions/cordis-client-runner	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+动态包在host侧的注册表与沙箱执行器，管理定义生命周期、vm求值、浏览器调度与invoke路由	extensions/cordis-host-runner	不需要	—	缺前置：起本机子进程的能力
+五个面向模型的自引用工具（cordis_inspect/define/run/stop/undefine），操作当前DSH进程中的实时Cordis运行时	extensions/tool-cordis	不需要	—	缺前置：起本机子进程的能力
+Cordis动态插件浏览器界面，全局浮窗面板显示所有定义及其运行控件，记录model调用的define卡片	extensions/ui-cordis	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+会话反馈采集与面向用户的/feedback命令，记录feedback/record事件并披露会话共享状态	feedback/command-feedback	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+单条assistant消息反馈存储，提供可编辑rating/note的伴随记录与compare-and-set操作	feedback/message-feedback	不需要	—	缺前置：本机文件系统
+定义执行世界的存储原语，抽象路径解析、读取、流式读取、列出、原子写入和字面量编辑操作	fs/fs	需要	fs fs/fstest	
+实现本地文件系统的文件系统接口，支持宿主文件系统的十二个存储原语	fs/fs-local	不需要	—	缺前置：本机文件系统
+记录已观察状态，为写入编辑添加防护并通过事件门禁参与文件系统策略	fs/fs-observation-policy	不需要	—	缺前置：模型直读文件的通道（tool-fs 不装，没有可观察的东西）
+强制沙箱围栏的文件系统后端，按调用策略限制写入操作	fs/fs-sandbox	不需要	—	缺前置：本机文件系统、交互式 TTY
+面向模型的文件系统工具（read、read_image、write、edit），通过事件门禁支持读取窗口和策略	fs/tool-fs	不需要	—	缺前置：本机文件系统
+基于 ripgrep 的文件发现工具（glob、grep），通过 subprocess 执行	fs/tool-fs-search	不需要	—	缺前置：起本机子进程的能力
+基于文件系统的编辑器工具（view、create、str_replace、insert），面向模型	fs/tool-str-replace-editor	不需要	—	缺前置：本机文件系统
+面向用户的/goal控制，基于ctx.goals实现，提供状态展示和create/edit/pause/resume/clear命令	goal/command-goal	需要	feature/goal/goalcommand	
+事件溯源的同会话目标状态，维持当前待完成目标和续行权限	goal/goal	需要	feature/goal feature/goal/goaltool	
+ctx.goals的同会话续行驱动器，把phase为active且已启用续行的目标转换为连续Goal Round	goal/goal-round-driver	需要	feature/goal/goalrounddriver	
+ctx.goals的面向模型控制API：get_goal、create_goal和update_goal	goal/tool-goal	需要	feature/goal/goaltool	
+循环中断器，监视连续重复工具调用并注入逐级增强的提醒	guard/repeat-tool-reminder	需要	feature/guard/repeattoolreminder	
+工具调用超时强制执行器，读取工具声明的timeoutMs并在超时时返回TOOL_TIMEOUT	guard/timeout-policy	需要	feature/guard/timeoutpolicy	
+hook协议格式的共享核心库，提供方言无关原语（matcher、codec、hook执行、输出合并、会话事件）	hooks/hook-protocol	不需要	—	缺前置：本机 shell 执行器（shell/* 全族出局）。方言只有 claude-code／codex 两种取值，也没有消费方
+Claude Code hook配置的方言桥接，在规范拦截点上运行CC command hook子集	hooks/hooks-claude-code	不需要	—	缺前置：起本机子进程的能力
+Codex hook配置的方言桥接，在规范拦截点上运行Codex 5项hook点的支持子集	hooks/hooks-codex	不需要	—	缺前置：起本机子进程的能力
+**上游已删。**提供共用API网关协议与HTTP载体，使客户端与服务器间通过JSON-RPC模式通信，处理会话请求/响应、流式事件、文件导出等	host/apiproxy	抄形状	（未落地）	上游已删，裁决已并入 api/ 底下三个控制器，缺口同那三条
+定义目录选择能力接缝，为web宿主抽象原生OS选择器与应用内浏览两种交互方式	host/directory-picker	不需要	—	缺前置：本机目录（服务端无磁盘）
+启动时自适应判定宿主处境并挂载匹配的目录选择后端（原生或浏览）	host/directory-picker-auto	不需要	—	缺前置：桌面 UI 宿主、浏览器运行时（DOM／ESM／React）
+应用内浏览目录选择后端，提供跨平台的单层目录列举、创建与面包屑导航交互	host/directory-picker-browse	不需要	—	缺前置：本机目录（服务端无磁盘）
+原生OS选择器后端，打开平台对话框让用户选择目录，支持macOS/Windows/Linux	host/directory-picker-native	不需要	—	缺前置：桌面 UI 宿主
+Web壳的SPA静态文件服务器，通过显式index入口返回构建好的前端dist，占据webserver回退席位	host/frontend-static	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
+当前Cordis Loader树的只读投影，直接读取Loader条目并通过Remote发布清单视图	host/plugin-inventory	不需要	—	缺前置：cordis 插件容器
+Web HTTP与upgrade route注册插件，启动node:http服务器并管理具名路由表，提供fallback处理器席位	host/webserver	不需要	—	缺前置：起本机子进程的能力
+遥测、反馈确认与DeepSeek提供方共用的匿名身份，按harness home生成UUID v4并持久化	identity/anonymous-user-id	不需要	—	缺前置：本机家目录持久化身份文件。且遥测身份不属运行时职责
+由插件注册的用户命令注册表，供交互式UI适配器使用	interaction/commands	需要	feature/interaction/commands	
+通过ctx.permissionPresets提供面向用户的权限预设组合沙箱与审批	interaction/permission-presets	需要	（未落地）	缺口：权限预设组合（沙箱与审批的成组配置）没有 Go 包。前提 1 多用户并发要它
+模型侧ask_user_question工具，基于ctx.userQuestions实现	interaction/tool-ask-user	需要	feature/interaction/askuser	
+与通道无关的一次性审批seam，request返回allowed-once/rejected/cancelled/unavailable	interaction/user-approval	需要	feature/interaction/userapproval tools	
+用户交互Service Definition，定义ctx.userQuestions与提供方注册	interaction/user-questions	需要	feature/interaction/userquestions	
+后台任务注册表约定，为长时间运行的生产方提供共享id、owner隔离、读取、取消、等待、通知和清理	jobs/jobs	需要	feature/jobs	
+ctx.jobs注册表约定的进程本地实现，把每条记录保存在内存中并按kind签发id	jobs/jobs-local	需要	adapter/domainjobs adapter/localjobs	
+ctx.jobs的面向模型控制器，提供job_output、job_list和job_kill三个与kind无关的工具	jobs/tool-jobs	需要	feature/jobs/jobstool	
+DeepSeek 官方请求的顶层字段扩展注册表，贡献插件各认领一个经声明合并的字段，基础请求序列化后准备当前贡献	llm/deepseek-llm-api-extensions	抄形状	（未落地）	缺口：adapter/openaicompat 没有让宿主往模型请求顶层追加提供方私有字段的注册表，宿主要加字段就得改适配器
+提供方无关的 LLM 词汇与抽象，注册适配器、捕获重试策略、支持模型发现与流式调用	llm/llm	需要	adapter/openaicompat llm	
+DeepSeek chat-completions 适配器，直接fetch+SSE转换为StreamChunk，支持图片文件API与思考模式	llm/llm-deepseek	不需要	—	缺前置：本机文件系统
+基于@earendil-works/pi-ai的多提供方通用适配器，支持OpenAI兼容端点与私有网关	llm/llm-pi-ai	需要	adapter/openaicompat	
+通过agent/request-error事件应用提供方重试策略，支持normal与always两种模式	llm/llm-retry	需要	feature/llmretry	
+向 DeepSeek 官方请求注入存活 Loader 插件包清单（dsh_plugin_packages 字段），用于请求诊断	llm/plugin-package-inventory-deepseek	不需要	—	缺前置：cordis 插件容器 + DeepSeek 官方接口，两个都没有
+通过单例ctx.tokenMeter进行回放感知的token测量与上下文占用率投影	llm/token-meter	需要	feature/tokenmeter	缺两角：（一）单回合精确用量——feature/tokenmeter 是整份日志累计，同一 turn/step 重复采样 last-wins，切不出「这一个回合花了多少、走了哪几条路由」，补法是加一个吃 turn/start..turn/end 事件切片的纯函数；（二）路由感知的图片计价——图片按固定启发式估价，llm 包里没有计价接缝，补法是 llm 加图片计价接口、feature/tokenmeter 按路由重估图片节点
+LSP 能力 seam，抽象四种语义代码导航操作	lsp/lsp	不需要	—	缺前置：无
+通用 stdio 语言服务器后端，惰性启动和池化服务器进程	lsp/lsp-stdio	不需要	—	缺前置：本机文件系统、起本机子进程的能力
+面向模型的 LSP 工具，通过四种导航操作执行代码定位	lsp/tool-lsp	不需要	—	缺前置：本机文件系统、起本机子进程的能力
+MCP客户端桥接插件，连接外部MCP服务器并把工具注册到ctx.tools	mcp/mcp-client	需要	protocol/mcp	
+软引导的plan协作状态，提供/plan命令、/plan off命令和经用户评审的exit_plan_mode退出方式	plan/plan-mode	需要	feature/plan/planmode	
+按preset组装agent，工具和提示词仅存在一份供所有已加入agent使用	preset/agent-presets	需要	feature/preset/agentpresets	
+可组装的agent人设，可遮蔽部署级人设或成为完整系统提示词	preset/persona	需要	feature/preset/persona	
+用于包自有运行时不变量检查的可配置注册表服务	runtime-diagnostics/invariants	需要	invariants	
+进程沙箱 Service Definition，定义限制词汇和运行时拒绝机制	sandbox/sandbox	不需要	—	缺前置：无
+本地沙箱实现，选择平台 runner（bwrap、Landlock、Seatbelt、ACL）	sandbox/sandbox-local	不需要	—	缺前置：起本机子进程的能力、单进程独占（本仓库要多实例并发）
+沙箱策略解析的唯一归属位置，管理部署默认和会话覆盖	sandbox/sandbox-policy	不需要	—	缺前置：无
+Windows 写入限制沙箱后端，基于受限令牌和 ACL 实现隔离	sandbox/sandbox-windows-acl	不需要	—	缺前置：起本机子进程的能力、单进程独占（本仓库要多实例并发）
+为未来创建的live根agent提供三个会话范围内的工具管理持久提醒	schedule/schedule	需要	feature/schedule	
+TypeScript客户端SDK以子进程驱动harness，stdio JSON-RPC通讯	sdk/client	抄形状	（未落地）	不缺：子进程驱动运行时这件事本仓库不做。客户端形状留待有外部驱动需求时再抄
+DeepSeek Harness SDK运行时共享协议格式，换行分帧JSON-RPC	sdk/protocol	需要	protocol/sdk/sdkprotocol	
+stdio JSON-RPC服务器插件使进程外SDK客户端驱动harness agent	sdk/server	需要	protocol/sdk/sdkprotocol protocol/sdk/sdkserver	
+Web会话日志ZIP下载控制	session-query/session-log-export	不需要	—	缺前置：桌面 UI 宿主、浏览器运行时（DOM／ESM／React）
+会话查询Service Definition，提供精确读取、关系跟踪与过滤	session-query/session-query	需要	feature/sessionquery	
+SQLite全文搜索会话查询提供方实现	session-query/session-query-sqlite	抄形状	feature/sessionquery	缺口：feature/sessionquery 只定义了 Searcher 挂点，全仓库没有任何实现，两个检索方法一律返回 CodeSearchDisabled。要抄的查询表结构与索引形状还没落成 Postgres 版
+经工作区授权的会话查询模型工具	session-query/tool-session-query	需要	feature/sessionquery/querytool	
+在模型适配器前与工具正文前为事件溯源会话创建检查点，持久化前一响应与工具结果	session/session-checkpoint-policy	需要	feature/checkpointpolicy	
+把规范会话日志增量上传进 DeepSeek 官方请求（dsh_session_log 字段），以持久 delivery-accepted 事件派生接受水位	session/session-log-deepseek	不需要	—	缺前置：DeepSeek 官方接口及其私有请求字段。注意与 llm/deepseek-llm-api-extensions 区分：那个要的是注册表形状，这个是往注册表里塞的一条具体内容
+会话持久化能力接缝，定义会话事件存储、加载与列表接口	session/session-persistence	需要	feature/persistence	
+仅追加JSONL逻辑日志持久化后端，支持Zstandard压缩与分片打包	session/session-persistence-jsonl	不需要	—	缺前置：本机文件系统
+**上游已删。**SQLite持久化后端，存储打包后的assistant分片与delta编码序列	session/session-persistence-sqlite	不需要	—	缺前置：本机文件系统、单进程独占（本仓库要多实例并发）
+会话投影Service Definition与驱动注册表，对已提交事件驱动客户端读模型	session/session-projection	需要	sessionlog/projection	
+持久投影缓存，把投影单元状态保存为检查点	session/session-projection-cache	需要	feature/projectioncache	
+折叠会话日志事件为step计数、轮数、LLM时间、工具时间等数字	session/session-stats	需要	feature/sessionstats	
+遥测Service Definition，捕获会话记录传给上报后端	session/session-telemetry	需要	feature/telemetry	
+OpenTelemetry遥测后端，支持FULL、FEEDBACK_ONLY、DISABLED三种模式	session/session-telemetry-otel	不需要	—	缺前置：OTLP 采集端。遥测投递不属运行时职责
+日志支持的会话标题，提供确定性回退与可选异步提供方	session/session-title	需要	feature/sessiontitle	
+通过LLM总结所有用户消息的会话标题提供方	session/session-title-all-prompts-llm	需要	feature/sessiontitle/sessiontitlellm	
+通过LLM总结第一条用户消息的会话标题提供方	session/session-title-first-prompt-llm	需要	feature/sessiontitle/sessiontitlellm	
+模型支持的会话标题提供方共享实现	session/session-title-llm	需要	feature/sessiontitle/sessiontitlellm	
+turnOutline 投影单元，给出全日志每个已开始轮次的 turn/start seq 与有界提示词、最终回复预览，支撑整会话轮次导航与向后分页定位	session/session-turn-outline	需要	（未落地）	缺口：sessionlog/projection 没有 turnOutline 单元。零前置条件，纯投影；几千轮的会话客户端要能跳到第 300 轮
+用户设置Service Definition，管理按namespace分节的schema默认值、组合base与用户层解析	settings/settings	需要	harness/agentdefaultmodel settings	
+基于YAML/JSON文件的settings提供方，支持外部编辑热发布、并发写锁、YAML注释保留	settings/settings-file	不需要	—	缺前置：本机文件系统
+本地 bash 执行器，通过 subprocess 提供前台和后台 shell 执行能力	shell/bash-local	不需要	—	缺前置：起本机子进程的能力
+沙箱消费型 bash 执行器，通过 sandbox 限制每次 spawn 并报告拒绝	shell/bash-sandbox	不需要	—	缺前置：起本机子进程的能力、单进程独占（本仓库要多实例并发）
+本地 PowerShell 执行器，通过 subprocess 提供前台和后台 shell 执行能力	shell/pwsh-local	不需要	—	缺前置：起本机子进程的能力
+沙箱消费型 PowerShell 执行器，通过 sandbox 限制每次 spawn 并报告拒绝	shell/pwsh-sandbox	不需要	—	缺前置：起本机子进程的能力、单进程独占（本仓库要多实例并发）
+定义 shell 执行器接口，不规定如何实现前台命令和后台进程	shell/shell	不需要	—	缺前置：无
+工具无关的 shell 环境插件，管理受信任的 DSH_* 变量供 shell 工具使用	shell/shell-env	不需要	—	缺前置：无
+面向模型的 bash 工具，支持前台运行、后台启动和沙箱升权	shell/tool-bash	不需要	—	缺前置：起本机子进程的能力
+持久 shell 工具，复用按 agent 隔离的 ctx.terminals shell	shell/tool-bash-persistent	不需要	—	缺前置：交互式 TTY
+面向模型的 pwsh 工具，支持前台运行、后台启动和沙箱升权	shell/tool-pwsh	不需要	—	缺前置：起本机子进程的能力
+持久 PowerShell 工具，复用按 agent 隔离的 ctx.terminals shell	shell/tool-pwsh-persistent	不需要	—	缺前置：交互式 TTY
+纯agent skill提供方注册表，Service Definition与策略框架	skill/skill	需要	feature/skill feature/skill/skilltool	
+可选内置skill提供方dsh-badge，官方markdown片段与PNG	skill/skill-badge	不需要	—	不缺前置：纯 DSH 品牌资源，不服务五条前提
+ctx.skills的本地文件系统提供方，扫描SKILL.md与平铺Markdown文件	skill/skill-filesystem	不需要	—	缺前置：本机文件系统
+面向模型的skill目录与skill工具，展示可用skill并加载完整指令	skill/tool-skill	需要	feature/skill/skilltool	
+spill能力Service Definition，定义后端存储过大工具文本并返回定位信息与取回指引	spill/spill	需要	spill	
+本地文件系统spill实现，将工具结果保存到会话级私有文件，定位信息是文件路径	spill/spill-local	不需要	adapter/textstore	服务端替代实现见 adapter/textstore；缺前置：本机文件系统
+工具结果spill策略，对过大纯文本结果执行spill并替换为有界预览与取回指引	spill/spill-policy	需要	feature/spillpolicy	
+非会话数据存储中心，具名后端注册表加数据形式设施	storage/storage	需要	storage storage/storagetest	
+存储中心领域数据形式，在后端上暴露可注入的storageDomain服务	storage/storage-domain	需要	storage/domain	
+存储中心JSON后端，每个单元一个JSON文件	storage/storage-json	不需要	—	缺前置：本机文件系统
+存储中心SQLite后端，单个数据库提供kv facet	storage/storage-sqlite	抄形状	adapter/datastore	抄键值怎么映射成表、迁移怎么走；后端已定 Postgres
+提供子agent运行的接缝抽象，管理provider注册、启动、持久化子agent描述符及可继续子级编排	subagent/subagent	需要	feature/subagent feature/subagent/internal/childseed	
+通过Agent Client Protocol在全新子进程运行subagent，并作为ACP客户端驱动它	subagent/subagent-acp	不需要	—	缺前置：起本机子进程的能力、交互式 TTY
+在发起委托的会话工作区中调用官方Claude Agent SDK运行subagent任务	subagent/subagent-claude-code	不需要	—	缺前置：起本机子进程的能力、交互式 TTY
+在全新临时Codex线程中启动subagent，通过app-server --stdio与Codex通信	subagent/subagent-codex	不需要	—	缺前置：起本机子进程的能力、交互式 TTY
+通过TypeScript SDK客户端在全新子进程运行完整DeepSeek Harness运行时作为subagent	subagent/subagent-dsh-sdk	不需要	—	缺前置：起本机子进程的能力、交互式 TTY
+在当前进程创建子agent，以父agent已完成的对话轮次作为初始内容	subagent/subagent-fork-in-process	需要	feature/subagent/forkinprocess	
+两个进程内provider共用的运行驱动器，处理深度、创建、定制、结果读取、取消和dispose	subagent/subagent-in-process-driver	需要	feature/subagent/inprocessdriver	
+在当前进程创建全新子agent，有自己的会话但以空对话开始运行	subagent/subagent-spawn-in-process	需要	feature/subagent/spawninprocess	
+基于已配置provider的面向模型委派工具，前台或后台执行subagent任务	subagent/tool-subagent	需要	feature/subagent/subagenttool feature/workflow/toolralph	缺一角：子 agent 的模型选择授权表。descriptor.go 的 AgentProvider／AgentModel 是装配期定死的，模型自己挑不了，也没有「许挑哪几条路由」的授权表。补的入口：工具 schema 加 provider／model／reasoning_effort，授权表以 subagent/model-selection-policy 事件进日志（只进日志不进模型历史），配一个投影单元读回来
+全局具名send_message、interrupt_agent与list_agents工具，控制可继续subagent的生命周期	subagent/tool-subagent-control	需要	feature/subagent/controltool	
+可选的子级作用域report工具，为可继续进程内子级提供向父agent的返回通道	subagent/tool-subagent-report	需要	feature/subagent/reporttool	
+子进程 seam 定义，抽象可执行文件查找、spawn 和终端进程原语	subprocess/subprocess	不需要	—	缺前置：无
+本地子进程运行时，实现 detached 进程树、按流处置和终止升级	subprocess/subprocess-local	不需要	—	缺前置：起本机子进程的能力
+Windows ACL 沙箱消费的底层 Win32 进程库，独家持有 restricted-process、stdio 与 Job Object 的 Koffi 绑定表	subprocess/win32-process	不需要	—	缺前置：起本机子进程的能力
+限定所有者范围的持久 PTY seam，通过具名后端路由终端操作	terminal/terminal	不需要	—	缺前置：交互式 TTY
+为 ctx.terminals 提供的持久 shell 后端，在共享沙箱策略下启动交互式 shell	terminal/terminal-bash	不需要	—	缺前置：交互式 TTY
+面向模型的终端工具（terminal_open、terminal_send、terminal_read 等），支持后台模式	terminal/tool-terminal	不需要	—	缺前置：交互式 TTY
+**上游已删。**为 ACP 快照测试提供无密钥层、规范化器、启动器和测试套件工厂	test-support/acp-snapshot	需要	（未落地）	上游已删，继任者 test-support/session-snapshot 也没落地，缺口合并到那一条
+共享挂载 agent loop 测试的先决依赖（LLM、会话、提示词、工具、agent）	test-support/agent-loop-testkit	需要	（未落地）	缺口：按序挂载 LLM／会话／提示词／工具／agent 的测试脚手架没有，loop 逻辑目前无法隔离测
+为客户端 UI 功能测试提供 jsdom 运行时，含真实 Cordis Context 和生产 slot 注册表	test-support/client-runtime	不需要	—	缺前置：jsdom／DOM 与 cordis
+可编脚本的 OpenAI 兼容 HTTP 服务器，无需密钥即可测试 LLM 适配器和 agent 循环	test-support/llm-mock-server	需要	cmd/llmmockserver llm/mockserver	
+从已记录会话日志回放 LLM 模型流，使快照测试无需 API 密钥	test-support/llm-replay	需要	feature/replay	
+通过 Cordis Loader 与 cordis.yml 启动应用的共享子进程冒烟 harness，runFixtureTurn 驱动一次完整任务并返回最终文本与用量	test-support/loader-smoke	需要	（未落地）	缺口：「能启动、能跑完一轮、能关停」的端到端冒烟脚手架没有
+无密钥已记录会话测试的共享支持：封闭 manifest、类型化身份脱敏、规范化、workspace 比较、fixture 保护，以及 headless、SDK、ACP 与 Web 的协议适配器	test-support/session-snapshot	需要	（未落地）	缺口：会话日志快照三件套——清单化夹具、身份脱敏、期望输出归一化。没有归一化，带时间戳和 ID 的日志没法做快照比对。它的 workspace 文件快照那部分不要（前置是本机文件系统）
+面向模型的todo_write工具，agent的完整任务列表每次调用整体替换	todo/tool-todo	需要	feature/todo	
+TypeScript项目分析器和模型驱动的Typert代码生成器	typert/generator	不需要	—	缺前置：TypeScript 编译期类型信息。Go 侧用 reflect 加代码生成
+生成的Typert产物的Loader集成，发现并注册贡献项	typert/loader	不需要	—	缺前置：cordis Loader 与 package.json 清单
+不依赖编译器的Remote服务声明与协议映射	typert/protocol	不需要	—	缺前置：TypeScript 装饰器与类型擦除。Go 侧用 struct tag 与接口
+生成的Typert产物运行时注册表，存储业务反射信息和Zod schema	typert/registry	Go 已有等价物	（Go 语言设施）	reflect 加 struct tag 白送，不移包
+零依赖原子文件替换，用于设置与凭据存储	util/atomic-write	Go 已有等价物	（Go 标准库）	os.WriteFile／os.Rename／文件锁是等价原语。本仓库无磁盘，实际落点是 storage 的事务写
+仅类型的Branded<B>名义类型原语，跨包id不可互换	util/brand	Go 已有等价物	（Go 语言设施）	type alias 加非导出字段实现同等效果。不是砍掉，是换手段
+零依赖、浏览器可用的 UUID 与字节编码辅助，UUID 基于所有发布上下文都有的 crypto.getRandomValues，而非安全上下文限定的 crypto.randomUUID	util/crypto	Go 已有等价物	（Go 标准库）	crypto/rand 加 encoding/hex／encoding/base64
+环形双端队列，两端追加与前端移除都是摊销常数时间，移除后即时释放条目并有界回收空闲存储	util/deque	Go 已有等价物	（Go 标准库）	切片本身就是摊还常数时间的双端队列，container/list 也在标准库
+DeepSeek Harness用户数据共享文件系统路径辅助工具	util/home-paths	不需要	—	缺前置：本机文件系统
+本次运行环境冻结为不可变快照，记住每个值来自哪一层	util/launch-environment	不需要	—	缺前置：本机文件系统
+零依赖免shell execFile运行器，直接spawn可执行文件	util/native-command	不需要	—	缺前置：起本机子进程的能力、桌面 UI 宿主
+轻依赖保留库，为工具提供有界面向模型输出	util/output-retention	需要	feature/outputretention	
+IANA 时区校验与规范化，canonicalClientTimeZone 只接受 UTC 或 Area/Location 并回答该名称在当前平台的规范拼写	util/time	Go 已有等价物	（Go 标准库）	time.LoadLocation 校验 IANA 时区名，Location.String() 规范化
+零依赖超时时序与分类纯函数库	util/timeout	需要	feature/timeout	
+无损 JSON 校验、分离式快照、深度冻结、JSON 结构相等与封闭联合的穷尽失败	util/values	Go 已有等价物	sessionlog	整包在防 JS 对象图的危险（伪造原型、取值器、稀疏数组、环、-0、非有限数），Go 里要么不存在要么 encoding/json 自己就拒。逐条对照写在 sessionlog/doc.go
+浏览器安全的 Workspace 路径辅助：拼接相对路径、缩写用于展示的 POSIX 主目录、从 POSIX 或 Windows 路径提取标题	util/workspace-path	Go 已有等价物	（Go 标准库）	path 包。注意不是 path/filepath——本仓库 oscheck 禁它
+面向模型的web_search与web_fetch工具，基于ctx.web能力seam	web/tool-web	不需要	—	缺前置：web/web 接缝，随它一起出局
+Web访问能力seam的Service Definition，定义WebRuntime接口与提供方注册	web/web	不需要	—	缺前置：搜索数据源。接缝零前置，但所有提供方都要第三方 API key
+匿名公共HTTP(S)抓取提供方，URL验证与内容兜底超时	web/web-fetch-http	不需要	—	缺前置：本机文件系统
+DeepSeek Anthropic兼容Messages API搜索提供方，触发原生web_search服务器工具	web/web-search-deepseek	不需要	—	缺前置：DeepSeek 官方 API key
+Exa搜索端点提供方，返回高亮摘要映射为规范结果	web/web-search-exa	不需要	—	缺前置：Exa API key
+Perplexity OpenAI兼容搜索提供方，生成答案与引用映射	web/web-search-perplexity	不需要	—	缺前置：Perplexity API key
+Host 侧 ctx.webhookRuntime：受信任程序化 webhook 规则的注册表，唯一内置动作是在 Web Workspace 中创建普通根 Session	webhook/webhook	需要	（未落地）	缺口：规则运行时（外部事件→工作区／预设／模型／权限→开会话跑提示词，fire-and-forget）。零本机前置，依赖的东西全有。现在运行时只能被人从协议层叫醒
+带签名验证的 GitHub webhook 适配器，在注入的 ctx.webServer 上注册一条精确 HTTP 路由，投影提供方无关的交付并立即返回 202	webhook/webhook-github	抄形状	（未落地）	缺口：随 webhook/webhook 一起缺。要抄的是 HMAC 验签→解事件→交给规则运行时这个形状，不绑 HTTP 框架；凭据取用挂到 credentials 的归属校验上
+面向模型的ralph工具，运行固定的前台工作流把目标依次交给多个全新子agent	workflow/tool-ralph	需要	feature/workflow/toolralph	
+面向模型的workflow工具，运行扇出subagent的JavaScript编排脚本并返回脚本最终值	workflow/tool-workflow	不需要	—	缺前置：JavaScript 编排引擎（workflow-worker-thread 出局），Go 侧没有产出方
+工作流seam定义脚本、运行、结果、错误和事件契约，worker-thread是当前引擎实现	workflow/workflow	需要	（未落地）	缺口：工作流接缝（脚本／运行／结果／错误／事件契约与生命周期观察器）。feature/workflow/toolralph 是挂在它上面的工具，接缝本身没有
+WorkflowEngine实现，每次运行使用Node worker thread隔离脚本执行	workflow/workflow-worker-thread	不需要	—	缺前置：单进程独占（本仓库要多实例并发）
+Workspace实体注册表，持久化workspace记录、顺序、会话归属索引，支持创建/删除/排序/归档操作	workspace/workspace	需要	feature/workspace	
+SQL 方言底座：把键值与日志映射成表，Postgres 与 SQLite 共用一套语句	—	本仓库自有	adapter/datastore	替代 storage/storage-sqlite。服务端无磁盘，后端定 Postgres
+挑测试跑在哪种库上的夹具	—	本仓库自有	adapter/datastore/internal/dbtest	只有 datastore 子树用，收进 internal
+键值存储后端	—	本仓库自有	adapter/datastore/kvstore	storage 契约的生产实现
+会话日志与查询的存储后端	—	本仓库自有	adapter/datastore/sessionstore	sessionlog 与 feature/sessionquery 的生产实现，抄 session-query-sqlite 的表与索引形状
+对象存储后端	—	本仓库自有	adapter/objectstore	服务端无磁盘，附件与溢出内容走对象存储
+子 agent 提供方的契约夹具	—	本仓库自有	feature/subagent/internal/providertest	只有 subagent 子树用，收进 internal
+宿主装配门面与生命周期	—	本仓库自有	harness	对应 DSH bundle/* 那份有序挂载清单。DSH 靠 cordis 容器装配，本仓库不移 cordis，改成显式装配函数
+能力账本工具	—	本仓库自有	internal/devtools/capmap	门禁
+消费方 import 路径校验	—	本仓库自有	internal/devtools/consumercheck	门禁：全仓库唯一按路径索引的地方
+数据库约定校验	—	本仓库自有	internal/devtools/dbcheck	门禁
+分层校验	—	本仓库自有	internal/devtools/layercheck	门禁：docs/layers.tsv 的执行者
+本机资源禁用校验	—	本仓库自有	internal/devtools/oscheck	门禁：服务端无磁盘这条的执行者
+符号账本工具	—	本仓库自有	internal/devtools/portmap	门禁
+规则库	—	本仓库自有	internal/devtools/rule	门禁共用
+裁决表工具	—	本仓库自有	internal/devtools/rulingtable	门禁共用
+工具路径校验	—	本仓库自有	internal/devtools/toolpath	门禁

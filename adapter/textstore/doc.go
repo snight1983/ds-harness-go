@@ -67,4 +67,23 @@
 //
 // 保留期在这条接缝上是**介质自己的事**：对象存储有生命周期规则，本地磁盘有
 // 运维的定时任务。两者都比一次启动时的尽力而为更靠谱。
+//
+// # 不做什么
+//
+//   - **不提供取回。**这条接缝只能写；取回靠宿主自己的通道，模型照着取回说明去调
+//     别的工具。
+//   - **不自己写那句取回说明。**句柄长什么样取决于装的是哪条
+//     [github.com/snight1983/ds-harness-go/fs.FileSystem]，说明由装配方经
+//     [Config.RetrievalHint] 给。
+//   - **不做启动清扫，也不定保留期。**那条接缝上没有「按修改时间扫一棵树」这个原语，
+//     多副本之间也没有协调；保留期是介质自己的事。
+//   - **不是会话持久化，也不是通用文件上传。**会话那条在
+//     [github.com/snight1983/ds-harness-go/feature/persistence]，本包只收工具结果外置
+//     的那段文本。
+//   - **不碰本机磁盘。**它建在 [github.com/snight1983/ds-harness-go/fs.FileSystem] 上，
+//     服务端部署下面接的是
+//     [github.com/snight1983/ds-harness-go/adapter/objectstore]。
+//   - **不覆盖已有的产物。**发布走
+//     [github.com/snight1983/ds-harness-go/fs.CreateIfAbsent]，撞上就报错——静默覆盖会
+//     毁掉在先那一份。
 package textstore

@@ -13,6 +13,19 @@
 //
 // 同 github.com/snight1983/ds-harness-go/feature/subagent/spawninprocess：DSH 那个 apply 是往 cordis 上下文上
 // 挂提供方，Go 里登记是组装根的一句话，所以这个包只交出 [New]。
+//
+// # 不做什么
+//
+//   - **不驱动那次运行。**「建孩子 → 投提示词 → 等静止 → 读结果 → 处置」整条路在
+//     [github.com/snight1983/ds-harness-go/feature/subagent/inprocessdriver]，本包只多贡献一样东西：
+//     那段种子。
+//   - **不建会话。**孩子那条会话由 [github.com/snight1983/ds-harness-go/harness/agent] 的造法在创建窗口里
+//     立起来，本包交出去的只是一段事件切片和它的起点 seq。
+//   - **不裁剪种子的内容。**它按最后一条 turn/end 切出前缀，那一段里有什么就带什么；
+//     要把它变短是 [github.com/snight1983/ds-harness-go/feature/compaction] 的事。
+//   - **不让孩子继续跟着父走。**分叉点之后两条日志各自独立，父再追加什么都不会流到
+//     孩子那边——继承的是创建那一刻的前缀，不是一条订阅。
+//   - **不跨进程分叉。**孩子在当前进程里；把一段会话搬到别的进程上跑不是这个包。
 package forkinprocess
 
 import (

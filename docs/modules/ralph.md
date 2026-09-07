@@ -51,6 +51,15 @@ Controller
 - 不自行选择外部模型或工具权限，子 Agent 仍受宿主配置约束。
 - 不保证子 Agent 报告的事实正确。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 基于已配置provider的面向模型委派工具，前台或后台执行subagent任务 | `subagent/tool-subagent` | 需要 | `feature/workflow/toolralph` | 缺一角：子 agent 的模型选择授权表。descriptor.go 的 AgentProvider／AgentModel 是装配期定死的，模型自己挑不了，也没有「许挑哪几条路由」的授权表。补的入口：工具 schema 加 provider／model／reasoning_effort，授权表以 subagent/model-selection-policy 事件进日志（只进日志不进模型历史），配一个投影单元读回来 |
+| 面向模型的ralph工具，运行固定的前台工作流把目标依次交给多个全新子agent | `workflow/tool-ralph` | 需要 | `feature/workflow/toolralph` | — |
+
 ## 相关源码
 
 - `feature/workflow/toolralph/config.go`

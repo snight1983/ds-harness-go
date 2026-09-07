@@ -33,4 +33,18 @@
 // 插件来源的上下文（见 [github.com/snight1983/ds-harness-go/tools.RunContext.DeferContext]），
 // 让模型在这一轮结束之前正面对用户交代一次。它取代的是 DSH 早先那个「硬停回合」
 // 的做法——硬停会让最后一轮的产出无人转述。
+//
+// # 不做什么
+//
+//   - **不拥有任何耐久状态。**改动落不落得下去、修订号接不接得上、阶段跃迁成不成立，
+//     全归 [github.com/snight1983/ds-harness-go/feature/goal] 那台服务验。
+//   - **没有 clear。**一个能自己清掉目标的模型等于一个没有预算的模型；清目标只在
+//     [github.com/snight1983/ds-harness-go/feature/goal/goalcommand] 那条给人的命令里。
+//   - **不看调用参数决定够不够格。**授权那三条规矩全钉在会话日志上——回合边界加上
+//     它后面那几条消息的来源，才是伪造不出来的证据。
+//   - **不推进目标。**开新回合、递续推提示词是
+//     [github.com/snight1983/ds-harness-go/feature/goal/goalrounddriver] 的事，
+//     本包只是模型手里的三件工具。
+//   - **不硬停回合。**一次终局更新只往结果上捎一条延后上下文，让模型自己再对用户
+//     交代一句；硬停会让最后一轮的产出无人转述。
 package goaltool

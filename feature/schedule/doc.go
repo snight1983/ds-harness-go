@@ -55,4 +55,20 @@
 //   - 往日志里追加失败。[github.com/snight1983/ds-harness-go/harness/session.Session.Append] 只会在序号或
 //     时间戳非零、数据不是合法 JSON、或者违反表层计划时报错；一条平铺的
 //     `schedule/change` 事件这四条一条都碰不到。
+//
+// # 不做什么
+//
+//   - **不是一台调度服务。**投递是会话本地的（[DeliverySessionLocal]）：原会话没开着
+//     的提醒一直停在 [StateOverdue]，等它恢复了再响，没有任何外部唤醒。
+//   - **不认 cron 表达式、日历规则和跨会话目标。**只有 `after` / `at` / `every` 三种，
+//     多出来的表达力要先有使用方再说。
+//   - **不在内存里存事实。**唯一事实是日志里那串 `schedule/change`，定时器只是它的
+//     进程局部投影，随时可以丢掉重算。
+//   - **不保证提醒之后那件事做成了。**它只保证提醒被交给一个活着的 agent，之后模型
+//     怎么处理归 [github.com/snight1983/ds-harness-go/harness/agentloop]。
+//   - **不自己拼会话词汇。**[EventTypes] 要由装配方并进
+//     [github.com/snight1983/ds-harness-go/sessionlog.Vocabulary]，否则读日志的一方会判成读到了
+//     一条不认识的必需事件。
+//   - **不自己落盘。**每次改动前后那道屏障走装配方交进来的 [Sessions]，本包只要求
+//     「这段前缀确实到过某个落盘监听者」这个答复。
 package schedule

@@ -46,6 +46,15 @@ Tools Pipeline
 - 超时不是进程隔离；不响应 Context 的工具仍可能继续占用资源。
 - 授权和用户审批由 `feature/interaction/userapproval` 与工具管线负责。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 循环中断器，监视连续重复工具调用并注入逐级增强的提醒 | `guard/repeat-tool-reminder` | 需要 | `feature/guard/repeattoolreminder` | — |
+| 工具调用超时强制执行器，读取工具声明的timeoutMs并在超时时返回TOOL_TIMEOUT | `guard/timeout-policy` | 需要 | `feature/guard/timeoutpolicy` | — |
+
 ## 相关源码
 
 - `feature/guard/timeoutpolicy/`

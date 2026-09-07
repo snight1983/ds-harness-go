@@ -8,7 +8,7 @@
 
 一个空的 `llm.Runtime` 不包含任何模型，也不会自动选择云厂商。
 
-## 两层结构
+## 架构：两层结构
 
 | 层 | 内容 |
 |---|---|
@@ -77,7 +77,7 @@ Adapter 返回统一 `StreamChunk`。运行时和 Agent Loop处理：
 
 流式分块可以逐条写入事件，最终完整消息也会落盘。恢复和界面展示不依赖当时的网络流仍然存在。
 
-## 失败
+## 失败语义
 
 `llm.Failure` 是可以写入日志和协议的失败事实，不是 Go error 基类。它包含稳定的失败代码、提供方信息和可展示说明。
 
@@ -164,7 +164,7 @@ Agent 的 `request-error` Observer 可以认领失败并要求重试；默认是
 - 动态密钥更新只影响后续请求，不应修改已经落盘的历史事实。
 - 多租户部署必须在 Provider 路由前完成租户隔离。
 
-## 并发
+## 生命周期与并发
 
 - Runtime 的 Adapter 注册和请求解析可并发使用。
 - 一个 Adapter 是否支持并发由其实现保证。
@@ -172,7 +172,7 @@ Agent 的 `request-error` Observer 可以认领失败并要求重试；默认是
 - 动态配置读取要避免请求中途读取到两份不同版本。
 - Observer 和 Adapter 回调不能在 Runtime 内部锁中执行长时间操作。
 
-## 边界
+## 能力边界
 
 LLM 模块负责：
 
@@ -188,6 +188,18 @@ LLM 模块不负责：
 - 自动保证所有模型行为一致。
 - 保存 API Key 到会话。
 - 提供所有厂商协议。
+
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 浏览器 Chat target，渲染 transcript 节点与详情、历史图片、操作、本地化与滚动位置恢复，并直接折叠打包的 assistant 历史 run | `client/ui-chat` | 不需要 | `llm` | 服务端替代实现见 llm；缺前置：浏览器运行时（DOM／ESM／React） |
+| 提供方无关的 LLM 词汇与抽象，注册适配器、捕获重试策略、支持模型发现与流式调用 | `llm/llm` | 需要 | `adapter/openaicompat` `llm` | — |
+| 基于@earendil-works/pi-ai的多提供方通用适配器，支持OpenAI兼容端点与私有网关 | `llm/llm-pi-ai` | 需要 | `adapter/openaicompat` | — |
+| 通过agent/request-error事件应用提供方重试策略，支持normal与always两种模式 | `llm/llm-retry` | 需要 | `feature/llmretry` | — |
+| 通过单例ctx.tokenMeter进行回放感知的token测量与上下文占用率投影 | `llm/token-meter` | 需要 | `feature/tokenmeter` | 缺两角：（一）单回合精确用量——feature/tokenmeter 是整份日志累计，同一 turn/step 重复采样 last-wins，切不出「这一个回合花了多少、走了哪几条路由」，补法是加一个吃 turn/start..turn/end 事件切片的纯函数；（二）路由感知的图片计价——图片按固定启发式估价，llm 包里没有计价接缝，补法是 llm 加图片计价接口、feature/tokenmeter 按路由重估图片节点 |
 
 ## 相关源码
 

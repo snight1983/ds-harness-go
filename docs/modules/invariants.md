@@ -49,6 +49,14 @@ Registry.Register(package, Installer)
 - 是否在生产启用、失败是否阻断服务由宿主决定。
 - 各模块仍需提供可直接调用的纯校验函数，便于离线检查历史日志。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 用于包自有运行时不变量检查的可配置注册表服务 | `runtime-diagnostics/invariants` | 需要 | `invariants` | — |
+
 ## 相关源码
 
 - `invariants/invariants.go`

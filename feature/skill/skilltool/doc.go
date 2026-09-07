@@ -30,4 +30,17 @@
 //  4. **认不出来的目录记录当成「不是本包的目录」**，不抛错。日志可能是恢复的、
 //     分叉的、或者外部写进来的，种子校验只保证 source 是个带非空 kind 的对象。
 //     在步骤监听器里抛错会让那个会话之后每一个回合都失败。
+//
+// # 不做什么
+//
+//   - **不拥有技能从哪来。**清单怎么收、同名谁赢、正文怎么渲染，全在
+//     [github.com/snight1983/ds-harness-go/feature/skill] 那台注册表上；本包只是它的模型这一侧。
+//   - **不读磁盘。**正文是提供方交过来的值，本包的依赖里没有
+//     [github.com/snight1983/ds-harness-go/fs] 那条接缝——技能来自打包、本地目录还是远端注册中心，
+//     是提供方要回答的问题。
+//   - **不为技能正文作保。**它是模型读完照着做的话，不是一份权柄：调得动哪些工具，
+//     仍由 [github.com/snight1983/ds-harness-go/tools] 那张注册表和作用域上的限制说了算。
+//   - **不管这些文字占掉多少上下文。**目录和正文进了模型表面之后，计量归
+//     [github.com/snight1983/ds-harness-go/feature/tokenmeter]，装不下时怎么办归
+//     [github.com/snight1983/ds-harness-go/feature/compaction]。
 package skilltool

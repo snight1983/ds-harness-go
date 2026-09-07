@@ -48,4 +48,14 @@
 // 通过生成的 SDK 反过来调那些工具。连同它配套的两个 SDK 渲染器（py-types.ts、
 // ts-types.ts）整块不移，理由见 docs/portmap/decisions.md 的
 // 「tools —— PTC（run_code）整块不移」。
+//
+// # 不做什么
+//
+//   - **不提供任何具体工具。**一个都没有；工具由 feature 下面那十几个包各自注册进来。
+//   - **不做鉴权，也不实现审批。**注册不是授权，[Approval] 只是接口，
+//     实现在 feature/interaction/userapproval。
+//   - **不执行 [Definition.Timeout]，也不定并行度。**超时由 feature/guard/timeoutpolicy
+//     那条绕派发规则做，一批调用同时跑几个由 harness/agentloop 定。
+//   - **不强杀不合作的执行体。**取消是协作式的，工具自己不看 ctx 就停不下来。
+//   - **不做 PTC（run_code）。**整块不移，见上一节。
 package tools

@@ -14,6 +14,18 @@
 // 也就是把这个提供方挂进 cordis 上下文。Go 没有那个运行期容器，装配是
 // 组装根里的一句 `subagents.RegisterProvider(spawninprocess.New(...))`，
 // 所以这个包只交出 [New]，登记归调用方。
+//
+// # 不做什么
+//
+//   - **不给孩子任何父上下文。**空对话是这个提供方的定义本身；要让孩子看得见这段
+//     对话，换 [github.com/snight1983/ds-harness-go/feature/subagent/forkinprocess]。
+//   - **不驱动那次运行。**建孩子、投提示词、等静止、读结果、处置全在
+//     [github.com/snight1983/ds-harness-go/feature/subagent/inprocessdriver]。
+//   - **不验服务齐不齐。**缺哪一样由
+//     [github.com/snight1983/ds-harness-go/feature/subagent/inprocessdriver.StartInProcessRun] 在真要用的
+//     时候一处报出来；这里和那里各验一遍，还可能验得不一样。
+//   - **不起新进程。**名字里的 spawn 说的是「新会话」，不是「新进程」——一个子进程
+//     都不起。
 package spawninprocess
 
 import (

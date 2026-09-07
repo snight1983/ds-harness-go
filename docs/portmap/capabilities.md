@@ -1,4 +1,4 @@
-# DSH 227 包能力清单
+# DSH 250 包能力清单
 
 ## 零、这份文档为什么存在
 
@@ -17,7 +17,10 @@
 
 所以这份清单要解决的不是「补充材料」，是**换掉裁决的依据**。这件事已经做完：
 依据链是 `functions.md`（2009 条功能）→ `required.md`（五条前提推出的必需集）→
-`rulings.md`（227 行逐包裁决）→ `DESIGN.md` 第三、四节（已按此重写，恢复效力）。
+`rulings.md`（257 行逐包裁决）→ `DESIGN.md` 第三、四节（已按此重写，恢复效力）。
+
+上面这一段写于快照还是 227 个包的时候，段里的 227、215,147 都是那时的数。
+当前基准快照 `deepseek-harness-dsh-v0.1.2-alpha.3` 是 **250 个包**，本文档正文已按它对齐。
 
 **这份是一个包一行，粒度不够裁决用。** `core/tools` 那一行底下压着 35 件独立的事，
 只看它决定不了「工具那块要哪些」。拆到条的那一层在 `docs/portmap/functions.md`，
@@ -25,21 +28,32 @@
 
 ## 一、方法与口径
 
-**读的是什么。** DSH 的 227 个包每个都带一份作者写的 `README.zh.md`，合计 13,637 行。
-体量是源码的 1/16，而内容恰好是裁决需要的那种：这个包干什么、它是接缝还是实现、
+**读的是什么。** DSH 的 250 个包每个都带一份作者写的 `README.zh.md`，合计 35,301 行。
+体量是源码的 1/9，而内容恰好是裁决需要的那种：这个包干什么、它是接缝还是实现、
 它自己承认做不到什么。源码回答「怎么实现的」，README 回答「它是什么」——
 裁决问的是后者。
 
-**覆盖率。** 227/227，全量，不是抽样。逐包的行来自八个并行子代理按同一套五列格式产出，
+**覆盖率。** 250/250，全量，不是抽样。逐包的行来自八个并行子代理按同一套五列格式产出，
 缺的一个（`test-support/loader-smoke`）事后单独补读。行数与包数由脚本对账：
 
 ```
-包数（packages/<域>/<包>/package.json）   227
-README.zh.md                              227
-README 中文总行数                          13,637
-src 总行数                                215,147
-清单行数 / 每行字段数                      227 / 5
+包数（packages/<域>/<包>/package.json）   250
+README.zh.md                              250
+README 中文总行数                          35,301
+src 总行数                                300,429
+清单行数 / 每行字段数                      257 / 5
 ```
+
+**清单 257 行而包数 250，多出来的 7 行是上游已删的包**，能力列开头标着「上游已删」。
+这 7 行不删：删掉的话，「我们当初判过它」这件事就没人看得见了，下一个人会重新判一遍。
+后面所有分布数字都只数那 250 行，不数这 7 行。
+
+| 已删的包 | 上一版清单里的位置 |
+|---|---|
+| `client/runtime` · `host/apiproxy` | 拆进 `api/` 底下三个控制器 |
+| `examples/acp-demo` · `examples/agent-spine-demo` · `examples/jsonrpc-demo` | 换成 `bundle/` 底下的 profile 组合包 |
+| `test-support/acp-snapshot` | 并进 `test-support/session-snapshot` |
+| `session/session-persistence-sqlite` | **真删，没有继任者**，上游只剩 JSONL 一个落盘实现 |
 
 **五列的含义。**
 
@@ -53,15 +67,15 @@ src 总行数                                215,147
 
 **分布（口径不互斥，一个包可占多项）：**
 
-- 性质：实现 101、工具 40、接缝 39、UI 33、脚手架 14
-- 服务端障碍为「无」：**104**
-- 碰本机文件 / 本机进程 / 需要本机终端：**69**
-- 浏览器端 / 桌面 UI：**49**
-- 自陈「仅单进程」：**19**
+- 性质：实现 110、工具 46、接缝 40、UI 37、脚手架 17
+- 服务端障碍为「无」：**111**
+- 碰本机文件 / 本机进程 / 需要本机终端：**75**
+- 浏览器端 / 桌面 UI：**59**
+- 自陈「仅单进程」：**22**
 
 ## 二、清单
 
-### A. 循环、会话与持久化（44 个）
+### A. 循环、会话与持久化（46 个）
 
 **`attachment/`（2）**
 
@@ -111,14 +125,15 @@ src 总行数                                215,147
 | `credentials` | 凭据Service Definition，配置引用与授权记录分离存储 | 接缝 | 无 | 引用不提供枚举；限定为环境变量形状；进程环境变化不可见；无scope验证 |
 | `credentials-local` | 文件型凭据提供方，四层来源优先级 | 实现 | 本机文件 | 并发写入同一引用后写胜出；同UID进程可读取；环境变化不可见；原子但无崩溃持久性 |
 
-**`session/`（13）**
+**`session/`（15）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
 | `session-checkpoint-policy` | 在模型适配器前与工具正文前为事件溯源会话创建检查点，持久化前一响应与工具结果 | 实现 | 无 | 流式分片无逐分片检查点；崩溃可能丢失当前批次或未完成写入；恢复无法证明副作用完成 |
+| `session-log-deepseek` | 把规范会话日志增量上传进 DeepSeek 官方请求（dsh_session_log 字段），以持久 delivery-accepted 事件派生接受水位 | 实现 | 无 | 2xx 后、水位持久化前进程丢失会在恢复时保守重放；缺存活会话就不带该字段；没有独立请求大小上限，提供方拒绝时游标不动而非截断日志 |
 | `session-persistence` | 会话持久化能力接缝，定义会话事件存储、加载与列表接口 | 接缝 | 无 | 无删除或保留接口；list()无分页或过滤；修复时仅合成closer作为崩溃恢复方案 |
 | `session-persistence-jsonl` | 仅追加JSONL逻辑日志持久化后端，支持Zstandard压缩与分片打包 | 实现 | 本机文件 | 仅单进程；每会话一个活动writer；POSIX需硬链接支持；压缩文件不能直接按行读取 |
-| `session-persistence-sqlite` | SQLite持久化后端，存储打包后的assistant分片与delta编码序列 | 实现 | 本机文件；仅单进程 | 过渡性设计，schema不稳定；同步压缩与繁忙等待阻塞事件循环；无删除或后台压缩 |
+| `session-persistence-sqlite` | **上游已删。**SQLite持久化后端，存储打包后的assistant分片与delta编码序列 | 实现 | 本机文件；仅单进程 | 过渡性设计，schema不稳定；同步压缩与繁忙等待阻塞事件循环；无删除或后台压缩 |
 | `session-projection` | 会话投影Service Definition与驱动注册表，对已提交事件驱动客户端读模型 | 接缝 | 无 | 每尾页携带每个client-visible key；单元表进程级；注册表cell仅内存；同步纪律部分可机械把关 |
 | `session-projection-cache` | 持久投影缓存，把投影单元状态保存为检查点 | 实现 | 无 | 不提供淘汰接口；记录按会话累积；间隔节流粗粒度；冷读不去重 |
 | `session-stats` | 折叠会话日志事件为step计数、轮数、LLM时间、工具时间等数字 | 实现 | 无 | 步数统计工作而非可见输出；被取消的步计数但不计时；仅挂载于web-app bundle |
@@ -128,6 +143,7 @@ src 总行数                                215,147
 | `session-title-all-prompts-llm` | 通过LLM总结所有用户消息的会话标题提供方 | 实现 | 无 | 输入溢出时保留先前标题；无基于摘要继续的机制 |
 | `session-title-first-prompt-llm` | 通过LLM总结第一条用户消息的会话标题提供方 | 实现 | 无 | 第一条消息对长期会话可能不代表；fork保留标题不自动运行 |
 | `session-title-llm` | 模型支持的会话标题提供方共享实现 | 实现 | 无 | 仅接受文本输出，拒绝工具调用；对整体封装强制字节上限 |
+| `session-turn-outline` | turnOutline 投影单元，给出全日志每个已开始轮次的 turn/start seq 与有界提示词、最终回复预览，支撑整会话轮次导航与向后分页定位 | 实现 | 无 | 每次推送携带完整大纲，wire 值随会话增长；回复只预览已落定的轮次；没有合格文本的轮次保持空串；仅在组合了投影注册表时挂载 |
 
 **`session-query/`（4）**
 
@@ -147,7 +163,7 @@ src 总行数                                215,147
 | `storage-json` | 存储中心JSON后端，每个单元一个JSON文件 | 实现 | 本机文件 | 没有跨进程写锁；Windows持久性依赖libuv rename()无显式write-through |
 | `storage-sqlite` | 存储中心SQLite后端，单个数据库提供kv facet | 实现 | 本机文件 | DatabaseSync同步阻塞；无忙等待或重试策略；不迁移其他版本；重复打开逻辑 |
 
-### B. 模型、工具与会话内能力（43 个）
+### B. 模型、工具与会话内能力（45 个）
 
 **`feedback/`（2）**
 
@@ -190,14 +206,16 @@ src 总行数                                215,147
 | `jobs-local` | ctx.jobs注册表约定的进程本地实现，把每条记录保存在内存中并按kind签发id | 实现 | 仅单进程 | 任务只存在于进程本地；静默无效的取消可能使销毁过程停滞 |
 | `tool-jobs` | ctx.jobs的面向模型控制器，提供job_output、job_list和job_kill三个与kind无关的工具 | 工具 | 无 | 落在driver退休窗口内的结算仍会让通知搁浅；已花掉的唤醒预算不会随时间恢复 |
 
-**`llm/`（5）**
+**`llm/`（7）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
+| `deepseek-llm-api-extensions` | DeepSeek 官方请求的顶层字段扩展注册表，贡献插件各认领一个经声明合并的字段，基础请求序列化后准备当前贡献 | 接缝 | 无 | 仅限 DeepSeek 官方请求，刻意不提供提供方无关的路由，也不集成 pi-ai 适配器；不约定字段顺序 |
 | `llm` | 提供方无关的 LLM 词汇与抽象，注册适配器、捕获重试策略、支持模型发现与流式调用 | 实现 | 无 | 本服务不执行重试、缓存或速率限制；采样字段仅含temperature/maxTokens/stop；BlockAssembler仅处理核心块类型 |
 | `llm-deepseek` | DeepSeek chat-completions 适配器，直接fetch+SSE转换为StreamChunk，支持图片文件API与思考模式 | 实现 | 本机文件 | settings的models列表整体替换；请求使用原始fetch而非proxy；会跳过插件添加的内容块类型 |
 | `llm-pi-ai` | 基于@earendil-works/pi-ai的多提供方通用适配器，支持OpenAI兼容端点与私有网关 | 实现 | 无 | maxRequestImageBytes仅统计base64图片载荷；一次登录仅存活于发起进程；settings能新增或覆盖但不能移除路由 |
 | `llm-retry` | 通过agent/request-error事件应用提供方重试策略，支持normal与always两种模式 | 实现 | 无 | agent轮次是唯一重试边界；always mode会重试永久性失败；恢复策略按waterfall顺序组合 |
+| `plugin-package-inventory-deepseek` | 向 DeepSeek 官方请求注入存活 Loader 插件包清单（dsh_plugin_packages 字段），用于请求诊断 | 实现 | 无 | 仅含 Loader 包来源，程序化创建的子 fiber 与内存动态插件不在内；省略没有 manifest 的松散模块；原地替换已挂载包的 manifest 需要重启 |
 | `token-meter` | 通过单例ctx.tokenMeter进行回放感知的token测量与上下文占用率投影 | 实现 | 无 | 固定启发式规则是近似值；每次测量克隆表层；提供方用量仅复用完全相同的规范envelope |
 
 **`mcp/`（1）**
@@ -272,13 +290,16 @@ src 总行数                                215,147
 |---|---|---|---|---|
 | `workspace` | Workspace实体注册表，持久化workspace记录、顺序、会话归属索引，支持创建/删除/排序/归档操作 | 实现 | 本机文件 | 会话删除与破坏性文件夹移除尚未提供，头部索引仅启动时刷新 |
 
-### C. 多 agent 编排（17 个）
+### C. 多 agent 编排（20 个）
 
-**`experimental/`（2）**
+**`experimental/`（5）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
 | `agent-team` | 隐式Root Agent Teams领域，维护Lead/teammate roster、持久peer mailbox与共享任务DAG | 实现 | 仅单进程 | 单进程共享checkout；write scope仅作提示；扁平且不可变的roster；mailbox不保证跨进程exactly-once |
+| `agent-team-profile` | 在 base 之上启用 Agent Teams 的私有 profile 层，插入 Team domain 与 Team 作用域工具，禁用名称重叠的全局 continuable-child 控制项，保留一次性 delegation | 脚手架 | 仅单进程 | 仅限源码 checkout，正式发布产物不含；所有 teammate 共享同一工作目录，没有 worktree 隔离或文件系统锁；依赖 base profile，不是独立 profile |
+| `agent-team-web-profile` | Agent Teams 的私有 Web 层，在浏览器显示 Team roster、任务板与 teammate 导航 | 脚手架 | 浏览器端、仅单进程 | 四层组合顺序固定；稳定 Web preset 仍在 preset scope 挂旧 continuable 控制项，会与 Team roster 并存；仅限源码 checkout |
+| `client-ui-agent-team` | Web 会话页头的 Agent Teams 面板，检查当前 roster、管理共享任务板并导航到 teammate 会话 | UI | 浏览器端 | 快照式刷新，没有实时 event 订阅或 mailbox 时间线；导航后的人类消息走稳定 addressed-subagent 路径而非 Team peer mailbox；不能 spawn、rename、delete 或 interrupt teammate |
 | `tool-agent-team` | ctx.agentTeams的scoped模型适配器，在每个隐式Lead和持久teammate scope安装协作工具 | 工具 | 无 | 提示词策略只负责协调不负责confinement；不会自主创建Team；没有Web控制功能 |
 
 **`subagent/`（11）**
@@ -306,7 +327,7 @@ src 总行数                                215,147
 | `workflow` | 工作流seam定义脚本、运行、结果、错误和事件契约，worker-thread是当前引擎实现 | 接缝 | 无 | 仅支持前台收集；没有日志化或恢复；没有已保存或嵌套工作流；没有token预算词汇 |
 | `workflow-worker-thread` | WorkflowEngine实现，每次运行使用Node worker thread隔离脚本执行 | 实现 | 仅单进程 | worker/vm不是安全边界；每次运行支付worker thread成本；终止只能报告宿主观察到的启动 |
 
-### D. 目录、命令与沙箱（碰本机资源的那一支）（35 个）
+### D. 目录、命令与沙箱（碰本机资源的那一支）（36 个）
 
 **`code-runtime/`（3）**
 
@@ -368,12 +389,13 @@ src 总行数                                215,147
 | `tool-pwsh` | 面向模型的 pwsh 工具，支持前台运行、后台启动和沙箱升权 | 工具 | 本机进程 | Windows 沙箱下语言模式与 named-pipe 捕获受限、无持久 shell |
 | `tool-pwsh-persistent` | 持久 PowerShell 工具，复用按 agent 隔离的 ctx.terminals shell | 工具 | 需要本机终端 | 工具需要拥有 agent 和支持 pwsh 的 terminal backend、输入回显不可避免 |
 
-**`subprocess/`（2）**
+**`subprocess/`（3）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
 | `subprocess` | 子进程 seam 定义，抽象可执行文件查找、spawn 和终端进程原语 | 接缝 | 无 | — |
 | `subprocess-local` | 本地子进程运行时，实现 detached 进程树、按流处置和终止升级 | 实现 | 本机进程 | Windows 进程树支持尽力而为、被强制杀死的 harness 遗留语言服务器、凭据清除依赖名称启发式 |
+| `win32-process` | Windows ACL 沙箱消费的底层 Win32 进程库，独家持有 restricted-process、stdio 与 Job Object 的 Koffi 绑定表 | 实现 | 本机进程 | 不是 Cordis 服务，不决定沙箱策略或公共 child 行为；handle 生命周期有限制 |
 
 **`terminal/`（3）**
 
@@ -383,7 +405,7 @@ src 总行数                                215,147
 | `terminal-bash` | 为 ctx.terminals 提供的持久 shell 后端，在共享沙箱策略下启动交互式 shell | 实现 | 需要本机终端 | 输出按行规范化、Windows 没有精确 stdin-wait 档、pwsh 引导在 read-only 下可能失败 |
 | `tool-terminal` | 面向模型的终端工具（terminal_open、terminal_send、terminal_read 等），支持后台模式 | 工具 | 需要本机终端 | 不公开具名按键序列、TUI、BEL、调整大小、自动启动或跨 agent 共享 |
 
-### E. 宿主、前端与对外协议（66 个）
+### E. 宿主、前端与对外协议（82 个）
 
 **`acp/`（1）**
 
@@ -391,12 +413,15 @@ src 总行数                                215,147
 |---|---|---|---|---|
 | `acp` | Agent Client Protocol仅自动化JSON-RPC服务器，通过stdio驱动harness agent | 实现 | 本机进程、仅单进程 | 仅新会话；仅光栅图片和一个workspace；仅已提交答案；生命周期由连接管理 |
 
-**`api/`（2）**
+**`api/`（5）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
 | `gateway` | Typert RPC endpoint提供Host侧ctx.typertGateway与Client侧ctx.remote服务 | 实现 | 无 | Connection分发普通失败为internal code；SRC模式仅支持名称唯一标识符；Client侧仅挂载严格模式 |
 | `remotes` | 双侧BFF为Host Remote能力提供客户端外观，包含Goal Remote与插件清单 | 实现 | 无 | 能力集由构建时导入固定确定；要增加能力必须显式导入；剩余BFF配置迁移前仍从旧API Proxy提供 |
+| `session-controller` | Host 的 ctx.sessionController 服务与生成的 Client session／skills／fileReferences namespace，负责会话生命周期与历史、模型目录、工作区路径打开、可调用 skill 发现与文件引用 | 实现 | 桌面UI、仅单进程 | control baseline 是进程本地状态，Host 重启后无法重建 jobs；follow 恢复失败对调用方可见而不无限重试；文件引用补全共享 Agent lookup 可能唤醒冷 Session |
+| `settings-controller` | 浏览器配置界面的 Host Remote 属主，提供脱敏 settings 与凭据元数据读取、不回传密钥的写入，并在 Host 桌面打开 settings 或 preset 位置 | 实现 | 桌面UI | 批量上限固定为 64 个引用，不是可按部署配置的字段 |
+| `workspace-controller` | Host 的 ctx.workspaceController 与 Client workspace namespace，负责 Workspace 增删改序、Session 重排与归档、完整 Workspace 投影跟随，并拥有选目录 seam | 实现 | 无 | follow() 重连后替换完整投影，没有持久 cursor 或增量追赶协议；进程本地删除标记只在 Client 模型生命周期内阻止已移除 Workspace 复活 |
 
 **`boot/`（2）**
 
@@ -405,15 +430,18 @@ src 总行数                                215,147
 | `app-boot` | 供多个bin共用的启动粘合层，提供配置路径解析、环境加载、Profile机制、Loader结算与启动失败处理 | 工具 | 需要本机终端 | 裸包specifier依赖Loader内部机制，快照回放替换仅识别特定basename |
 | `cmdline` | dsh启动器交给引导应用的命令行参数接口，提供参数快照读取与退出请求 | 接缝 | 无 | 启动器flag必须写在应用参数之前，用户patch会替换整个config |
 
-**`bundle/`（3）**
+**`bundle/`（6）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
+| `acp-app` | 纯自动化 ACP stdio 应用 profile 组合包，在 base 之上设 coding persona 与默认模型路由，命令提供方接受调用后才启动 ACP bridge | 脚手架 | 本机进程、仅单进程 | 自定义 profile 可能省略 ACP bridge 导致无 peer 响应 client；任意插入的插件可破坏 stdout 纯净性；配置更改需重启（patchReload: startup） |
 | `base` | 共享dsh核心profile组合包，插入全部基础插件（适配器、持久化、策略、settings等），作为所有profile的第一层 | 脚手架 | 仅单进程 | patch替换整行config，Windows临时目录授权是会话私有子目录 |
 | `headless` | 一次性任务组合包，提供编码persona和工具模式，禁用HMR，仅创建一个新Agent执行任务后退出 | 脚手架 | 仅单进程 | 只提交单个任务，ctx.appExit由启动器持有 |
+| `sdk-app` | SDK stdio 应用 profile 组合包，在 base 之上设 coding persona，命令提供方接受调用后才启动 JSON-RPC server | 脚手架 | 本机进程、仅单进程 | 自定义 profile 可能省略 SDK server 导致 client 初始化失败；任意插入的插件可破坏 stdout 纯净性；配置变化需重启 |
+| `sdk-minimal` | 不含共享 base 的独立双工具 SDK profile，只公布按平台选择的持久 shell 与 str_replace_editor，会话存为未压缩 JSONL，模型从 SDK 初始化请求选 | 脚手架 | 本机进程、需要本机终端 | 刻意省略 settings、托管凭据、遥测、compaction、workspace 指令、skills、jobs 与 subagent；danger-full-access 允许改进程可及的任何路径，只能配隔离 workspace；用户 patch 可破坏 stdout |
 | `web-app` | 浏览器表层组合包，挂载Web宿主行、客户端插件、前端dist服务和web-runtime粘合，支持浏览器打开与URL打印 | 脚手架 | 本机进程、浏览器端 | 前端dist必须已构建，lanAddresses是启动期快照，SSH转发持有浏览器URL |
 
-**`client/`（40）**
+**`client/`（45）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
@@ -421,10 +449,13 @@ src 总行数                                215,147
 | `hmr` | 为通过脚本加载的客户端插件提供热重载 | 实现 | 无 | 重载保持粗粒度，失败不回滚，重建帧不刷新图rev |
 | `locale` | 偏好设置以locale.preference存储，支持中英文切换及本地化文案注册 | 实现 | 无 | 部分界面仍保留内联文案；注册表文本只读取一次翻译 |
 | `modules` | 浏览器端ESM loader实现，管理插件bundle的懒加载和依赖解析 | 实现 | 无 | 采用扁平模块图；自身不维护卸载记录 |
-| `runtime` | 客户端cordis启动与对象服务，拥有Session/Workspace列表和运行时投影 | 实现 | 无 | loader.unload是stub；scope拆卸由阶段驱动仅单占用者；插件导入需用/client子路径 |
+| `runtime` | **上游已删。**客户端cordis启动与对象服务，拥有Session/Workspace列表和运行时投影 | 实现 | 无 | loader.unload是stub；scope拆卸由阶段驱动仅单占用者；插件导入需用/client子路径 |
+| `store` | 不依赖 React 的浏览器 observable 与 snapshot store，负责同步与 animation-frame 发布、基于 Immer 的更新、浅比较与可选浏览器持久化 | 实现 | 浏览器端 | 持久化仅限浏览器本地（localStorage 里的 JSON），非浏览器运行时禁用持久化，也不提供跨设备同步 |
 | `ui-agent-preset` | agent preset的各表层，包括选择、标签、管理分区和复制对话框 | UI | 本机文件、桌面UI | 没有元数据的preset按id列出；展示路径是文本非链接；组装编辑对页面不可见 |
+| `ui-approval` | 浏览器审批界面，按 Agent 作用域发布每个待处理权限请求、接管 Conversation composer、渲染关联工具详情，并把用户决定回送等待中的 Host 请求 | UI | 浏览器端 | 面板只提供临时决定（仅本次允许与拒绝），持久权限策略仍由 Host 侧审批包拥有 |
 | `ui-attachment` | 对话UI的附件呈现，支持输入框草稿图片栏、拖放和灯箱 | UI | 浏览器端 | 仅支持图片；灯箱无缩放与下载；灯箱不锁定焦点 |
 | `ui-brand-official` | 仅当构建为official时填充sidebar.brand和conversation.hero.brand | UI | 浏览器端 | 仅提供一组occupant；浏览器标题相互独立 |
+| `ui-chat` | 浏览器 Chat target，渲染 transcript 节点与详情、历史图片、操作、本地化与滚动位置恢复，并直接折叠打包的 assistant 历史 run | UI | 浏览器端 | transcript 只反映已加载的 Session 窗口；轮次导航依赖 turnOutline 投影，没有它就回退到仅已加载轮次；导航预览按卡片尺寸截断 |
 | `ui-commands` | 客户端命令API，提供/命令source与派发，支持popupSelect和带参claim | UI | 浏览器端 | 脱离会话后detached result的notice回退到console |
 | `ui-conversation` | 会话领域骨架、聊天视图、编辑器与输入区，支持压缩、消息、待处理交互 | UI | 浏览器端 | 统计行回退折算只覆盖窗口内；详情面板没有入口；assistant逐消息分页预留slot |
 | `ui-deliverables` | 产出文件与可点击文件引用属主 | UI | 本机文件、浏览器端 | 提及匹配只认精确路径或唯一basename；终端命令创建的文件不在词表；原生文件夹交接需要本机或配置 |
@@ -441,6 +472,8 @@ src 总行数                                215,147
 | `ui-primitives` | 纯React原子组件，包括按钮、菜单、Toast、Markdown和终端卡片 | UI | 浏览器端 | 流式期间跨边界引用解析被推迟；字形图标是重绘版本；TerminalBlock不是模拟器 |
 | `ui-reference` | 统一的Web@file与@session source | UI | 浏览器端 | 候选失败有意保持静默；浏览器侧不扫描文件；会话搜索仅使用元数据 |
 | `ui-renderer` | 负责React渲染层，安装slot渲染器并hydrate启动DOM | UI | 浏览器端 | 首帧等待全部客户端entry；slot渲染无Suspense集成或逐entry懒加载 |
+| `ui-schedule` | 会话头部的活动 Schedule 提醒只读目录，读完整 schedule 投影，不发 RPC 也不做 mutation | UI | 浏览器端 | 仅含活动记录，delete 与 dispatch 会移除对应行；本地时间与相对时间由浏览器派生，是呈现值不是持久事实；只读，没有 mutation、Retry、回执或 Toast 语义 |
+| `ui-session` | Session Controller 状态的 React 与 Slot adapter，在 root scope 提供 Session 列表与待处理交互 hook、物化逐会话 hook 与 prop，不接管 transport 或生命周期 | 实现 | 浏览器端 | 待处理交互是进程本地投影，浏览器重连后所属 Remote waterfall 必须重放仍未完成的请求 |
 | `ui-settings` | 设置领域底座，提供ctx.settingsScope和slot声明 | 实现 | 浏览器端 | 远程浏览器没有持久化设置；每次写入仅一个字段 |
 | `ui-settings-general` | 设置外壳、无特定功能文案与引导namespace | UI | 浏览器端 | 通用分区没有内置行 |
 | `ui-settings-models` | 模型设置与产品引导插件，提供Models页面和首次运行步骤 | UI | 浏览器端 | 卡片可编辑仅限API密钥与精选字段；凭据清理范围刻意狭窄；只有pi-ai路由可手工声明 |
@@ -457,6 +490,14 @@ src 总行数                                215,147
 | `ui-workflow-run` | 将持久化顶层工作流运行重建为独立Chat节点 | UI | 浏览器端 | 只有顶层工作流调用生成记录；导航仅面向实时运行；节点不显示脚本和操作 |
 | `ui-workspace` | 共享Workspace浏览器与选择器插件，支持添加、重命名、搜索 | UI | 本机文件、浏览器端 | 没有模糊内容搜索或事件深链接；没有Session删除；待处理交互不聚合到折叠分组 |
 | `web` | Web启动内核，分两阶段挂载客户端 | 脚手架 | 浏览器端 | 应用等待完整名册 |
+
+**`experimental/`（3）**
+
+| 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
+|---|---|---|---|---|
+| `inspector` | 把运行中的 Host 与浏览器 Client 接进 Chrome DevTools，提供双侧 Console context、Host Sources 与调试、fetch 采集、共享 Cordis 树与独立于 CDP 的查询 API | 工具 | 本机进程、桌面UI | 私有包，不进正式发布；Worker 不访问实时 Cordis 对象，共享 collector 传输前把它们投影成已验证快照 |
+| `webworker-packer` | VFS 镜像打包器，把一份合成 profile 变成浏览器 worker 可挂载的 gzip 基础 tar，并把数据目录变成按序应用的 overlay tar | 脚手架 | 本机文件 | 不做任何源码编译，基础镜像携带仓库真实构建产物，调试的就是 served 部署交付的字节 |
+| `webworker-runtime` | 浏览器 worker 宿主，整棵 harness 插件树跑在一个 dedicated Web Worker 里，边下载边解压 VFS 镜像挂进内存，经 postMessage HTTP 隧道服务页面 | 实现 | 浏览器端 | 面向预览部署与打包回归的实验性定位；经 CommonJS 包装加载器装载模块 |
 
 **`extensions/`（4）**
 
@@ -479,7 +520,7 @@ src 总行数                                215,147
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
-| `apiproxy` | 提供共用API网关协议与HTTP载体，使客户端与服务器间通过JSON-RPC模式通信，处理会话请求/响应、流式事件、文件导出等 | 接缝 | 浏览器端 | 待处理交互无法跨宿主重启存活，搜索失败暴露提供方诊断信息，Linux原生选择器依赖桌面工具 |
+| `apiproxy` | **上游已删。**提供共用API网关协议与HTTP载体，使客户端与服务器间通过JSON-RPC模式通信，处理会话请求/响应、流式事件、文件导出等 | 接缝 | 浏览器端 | 待处理交互无法跨宿主重启存活，搜索失败暴露提供方诊断信息，Linux原生选择器依赖桌面工具 |
 | `directory-picker` | 定义目录选择能力接缝，为web宿主抽象原生OS选择器与应用内浏览两种交互方式 | 接缝 | 无 | 不支持多根目录 |
 | `directory-picker-auto` | 启动时自适应判定宿主处境并挂载匹配的目录选择后端（原生或浏览） | 实现 | 桌面UI、浏览器端 | 探测仅在启动时执行，无法按连接自适应；SSH脱离会丢失标记 |
 | `directory-picker-browse` | 应用内浏览目录选择后端，提供跨平台的单层目录列举、创建与面包屑导航交互 | 实现 | 无 | 不读取Windows隐藏属性，不枚举盘符根，全盘可浏览无限制 |
@@ -496,7 +537,15 @@ src 总行数                                215,147
 | `protocol` | DeepSeek Harness SDK运行时共享协议格式，换行分帧JSON-RPC | 接缝 | 无 | 无协议版本协商；无取消与会话关闭方法；server→client请求未使用 |
 | `server` | stdio JSON-RPC服务器插件使进程外SDK客户端驱动harness agent | 实现 | 本机进程 | 协议无逐会话关闭或提示词取消；无逐提示词结果；stdout纯净性由部署保证；自动挂载仅支持DeepSeek |
 
-### F. 底座与工具库（13 个）
+**`webhook/`（2）**
+
+| 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
+|---|---|---|---|---|
+| `webhook` | Host 侧 ctx.webhookRuntime：受信任程序化 webhook 规则的注册表，唯一内置动作是在 Web Workspace 中创建普通根 Session | 接缝 | 无 | 接口只有 register(rule) 与 dispatch(delivery)，提供方身份验证属于适配器包 |
+| `webhook-github` | 带签名验证的 GitHub webhook 适配器，在注入的 ctx.webServer 上注册一条精确 HTTP 路由，投影提供方无关的交付并立即返回 202 | 实现 | 无 | 不等待规则或 Session 完成即返回 202 |
+
+
+### F. 底座与工具库（18 个）
 
 **`identity/`（1）**
 
@@ -519,38 +568,44 @@ src 总行数                                215,147
 | `protocol` | 不依赖编译器的Remote服务声明与协议映射 | 接缝 | 无 | 装饰器标记仅包含方法名和调用模式；参数与schema反射需要Typert构建流水线 |
 | `registry` | 生成的Typert产物运行时注册表，存储业务反射信息和Zod schema | 实现 | 无 | 注册表不合并宿主侧与客户端侧的图；同名schema会作为重复项拒绝 |
 
-**`util/`（7）**
+**`util/`（12）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
 | `atomic-write` | 零依赖原子文件替换，用于设置与凭据存储 | 工具 | 本机文件 | 原子但不保证持久；仅支持字符串内容；遗留锁需要操作者恢复 |
 | `brand` | 仅类型的Branded<B>名义类型原语，跨包id不可互换 | 工具 | 无 | — |
+| `crypto` | 零依赖、浏览器可用的 UUID 与字节编码辅助，UUID 基于所有发布上下文都有的 crypto.getRandomValues，而非安全上下文限定的 crypto.randomUUID | 工具 | 无 | 全仓 lint 规则把 crypto.randomUUID 的调用者指到这里；只跑 Node 的代码仍从 node:crypto 导入 |
+| `deque` | 环形双端队列，两端追加与前端移除都是摊销常数时间，移除后即时释放条目并有界回收空闲存储 | 工具 | 无 | 没有容量策略，不限流、不合并、不拒绝条目，过载行为由每个消费方自己定义 |
 | `home-paths` | DeepSeek Harness用户数据共享文件系统路径辅助工具 | 工具 | 本机文件 | 展开范围保持狭窄；规范化仅读不修改 |
 | `launch-environment` | 本次运行环境冻结为不可变快照，记住每个值来自哪一层 | 工具 | 本机文件 | 快照不是子进程边界；没有按工作区划分的层 |
 | `native-command` | 零依赖免shell execFile运行器，直接spawn可执行文件 | 工具 | 本机进程、桌面UI | 不做输出限量 |
 | `output-retention` | 轻依赖保留库，为工具提供有界面向模型输出 | 工具 | 无 | 项保留仅支持head；文本保留面向字节 |
+| `time` | IANA 时区校验与规范化，canonicalClientTimeZone 只接受 UTC 或 Area/Location 并回答该名称在当前平台的规范拼写 | 工具 | 无 | 只做校验与规范化，不格式化时间，也不持有失败词汇，每个边界抛自己的域码 |
 | `timeout` | 零依赖超时时序与分类纯函数库 | 工具 | 无 | 仅发出通知；timeoutMs<=0是内部词汇；第一个中止原因决定分类；空闲watchdog不是总deadline |
+| `values` | 无损 JSON 校验、分离式快照、深度冻结、JSON 结构相等与封闭联合的穷尽失败 | 工具 | 无 | deepEqualJson 假定输入兼容 JSON，不为 prototype、symbol、accessor、循环、map 或 set 定义语义；deepFreeze 只沿可枚举字符串键遍历，并刻意跳过活跃 AbortSignal |
+| `workspace-path` | 浏览器安全的 Workspace 路径辅助：拼接相对路径、缩写用于展示的 POSIX 主目录、从 POSIX 或 Windows 路径提取标题 | 工具 | 无 | 路径解析仅处理字面值，不访问文件系统也不规范化 . 与 .. 段；主目录缩写仅支持 POSIX，Windows 路径保持不变 |
 
-### G. 测试脚手架与示例（9 个）
+### G. 测试脚手架与示例（10 个）
 
 **`examples/`（3）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
-| `acp-demo` | 通过 JSON-RPC stdio 提供 ACP 自动化服务器应用，支持会话管理和语义检查点 | 脚手架 | 无 | JSONL 持久化固定不变、同级插件可能破坏 stdout、只支持新建自动化会话 |
-| `agent-spine-demo` | 最小 agent 主干组合包，包含 LLM、会话、提示词、工具、skill、loop 等固定服务集 | 脚手架 | 无 | 大部分主干集合固定在代码、不变式服务与配套插件仍是固定成员 |
-| `jsonrpc-demo` | 只包含 bin 的应用，通过 JSON-RPC stdio 为 SDK 客户端启动外部 cordis.yml 配置 | 脚手架 | 无 | bin 无法证明配置提供服务、不存在默认配置、stdin EOF 会截断正在处理的工作 |
+| `acp-demo` | **上游已删。**通过 JSON-RPC stdio 提供 ACP 自动化服务器应用，支持会话管理和语义检查点 | 脚手架 | 无 | JSONL 持久化固定不变、同级插件可能破坏 stdout、只支持新建自动化会话 |
+| `agent-spine-demo` | **上游已删。**最小 agent 主干组合包，包含 LLM、会话、提示词、工具、skill、loop 等固定服务集 | 脚手架 | 无 | 大部分主干集合固定在代码、不变式服务与配套插件仍是固定成员 |
+| `jsonrpc-demo` | **上游已删。**只包含 bin 的应用，通过 JSON-RPC stdio 为 SDK 客户端启动外部 cordis.yml 配置 | 脚手架 | 无 | bin 无法证明配置提供服务、不存在默认配置、stdin EOF 会截断正在处理的工作 |
 
-**`test-support/`（6）**
+**`test-support/`（7）**
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
-| `acp-snapshot` | 为 ACP 快照测试提供无密钥层、规范化器、启动器和测试套件工厂 | 工具 | 无 | JSONL 持久化固定不变、构建 mode 需要当前产物、后端覆盖仍使用 ACP 驱动器 |
+| `acp-snapshot` | **上游已删。**为 ACP 快照测试提供无密钥层、规范化器、启动器和测试套件工厂 | 工具 | 无 | JSONL 持久化固定不变、构建 mode 需要当前产物、后端覆盖仍使用 ACP 驱动器 |
 | `agent-loop-testkit` | 共享挂载 agent loop 测试的先决依赖（LLM、会话、提示词、工具、agent） | 工具 | 无 | 只共享必需的先决主干，adapter/插件/loop/agent/cleanup 由调用方负责 |
 | `client-runtime` | 为客户端 UI 功能测试提供 jsdom 运行时，含真实 Cordis Context 和生产 slot 注册表 | 工具 | 无 | 仅可经仓内源码别名消费、会话快照是 fixture 数据不是重放历史 |
 | `llm-mock-server` | 可编脚本的 OpenAI 兼容 HTTP 服务器，无需密钥即可测试 LLM 适配器和 agent 循环 | 工具 | 无 | 随机权重建模测试压力而非生产频率、按到达顺序执行脚本、真实连接拒绝仅在监听器生命周期阶段发生 |
 | `llm-replay` | 从已记录会话日志回放 LLM 模型流，使快照测试无需 API 密钥 | 工具 | 无 | 首次调用顺序脚本绑定假设串行委托、只有普通 loop 分片和带标记压缩输出能派生 |
 | `loader-smoke` | 通过 Cordis Loader 与 cordis.yml 启动应用的共享子进程冒烟 harness，runFixtureTurn 驱动一次完整任务并返回最终文本与用量 | 脚手架 | 本机进程 | 构建模式需事先构建；stdout/stderr 受 execa 100MB maxBuffer 约束；超时只终止直接子进程 |
+| `session-snapshot` | 无密钥已记录会话测试的共享支持：封闭 manifest、类型化身份脱敏、规范化、workspace 比较、fixture 保护，以及 headless、SDK、ACP 与 Web 的协议适配器 | 工具 | 本机进程、本机文件 | 会话收集需要原始 JSONL mode（compression: none），压缩 JSONL 没有收集路径；构建 mode 需事先构建；取消与权限往返留在 ACP 适配器 |
 
 ## 三、第四列不可单独作为裁决依据
 
@@ -679,3 +734,48 @@ DSH 已经做完了，不需要我们设计。
    还写着「服务端换成 SQLite」，应为 Postgres。）
 
 在第 2 步完成之前，`DESIGN.md` 第三、四节不作数。
+
+第 2、3 步已经做完，本节保留作记录。
+
+## 七、`capability-coverage.tsv`：这份清单落到 Go 包上
+
+本文档回答「DSH 有什么」，`rulings.md` 回答「要不要」，两份都不回答**「要的那些，现在在哪」**。
+`docs/portmap/capability-coverage.tsv` 补的是这一列。
+
+**五列**：
+
+| 列 | 取值 | 说明 |
+|---|---|---|
+| 能力 | 一句话 | 抄本文档第二节的「能力」列 |
+| DSH出处包 | `<域>/<包>` 或 `—` | `—` 表示这一行没有 DSH 出处，是本仓库自有 |
+| 要不要 | 需要／抄形状／Go 已有等价物／不需要／本仓库自有 | 前四种抄 `rulings.md` 的裁决 |
+| 落在哪个Go包 | 模块内相对路径，多个用空格隔开 | `（未落地）` 表示要但还没有；`（Go 标准库）`／`（Go 语言设施）` 表示换了手段；`—` 表示不要 |
+| 缺口说明 | 一句话 | 「不要」写**缺哪个前置条件**，不写「用不上」；「要但没落地」写缺什么；「落地了但缺一角」也写在这里 |
+
+**273 行 = 257 个 DSH 包各一行 + 16 个无 DSH 出处的本仓库自有 Go 包各一行。**
+后 16 个是 `adapter/` 底下的 Postgres 与对象存储后端、两个 `internal` 测试夹具、
+`harness` 装配门面，以及 9 个门禁工具——它们在 DSH 里没有对应物，但它们是这个仓库的一部分，
+不列进来这张表就只覆盖了「抄来的」而不是「有的」。
+
+**落点这一列不是手填的**，是扫全仓库 Go 源里的 `// 源: packages/<域>/<包>/` 反查出来的，
+所以它和 `internal/devtools/portcheck` 校验的那套溯源注释同源。
+`internal/devtools/` 底下的文件不参与反查——门禁自己的夹具里也有 `packages/` 字样，
+算进去会把 `acp/acp` 的落点算成 `internal/devtools/portcheck`。
+
+**抄形状那 23 行的落点是手写的**，因为「抄形状」按定义不产出对应符号，也就没有溯源注释可反查。
+
+### 这张表当场问出来的三件事
+
+1. **需要 83 个里，8 个没有任何 Go 落点。**`interaction/permission-presets`、
+   `session/session-turn-outline`、`webhook/webhook`、`workflow/workflow`，
+   加上四个测试脚手架（`agent-loop-testkit`／`loader-smoke`／`session-snapshot`／已删的 `acp-snapshot`）。
+   前四个都是**零本机前置**——不是做不了，是还没做。
+2. **抄形状 23 个里，10 个完全未落地。**`experimental/agent-team` 那套 peer mailbox＋CAS 任务板、
+   `credentials/authorization` 的可恢复授权流程、`llm/deepseek-llm-api-extensions` 的附加请求字段注册表，
+   都在里面。另有三个 `api/` 控制器是**落了一半**：`api/session-controller` 只有 `session/prompt`，
+   create／resume／fork／rename／list／search／cancel／select-model／update-queue 一个没有。
+3. **`feature/sessionquery` 只有挂点没有实现。**`Searcher` 这个接口全仓库没有任何实现方，
+   两个检索方法一律返回 `CodeSearchDisabled`。
+
+这三件不是这一轮要修的，是这张表存在的理由：它们此前散在 `rulings.md` 九百行理由里，
+没有一个地方能一眼数出来。

@@ -48,6 +48,14 @@ schedule/change 事件 -> FoldEvents -> Record / View
 - 不支持 cron 表达式、日历规则或跨会话目标。
 - 定时器触发不保证业务动作成功，只保证提醒被交给活 Agent。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 为未来创建的live根agent提供三个会话范围内的工具管理持久提醒 | `schedule/schedule` | 需要 | `feature/schedule` | — |
+
 ## 相关源码
 
 - `feature/schedule/domain.go`

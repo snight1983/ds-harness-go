@@ -797,6 +797,16 @@ flowchart TD
 
 ---
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 会话查询Service Definition，提供精确读取、关系跟踪与过滤 | `session-query/session-query` | 需要 | `feature/sessionquery` | — |
+| SQLite全文搜索会话查询提供方实现 | `session-query/session-query-sqlite` | 抄形状 | `feature/sessionquery` | 缺口：feature/sessionquery 只定义了 Searcher 挂点，全仓库没有任何实现，两个检索方法一律返回 CodeSearchDisabled。要抄的查询表结构与索引形状还没落成 Postgres 版 |
+| 经工作区授权的会话查询模型工具 | `session-query/tool-session-query` | 需要 | `feature/sessionquery/querytool` | — |
+
 ## 相关源码
 
 | 路径 | 内容 |

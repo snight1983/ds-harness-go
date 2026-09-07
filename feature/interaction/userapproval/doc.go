@@ -40,4 +40,20 @@
 // cancelled、迟到的答复被丢掉。Go 里取消是 ctx，答复者链是同步调用，所以那场赛跑
 // 写成「答复者跑在一个 goroutine 里，结果送进一个容量 1 的 channel」——容量 1 保证
 // 取消赢了之后那个 goroutine 仍然送得出去、收得掉，迟到的答复由构造本身丢弃。
+//
+// # 不做什么
+//
+//   - **不认人。**这里问的是「要不要放这一次工具执行过去」，不是身份认证，
+//     也不是长期权限授予——一次 allowed-once 只管这一次。
+//   - **不画界面，也不自己答。**答复者由装配方接上来；没人应答、应答的报错、
+//     应答的还回来一个词汇表外的值，三种一律收敛成
+//     [github.com/snight1983/ds-harness-go/tools.ApprovalUnavailable]，失败向「不放行」倒。
+//   - **不把策略闸做成一条答复者。**`never` 必然拒绝这句承诺不能取决于登记顺序，
+//     所以那一步在派发之前就判完了。
+//   - **不挂系统提示。**切换策略之后那两句陈述本包只交出来（[PolicyStatement]），
+//     挂进 [github.com/snight1983/ds-harness-go/harness/systemprompt] 是装配方的事。
+//   - **不在回合之外写字。**没有打开的回合就当场拒，一个字节都不写——两个回合之间
+//     裸写的一条事件，重新装载时和一段崩溃残尾长得一模一样。
+//   - **不定义答复的词汇表。**allowed-once / rejected / cancelled / unavailable 在
+//     [github.com/snight1983/ds-harness-go/tools]，本包引它。
 package userapproval

@@ -33,4 +33,18 @@
 // DSH 那个抽象类的构造函数里有一道 `new.target === JobRegistry` 的守卫，因为
 // `abstract` 在运行期会被抹掉，一份写错的组装表会登记出一个方法全空的 ctx.jobs。
 // Go 的接口压根实例化不了，这道守卫因此没有对应物。
+//
+// # 不做什么
+//
+//   - **不起协程，也不拥有那份活儿。**开工的是生产方，本包只记账；停下来靠
+//     [Hooks.Cancel]，一个不理会取消的生产方它停不了。
+//   - **不是任务队列。**没有排队、没有重试、没有跨副本调度——活儿在哪个副本起就在
+//     哪个副本跑，[RunnerID] 说的正是这件事。
+//   - **不提供实现。**这里只有契约，进程内那台在
+//     [github.com/snight1983/ds-harness-go/adapter/localjobs]，共享账本那台在
+//     [github.com/snight1983/ds-harness-go/adapter/domainjobs]。
+//   - **不解释生产方那些事实。**[Snapshot.Detail] 里写的是什么由生产方说了算，
+//     本包原样转手。
+//   - **不替属主开回合。**结算之后怎么让模型知道归
+//     [github.com/snight1983/ds-harness-go/feature/jobs/jobstool]，本包只把监听器叫一遍。
 package jobs

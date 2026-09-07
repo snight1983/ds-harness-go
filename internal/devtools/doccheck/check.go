@@ -15,6 +15,7 @@ import (
 const (
 	mappingPath = "docs/packages.md"
 	sidebarPath = "docs/_sidebar.md"
+	modulesDir  = "docs/modules"
 )
 
 var (
@@ -90,12 +91,12 @@ func checkRepository(root string, packages []string) (report, error) {
 			}
 		}
 	}
-	detailed, detailedErr := detailedModuleLinks(root)
-	if detailedErr != nil {
-		problems = append(problems, detailedErr.Error())
+	moduleFiles, moduleErr := moduleDocs(root)
+	if moduleErr != nil {
+		problems = append(problems, moduleErr.Error())
 	} else {
-		for _, doc := range detailed {
-			problems = append(problems, checkDetailedModule(root, doc)...)
+		for _, doc := range moduleFiles {
+			problems = append(problems, checkModuleDoc(root, doc)...)
 		}
 	}
 
@@ -117,52 +118,22 @@ func checkRepository(root string, packages []string) (report, error) {
 	}, nil
 }
 
-func detailedModuleLinks(root string) ([]string, error) {
-	path := filepath.Join(root, filepath.FromSlash(sidebarPath))
-	file, err := os.Open(path)
+// moduleDocs 列出 docs/modules 下的全部模块文档。这里按目录取而不是按侧栏的
+// 「详细模块」小节取：侧栏分组是给人读的编排，一篇文档挪个分组不该让它脱离结构检查。
+func moduleDocs(root string) ([]string, error) {
+	pattern := filepath.Join(root, filepath.FromSlash(modulesDir), "*.md")
+	matches, err := filepath.Glob(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("读取侧栏失败：%w", err)
+		return nil, fmt.Errorf("枚举模块文档失败：%w", err)
 	}
-	defer file.Close()
-
-	var documents []string
-	inSection := false
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "- 详细模块" {
-			inSection = true
-			continue
-		}
-		if inSection && strings.HasPrefix(line, "- ") {
-			break
-		}
-		if !inSection {
-			continue
-		}
-		match := markdownLink.FindStringSubmatch(line)
-		if match == nil {
-			continue
-		}
-		target, local, parseErr := markdownTarget(match[1])
-		if parseErr != nil || !local {
-			continue
-		}
-		resolved, resolveErr := resolveLocalLink(root, path, target)
-		if resolveErr == nil {
-			documents = append(documents, resolved)
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("读取侧栏失败：%w", err)
-	}
-	return documents, nil
+	sort.Strings(matches)
+	return matches, nil
 }
 
-func checkDetailedModule(root, path string) []string {
+func checkModuleDoc(root, path string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return []string{fmt.Sprintf("读取详细模块文档失败：%s", displayPath(root, path))}
+		return []string{fmt.Sprintf("读取模块文档失败：%s", displayPath(root, path))}
 	}
 	text := string(data)
 	required := []struct {
@@ -175,12 +146,13 @@ func checkDetailedModule(root, path string) []string {
 		{"生命周期与并发", `(?m)^## .*生命周期.*并发.*$`},
 		{"失败语义", `(?m)^## 失败语义$`},
 		{"能力边界", `(?m)^## 能力边界$`},
+		{"对应的 DSH 能力", `(?m)^## 对应的 DSH 能力$`},
 		{"相关源码", `(?m)^## 相关源码$`},
 	}
 	var problems []string
 	for _, item := range required {
 		if !regexp.MustCompile(item.pattern).MatchString(text) {
-			problems = append(problems, fmt.Sprintf("详细模块文档缺少%s章节：%s", item.name, displayPath(root, path)))
+			problems = append(problems, fmt.Sprintf("模块文档缺少%s章节：%s", item.name, displayPath(root, path)))
 		}
 	}
 	return problems

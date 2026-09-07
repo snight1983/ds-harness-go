@@ -50,4 +50,16 @@
 // 新增: DSH 那份 invariant.ts 装的是个空函数体，它自陈没有运行期不变量可守——次序
 // 由被拦的那几条瀑布和持久化那一层自己保证，这个无状态策略不拥有任何独立的可变关系。
 // Go 这边同理，本包不往不变量注册表上登记任何东西。
+//
+// # 不做什么
+//
+//   - **不自己写盘。**三处边界上叫的都是 [github.com/snight1983/ds-harness-go/harness/session.Store.Flush]，
+//     真把字节送到耐久介质上的是 [github.com/snight1983/ds-harness-go/feature/persistence] 那一层。
+//   - **不划回合和步骤的边界。**这三处位置是 [github.com/snight1983/ds-harness-go/harness/agentloop]
+//     跑出来的，本包只是挂在那几条瀑布上的观察者。
+//   - **不重试，也不回滚。**刷不下去就把下游整个关掉、把错误原样抛上去；已经发生过的副作用
+//     不归它收拾——它守的是「副作用发生之前那条记录已经耐久」这一件事。
+//   - **不登记任何不变量。**它一行状态都不存，没有独立的可变关系可守。
+//   - **不决定刷多少。**一次 Flush 刷的是日志此刻攒下的全部，本包不挑事件、不改表面，
+//     那是 [github.com/snight1983/ds-harness-go/feature/compaction] 那一层的事。
 package checkpointpolicy

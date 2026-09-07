@@ -82,4 +82,17 @@
 // [github.com/snight1983/ds-harness-go/sessionlog.Event] 的 UnmarshalJSON 干的活，而且干得更早。
 // 同理 `data !== undefined`、`ignorable !== true`、Number.isSafeInteger 那几条
 // 在 Go 的类型上不可能违反，见 [validateSeedEvent] 各处的注释。
+//
+// # 不做什么
+//
+//   - **不定义会话词汇。**事件类型、负载形状、表面规则、消息派生规则全在
+//     [github.com/snight1983/ds-harness-go/sessionlog]，本包只是拿着它们的活对象。
+//   - **不做持久化。**追加和刷盘时只把钩子拉响，落盘是
+//     [github.com/snight1983/ds-harness-go/feature/persistence] 那一族包挂上来做的。
+//   - **不弹日志。**只有追加，没有删、没有改、没有裁剪；它只是**能接受**一个非零起点。
+//   - **不提供查询。**没有按内容检索、没有跨会话列举语义，那是
+//     [github.com/snight1983/ds-harness-go/feature/sessionquery] 的事。
+//   - **不跨进程，也不做鉴权。**[Store] 是一张内存表，没有任何跨节点一致性；
+//     [github.com/snight1983/ds-harness-go/scope] 那层过滤管的是「谁观察得到」，不是「谁有权访问」。
+//   - **不自己计时。**没有超时、没有 TTL、没有后台回收，表里的会话只靠摘除离开。
 package session

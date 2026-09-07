@@ -2,6 +2,32 @@
 
 227 个包，2009 条功能，一条一件事，每条只有「有」和「自陈无」两种取值。
 
+> **这份清单落后于当前快照，2026-09-04 记。**
+> 上面的 227 包 / 2009 条 / 13,637 行是对着一份更旧的 DSH 判的。当前基准快照
+> `deepseek-harness-dsh-v0.1.2-alpha.3` 是 **250 个包、35,301 行 README**。
+> `capabilities.md` 和 `rulings.md` 已经按它对齐（各 257 行），**这份没有**——
+> 重抽它要把 250 份 README 重新拆到条，是单独一轮的活。
+>
+> 所以：**这份可以当依据用，但只对它覆盖的那 227 个包有效。** 新快照多出来的
+> **30 个包**在这里查不到条目，它们的裁决依据写在 `rulings.md` 各自那一行的理由里：
+>
+> | 域 | 数 | 包 |
+> |---|---|---|
+> | `experimental/` | 6 | `agent-team-profile` `agent-team-web-profile` `client-ui-agent-team` `inspector` `webworker-packer` `webworker-runtime` |
+> | `client/` | 5 | `store` `ui-approval` `ui-chat` `ui-schedule` `ui-session` |
+> | `util/` | 5 | `crypto` `deque` `time` `values` `workspace-path` |
+> | `api/` | 3 | `session-controller` `settings-controller` `workspace-controller` |
+> | `bundle/` | 3 | `acp-app` `sdk-app` `sdk-minimal` |
+> | `llm/` | 2 | `deepseek-llm-api-extensions` `plugin-package-inventory-deepseek` |
+> | `session/` | 2 | `session-log-deepseek` `session-turn-outline` |
+> | `webhook/` | 2 | `webhook` `webhook-github` |
+> | `subprocess/` | 1 | `win32-process` |
+> | `test-support/` | 1 | `session-snapshot` |
+>
+> 另有 **7 个包上游已删**，这份清单里还留着它们的条目：`client/runtime`
+> `host/apiproxy` `examples/acp-demo` `examples/agent-spine-demo` `examples/jsonrpc-demo`
+> `test-support/acp-snapshot` `session/session-persistence-sqlite`。227 = 220 + 7。
+
 来源只有一处：每个包自己的 `README.zh.md`（共 13,637 行）。**不是从包名、目录名、符号表推的。**
 `docs/portmap/portmap.tsv` 那 7909 行是机器抽的符号名和签名，说不出这些符号合起来能干什么；
 `docs/portmap/capabilities.md` 一个包一行，`core/tools` 那一行底下压着 35 件独立的事。

@@ -1,10 +1,10 @@
 # 移植审查发现
 
-由 `go run ./tools/portcheck -mode audit` 生成，**不要手工编辑**——它每次会被整份覆盖。
+由 `go run ./internal/devtools/portcheck -mode audit` 生成，**不要手工编辑**——它每次会被整份覆盖。
 
 这五份都不是判决，是**工作队列**：每一条要么改代码、要么在裁决表的 `note` 列写明为什么它是对的。
 
-裁决表 11194 行，其中 PORTED 且填了 `go_ref` 的 1482 条。
+裁决表 11194 行，其中 PORTED 且填了 `go_ref` 的 1484 条。
 
 ## 一、kind 对不上（最强信号）
 
@@ -13,17 +13,18 @@
 | 上游包 | 上游符号 | go_ref | 问题 |
 |---|---|---|---|
 | acp/acp | `CreateAcpSessionOptions` | `acp.Bridge.NewSession` | 上游是 interface，Go 侧是 method（该是 type）（裁决表已有理由：新建一个 ACP 会话的构造输入（sessionId、cwd、mcpServers、agentOptions、fallbackSelection、signal、notify）。Go 侧没有这个打包结构：线上参数直接是第三方 SDK 的 wire.NewSessionRequest（github.com/coder/acp-go-sdk），由 acp.Bridge.NewSession（acp/acp/bridge.go:642）收下，validateSessionParams（:691）先拒掉 additionalDirectories 和 mcpServers 这两样本契约不支持的特性，再自己铸 sessionID 并组一个 agent.CreateOptions（:659-663）。四处不对等：mcpServers 上游是可用输入，Go 是硬拒；fallbackSelection 那条「先恢复日志里的路由、再退回部署配置」的选择在 Go 里不存在，provider/model 一律取 Bridge 配置里那一份；signal 变成第一个参数 ctx；notify 不是每次会话传进来的回调，而是桥自己的 Bridge.notify（:284）。） |
+| acp/acp | `ResumeAcpSessionOptions` | `acp.Bridge.ResumeSession` | 上游是 interface，Go 侧是 method（该是 type）（裁决表已有理由：会话恢复后来补上了：Bridge.Initialize 声明 SessionCapabilities.Resume，Bridge.ResumeSession 读回已落盘的会话再交回句柄。原先记的「不声明 resume」已不成立，2026-09-04 改正。） |
 | acp/acp | `apply` | `acp.Bridge` | 上游是 function，Go 侧是 type（该是 func/method）（裁决表已有理由：整座桥：五个协议方法、运行时那三条边、审批那条线、以及收摊那条次序敏感的路。DSH 那个 apply 里的闭包状态在 Go 里是 Bridge 的字段，装上去那一步是 acp.Bridge.Install。） |
 | attachment/attachment | `ImageAdmissionErrorCode` | `attachment.imageAdmissionCodes` | 上游是 type，Go 侧是 var（该是 type）（裁决表已有理由：TS 里是那九个准入码的联合类型，只在编译期成立。Go 里对应的是一张集合，因为这组码真正的用途是 IsImageAdmissionError 在运行期查表分类，而不是约束某个字段的取值。） |
 | attachment/attachment | `ImageAdmissionErrorCode` | `attachment.imageAdmissionCodes` | 上游是 reexport-type，Go 侧是 var（该是 type）（裁决表已有理由：桶文件转发，定义处见 src/error.ts:16。） |
 | context/session-reference | `SessionReferenceResolver` | `sessionref.Install` | 上游是 class，Go 侧是 func（该是 type）（裁决表已有理由：服务在 NewResolver，接线在 Install；DSH 一个类兼两职，这里拆成两半） |
-| core/session | `SurfaceEventType` | `session.IsSurfaceEligibleType` | 上游是 type，Go 侧是 func（该是 type）（裁决表已有理由：能上表面的那三个事件类型。DSH 用字面量子集表达它，于是编译期就能挡住「给一条边界事件挂 surfaceOp」；Go 的具名 string 类型分不出子集，这个子集在 Go 里是一个谓词，那条约束由 [session.SurfaceOpOf] 在读和写两侧各验一次——DSH 在运行期也验，Go 只是没有它那道编译期的第二层。） |
-| core/session | `apply` | `session.Trace` | 上游是 const，Go 侧是 type（该是 const/var/func/method）（裁决表已有理由：DSH 的 apply 只做一件事：把 install 那份关系检查注册进 invariants 服务。检查本身在 Go 里是 [session.Trace] 这个不认识任何容器的普通值——回合与步骤的开合、seq 单调、在途调用的收尾，由 [session.ValidateLog] 折一遍整份日志或者 Trace.Validate 逐条推进。DSH 用 WeakMap 给活的 Session 挂旁路状态，Go 里谁拥有这个 Trace 谁自己拿着。把它挂上本仓库的不变量注册表是第 6 块的事。） |
+| core/session | `SurfaceEventType` | `sessionlog.IsSurfaceEligibleType` | 上游是 type，Go 侧是 func（该是 type）（裁决表已有理由：能上表面的那三个事件类型。DSH 用字面量子集表达它，于是编译期就能挡住「给一条边界事件挂 surfaceOp」；Go 的具名 string 类型分不出子集，这个子集在 Go 里是一个谓词，那条约束由 [sessionlog.SurfaceOpOf] 在读和写两侧各验一次——DSH 在运行期也验，Go 只是没有它那道编译期的第二层。） |
+| core/session | `apply` | `sessionlog.Trace` | 上游是 const，Go 侧是 type（该是 const/var/func/method）（裁决表已有理由：DSH 的 apply 只做一件事：把 install 那份关系检查注册进 invariants 服务。检查本身在 Go 里是 [sessionlog.Trace] 这个不认识任何容器的普通值——回合与步骤的开合、seq 单调、在途调用的收尾，由 [sessionlog.ValidateLog] 折一遍整份日志或者 Trace.Validate 逐条推进。DSH 用 WeakMap 给活的 Session 挂旁路状态，Go 里谁拥有这个 Trace 谁自己拿着。把它挂上本仓库的不变量注册表是第 6 块的事。） |
 | core/tools | `ObjectJsonSchema` | `tools.AssertObjectSchema` | 上游是 type，Go 侧是 func（该是 type）（裁决表已有理由：TS 那边是一个用来收窄的类型别名，Go 里没有类型收窄，同一件事由运行期断言 AssertObjectSchema 表达。） |
 | llm/llm-pi-ai | `PiImageRequestContext` | `openaicompat.toContext` | 上游是 interface，Go 侧是 func（该是 type）（裁决表已有理由：把「确定性的请求图片」绑到一次工具执行世界上的那组输入。Go 侧没有这个打包结构，四个字段摊成 openaicompat.toContext（llm/openaicompat/context.go:473）的显式参数：attachments 对 attachment.Store（nil 选纯文本那一支，历史里有图就报 UNSUPPORTED_CONTENT）、maxRequestImageBytes 对 *int（nil 表示不设上限）、requestImagePolicy 对 attachment.RequestPolicy。第四个字段 resolveImageAccess 在 Go 里**一个对应物都没有**：上游那条线是 ImageAttachmentAccessResolver（packages/llm/llm/src/content.ts:19）把一份耐久图片引用解成当前工具执行世界里的一个只读路径，再由 requestImageHandleText（content.ts:88）把这个路径缀进给模型看的把手文本里，好让模型能用文件工具去读那份归一化后的原图。Go 的 llm.RequestImageHandleText（llm/image.go:49）只收 version 一个参数，输出恒为 "Image <id>; request preview WxHpx." 那一句的旧口径，既没有 access 分支也没有那句「可能被缩放或重编码」的免责。后果是模型只能看到内联进请求的那份缩略版本，拿不到原图的落盘位置，也就没法对它再做工具操作。要补的话入口是 llm.RequestImageHandleText 加一个可选的 access 参数，前置条件是先有一个从附件宿主路径映射到工具执行世界的接缝（attachment.Store 上目前没有 imageHostPath 这类方法）。） |
 | preset/agent-presets | `mountPreset` | `agentpresets.Composer` | 上游是 function，Go 侧是 type（该是 func/method）（裁决表已有理由：本包唯一一处真正换掉的东西。DSH 靠 cordis Loader 在运行期按 YAML 里写的 npm 包名 import 并挂进 EntryTree；Go 静态链接，包名到实现的映射编译期就定死了。换成一张组装器名册（Composer / ComposerSet）：宿主在构建期登记具名安装器，YAML 的一行点名字、带一段 JSON 配置，mountComposition 照行装、失败按反序回滚。行的形状（name/group/disabled/config、组展开、禁用跳过）与 DSH 逐字一致。） |
 | preset/agent-presets | `presetExists` | `agentpresets.PresetExistsError` | 上游是 function，Go 侧是 type（该是 func/method）（裁决表已有理由：上游是个类型守卫函数（判断一个错误是不是「这个 id 已经被占了」）；Go 侧是 errors.As 的目标类型加一个哨兵 ErrPresetExists（authoring.go:43-55），由 CreatePreset 在 authoring.go:221 抛出。判别方式换了（守卫函数换成 errors.As/errors.Is），能力是同一件。） |
-| session-query/session-query | `SessionObservationReader` | `sessionquery.Corpus.Load` | 上游是 class，Go 侧是 method（该是 type）（**裁决表没写理由**） |
+| session-query/session-query | `SessionObservationReader` | `sessionquery.Corpus.Load` | 上游是 class，Go 侧是 method（该是 type）（裁决表已有理由：一次点观察：优先活会话，活的不在就退回持久化。上游那个类只为在构造函数里存一个 ctx，读这件事全在它的 read 方法上；Go 的 sessionquery.Corpus 本来就拿着同一批依赖，所以这个类没有对应物，能力落在 Corpus.Load（sessionquery/corpus.go:177）这个方法上——kind 从 class 变 method 是这个原因，不是填错格子。交出来的东西两边不一样：上游 read 返回一份 Disposable 的租约 SessionObservation，Go 返回一份脱离的拷贝 LogicalSession，那条取舍连同它的三条代价记在 src/observation.ts:14 那一行上；options 那个参数的去向记在 src/observation.ts:35 那一行。） |
 | session/session-persistence | `SessionPersistenceNotFoundError` | `persistence.ErrSessionNotFound` | 上游是 class，Go 侧是 var（该是 type）（裁决表已有理由：Go 侧是哨兵错误 persistence.ErrSessionNotFound（session/persistence/error.go:21），判别用 errors.Is，成例见 isNotFound（coordinator_chain.go:351）。上游那个类把缺席的身份存在 sessionId 字段上；Go 的哨兵不带字段，身份由抛出点包进消息（coordinator_prepare.go:365 的 fmt.Errorf("%w: 会话 %q", ...)），所以身份仍在人眼能读的那一层，但拿不到结构化的 id。两边同样都把「没有这个存档」当成正常控制流而不是故障——backend.go:50 明确写了这一条。） |
 | session/session-projection-cache | `checkpointIdentity` | `projectioncache.Identity` | 上游是 const，Go 侧是 type（该是 const/var/func/method）（裁决表已有理由：一条记录绑定的那段日志身份：同一个 id 底下区分两次生命周期的那几个不可变头字段。Go 里它是一个可比较的结构体，所以核对身份就是一次 ==。） |
 | session/session-projection-cache | `checkpointRecord` | `projectioncache.Record` | 上游是 const，Go 侧是 type（该是 const/var/func/method）（裁决表已有理由：一个会话存下来的那条记录：绑定的日志身份加按投影键索引的检查点行。整条记录每次整块替换。） |
@@ -51,10 +52,8 @@
 
 | 上游包 | 上游符号 | go_ref | 说明 |
 |---|---|---|---|
-| acp/acp | `toolCallUpdate` | `acp.Bridge.onSessionEvent` | 非导出的一段：onSessionEvent（**裁决表没写理由**） |
-| acp/acp | `toolResultUpdate` | `acp.Bridge.onSessionEvent` | 非导出的一段：onSessionEvent（**裁决表没写理由**） |
-| attachment/attachment | `ImageAdmissionErrorCode` | `attachment.imageAdmissionCodes` | 非导出的一段：imageAdmissionCodes（裁决表已有理由：TS 里是那九个准入码的联合类型，只在编译期成立。Go 里对应的是一张集合，因为这组码真正的用途是 IsImageAdmissionError 在运行期查表分类，而不是约束某个字段的取值。） |
 | attachment/attachment | `ImageAdmissionErrorCode` | `attachment.imageAdmissionCodes` | 非导出的一段：imageAdmissionCodes（裁决表已有理由：桶文件转发，定义处见 src/error.ts:16。） |
+| attachment/attachment | `ImageAdmissionErrorCode` | `attachment.imageAdmissionCodes` | 非导出的一段：imageAdmissionCodes（裁决表已有理由：TS 里是那九个准入码的联合类型，只在编译期成立。Go 里对应的是一张集合，因为这组码真正的用途是 IsImageAdmissionError 在运行期查表分类，而不是约束某个字段的取值。） |
 | context/session-reference | `stringifyTagSafeJson` | `sessionref.stringifyTagSafeJSON` | 非导出的一段：stringifyTagSafeJSON（裁决表已有理由：关掉 Go 自己的 HTML 转义，只做 DSH 做的那一件事，否则字节预算对不上） |
 | goal/tool-goal | `completionAuthority` | `goaltool.Controller.completionAuthority` | 非导出的一段：completionAuthority（裁决表已有理由：同 requireDirectHuman：上游的 export 是 TS 跨文件可见性，不是公开面。Go 里挂成 Controller 的方法，因为它要读 Controller 上那份策略配置。） |
 | goal/tool-goal | `goalToolExecution` | `goaltool.Controller.execution` | 非导出的一段：execution（裁决表已有理由：ctx.agents.currentInitiator() 换成挂在 ctx 上的 agent.CurrentInitiator。） |
@@ -73,13 +72,13 @@
 | llm/llm-pi-ai | `toPiContext` | `openaicompat.toContext` | 非导出的一段：toContext（裁决表已有理由：把 harness 的历史翻成线上请求。DSH 用两个重载分开「纯文本（同步）」和「要解耐久图片（异步）」；Go 里没有重载，也不需要——一个函数，attachments 为 nil 就走纯文本那一支，调用方拿到的都是同一个签名。图片总量超限时从最老的开始换成文本占位，这条照搬。） |
 | llm/llm-pi-ai | `toStreamChunks` | `openaicompat.streamChunks` | 非导出的一段：streamChunks（裁决表已有理由：SSE 流翻成 harness 的分块序列。DSH 拿到的是 pi-ai 已经带边界的事件（text_start/text_delta/text_end），这条协议一条 delta 里只有 content／reasoning_content／tool_calls 三样，块的开始和结束得由「字段变了」自己推出来——openaicompat.blockAssembly 就是那次推导的状态。） |
 | llm/token-meter | `SurfaceTokenFold` | `tokenmeter.surfaceTokenFold` | 非导出的一段：surfaceTokenFold（裁决表已有理由：服务那份逐节点折叠的结果。Go 里不导出：它是 TokenMeter 内部的账本形状，对外只出现在 Measurement.Nodes 里。） |
-| llm/token-meter | `SurfaceTokenPlan` | `tokenmeter.surfaceTokenFold` | 非导出的一段：surfaceTokenFold（**裁决表没写理由**） |
+| llm/token-meter | `SurfaceTokenPlan` | `tokenmeter.surfaceTokenFold` | 非导出的一段：surfaceTokenFold（裁决表已有理由：折进一条表面事件之后的结果。不导出：上游那个 export 是 TS 的跨文件可见性，surface-fold.ts 之外只有同包的 index.ts:254 用它，token-meter 包外一个调用方都没有（全快照 grep 确认），而 Go 里包内跨文件天然共享符号。字段不是逐条对上的：DSH 的 plan 带 node 和 target（'append' 或者被替换的下标闭区间），留给 commitSurfaceTokens 就地改那张表；Go 这一步直接交出折完的整张新节点表（nodes 字段），于是提交就是 tokenmeter/meter.go:431-432 那两次赋值，没有第二个函数。「失败时调用方手上那份状态一个字节都没被动过」这条两边一样，DSH 靠 [...nodes] 加 splice 做到，Go 靠新分配。） |
 | llm/token-meter | `SurfaceTokensFold` | `tokenmeter.surfaceTokensFold` | 非导出的一段：surfaceTokensFold（裁决表已有理由：投影那份 O(1) 折叠的结果。Go 里不导出，理由同 surfaceTokenFold。） |
 | llm/token-meter | `contextBreakdownProjectionDefinition` | `tokenmeter.contextBreakdownDefinition` | 非导出的一段：contextBreakdownDefinition（裁决表已有理由：信封那两个数按请求头 last-wins，消息那个数骑在 O(1) 表面折叠上。读不回来的请求头保持原值而不是归零——归零会让界面显示成「这次请求没有系统提示、没带工具」，那比偏一点严重得多。） |
 | llm/token-meter | `contextPressureProjectionDefinition` | `tokenmeter.contextPressureDefinition` | 非导出的一段：contextPressureDefinition（裁决表已有理由：占用只算提示词侧不含输出，所以一个回合流着的时候它不动。投影值回答的是**下一次**请求：采样值加上采样之后表面的带符号位移，钳在 0；一次压缩能让它当场掉下来，而压力自己看不见那件事，因为压缩不产生用量。） |
 | llm/token-meter | `foldSurfaceProjection` | `tokenmeter.foldSurfaceProjection` | 非导出的一段：foldSurfaceProjection（裁决表已有理由：O(1) 的那份：投影状态要塞进一份能落盘的检查点，留不下整张节点表。两种失败有意做成不对称——没有认领单是协议落地之前的老日志，折 0 放过；有认领单但区间对不上是协议被用错了，报错。Definition.Apply 是全函数，所以另有一个 foldSurfaceProjectionLenient 把两种失败合并成同一种降级。两份折叠在每个事件边界上给出同一个总价，由 TestBothFoldsAgreeAtEveryEventBoundary 钉住。） |
 | llm/token-meter | `foldSurfaceTokens` | `tokenmeter.foldSurfaceTokens` | 非导出的一段：foldSurfaceTokens（裁决表已有理由：O(表面) 的折叠：每个节点的价钱都留着，因为压缩那边挑下刀点全靠这张表。一条不上表面的事件折不进来要报错——静悄悄忽略会让调用方以为自己已经把它记进去了。失败时调用方手上那张节点表一个字节都不许被动过。） |
-| llm/token-meter | `planSurfaceTokens` | `tokenmeter.foldSurfaceTokens` | 非导出的一段：foldSurfaceTokens（**裁决表没写理由**） |
+| llm/token-meter | `planSurfaceTokens` | `tokenmeter.foldSurfaceTokens` | 非导出的一段：foldSurfaceTokens（裁决表已有理由：把一条表面事件折进当前的节点表。不导出，理由同 SurfaceTokenPlan 那条。名字从 plan 改成 fold，是因为 Go 这一步不再是「先算计划、再提交」的两段式，见上一行。多一个 baseSeq 形参：一次替换的端点定位不到时 DSH 一律抛错，Go 先分两种——端点落在 baseSeq 之前是被 FIFO 弹掉的正常损耗（起点被弹就把区间收到表面最前端，起点终点都被弹就整个降级成一次追加），端点不小于 baseSeq 却仍不在表面上，才是这份节点表算的根本不是当前这个表面，那时候照旧当场断掉。这条降级照的是 sessionlog 那份表面折叠（surface.go 的 replacementRange）已经定下的先例。） |
 | llm/token-meter | `tokenUsageProjectionDefinition` | `tokenmeter.tokenUsageDefinition` | 非导出的一段：tokenUsageDefinition（裁决表已有理由：同一个步骤重复报用量是**替换**不是叠加：流中途那条 usage 分块和它后面那条落定消息报的常常逐字相同，加两遍就把账翻倍了。） |
 | mcp/mcp-client | `Config` | `mcp.Config.validate` | 非导出的一段：validate（裁决表已有理由：schema 式的运行时校验换成一个 validate 方法，错误都裹在 mcp.ErrInvalidConfig 上） |
 | mcp/mcp-client | `RECONNECT_DEFAULTS` | `mcp.defaultInitialDelay` | 非导出的一段：defaultInitialDelay（裁决表已有理由：三个默认值在 Go 里是 mcp/config.go 里的三个常量：defaultInitialDelay / defaultMaxDelay / defaultMaxAttempts） |
@@ -91,7 +90,7 @@
 | mcp/mcp-client | `syncTools` | `mcp.syncTools` | 非导出的一段：syncTools（裁决表已有理由：「入参 schema 说不出口」从 DSH 的第 2 步提前到第 1 步：Go 要先把 schema 解成 tools.Node 才造得出定义，于是上一代注册在这种失败下活了下来） |
 | plan/plan-mode | `PlanUnitState` | `planmode.unitState` | 非导出的一段：unitState（裁决表已有理由：Go 侧是 planmode.unitState（plan/planmode/projection.go:50），Active／Wanted／Running 三个字段逐字对应，两个 nullable 用指针且不带 omitempty，排出去的是显式 null。alpha.3 新加的第四个字段 activeAtLastHeader（request/header 落下时把当时的 active 记一份）Go 没有：同一件事由 planmode.modeAtLastHeader（plan/planmode/fold.go:100）在需要时现场扫一遍整条日志算出来，narration（controller.go:396）读的就是它，所以那条「最后一次告诉模型的是另一种模式才通知」的行为一致。差在两处：算它要一次全日志线性扫而不是读一个字段；以及只拿投影的客户端看不到这个事实。要补的话入口是 unitState 加一个 *bool 字段并在 EventRequestHeader 那一支写入，同时把 projectionStateVersion 从 2 抬到 3。） |
 | plan/plan-mode | `resolveConfig` | `planmode.resolveSection` | 非导出的一段：resolveSection（裁决表已有理由：只被本包的 Controller 装配用到，plan-mode 包外没有调用方，所以不导出。改名是因为它在 Go 里只剩一件事：DSH 那三条检查里「section 不是字符串」和「有多余的键」都被 Go 的结构体在编译期挡掉了，运行期只剩「不能是空白」这一条。） |
-| preset/agent-presets | `entryListProblem` | `agentpresets.entryListProblem` | 非导出的一段：entryListProblem（**裁决表没写理由**） |
+| preset/agent-presets | `entryListProblem` | `agentpresets.entryListProblem` | 非导出的一段：entryListProblem（裁决表已有理由：一份组合清单的形状对不对，答一句人能读的话或者空串。不导出：上游那个 export 是 TS 的跨文件可见性，discovery.ts 之外只有同包的 composition-inventory.ts:173 用它，agent-presets 包外一个调用方都没有（全快照 grep 确认），而 Go 里包内跨文件天然共享符号。上游那句注释交代的理由——清单盘点那边读文件时会和编辑赛跑，必须按同一条规则判那份赛到的内容——在 Go 侧同样成立，所以它照旧只有一份实现。收的东西换了：DSH 收一份已经解析成 unknown 的值，Go 收 *yaml.Node（agentpresets/discovery.go:63），于是多一步把 DocumentNode 拆到它唯一那个孩子上；判不出问题时 DSH 答 undefined，Go 答空串。） |
 | schedule/schedule | `flushSchedulePersistence` | `schedule.flushPersistence` | 非导出的一段：flushPersistence（裁决表已有理由：Go 里不导出：落盘屏障只在本包三件工具的前后走，没有包外调用方。） |
 | schedule/schedule | `registerScheduleTools` | `schedule.registerTools` | 非导出的一段：registerTools（裁决表已有理由：桶文件转发，定义处见 src/tools.ts:299；Go 里不导出，由 install.go 内部调用。） |
 | schedule/schedule | `registerScheduleTools` | `schedule.registerTools` | 非导出的一段：registerTools（裁决表已有理由：Go 里不导出：三件工具由 install.go 在每个根 agent 上装一次，没有包外调用方。） |
@@ -104,7 +103,7 @@
 | session/session-persistence | `SessionPreparationReservation` | `persistence.preparationReservation` | 非导出的一段：preparationReservation（裁决表已有理由：一份被独占持有的准备成果。不导出：它只在本包内部的写路径和准备路径之间传，对外露出去的是 persistence.Preparation。） |
 | session/session-persistence | `SessionPreparations` | `persistence.preparations` | 非导出的一段：preparations（裁决表已有理由：准备池：冷读共享、独占预留、就绪条目按最近使用淘汰。不导出——它是编排器的内脏。DSH 靠 JS Map 的插入顺序当 LRU 队列，Go 的 map 没有顺序，所以另立一条 order 切片：那个顺序是语义，淘汰谁全看它。另外每一次状态转移都要拿锁，因为 Go 这边池子会被好几条 goroutine 同时碰。） |
 | session/session-persistence | `observeQueuedAbort` | `persistence.awaitShared` | 非导出的一段：awaitShared（裁决表已有理由：等一件共享的活儿干完，中途允许这一个等待方自己走掉而不连累其余人。DSH 是给 AbortSignal 挂监听再拆掉；Go 里就是 select 两个通道，另加一句「两边都就绪时不看运气」——一件已经干完的活儿就是干完了。） |
-| session/session-title | `titleProjectionDefinition` | `sessiontitle.projectionDefinition` | 非导出的一段：projectionDefinition（**裁决表没写理由**） |
+| session/session-title | `titleProjectionDefinition` | `sessiontitle.projectionDefinition` | 非导出的一段：projectionDefinition（裁决表已有理由：标题那个投影单元。不导出：上游那个 export 是 TS 的跨文件可见性，index.ts 里它自己在 :337 登记自己，session-title 包外一个调用方都没有（全快照 grep 确认）。Go 里它是 sessiontitle/projection.go:62 的一个包内函数，装配方够得着的只有导出的 sessiontitle.RegisterProjection（projection.go:113）——登记这件事只留一个口子，是因为 DSH 那边登记裹在 ctx.inject(['sessionProjections']) 里、投影服务不在场就跳过，Go 没有那个容器，「在不在场」就是装配方手上有没有那张注册表，于是它必须是一次显式调用。） |
 | subagent/subagent | `ActivationObserver` | `subagent.activationObserver` | 非导出的一段：activationObserver（裁决表已有理由：只在包内用，所以不导出。） |
 | subagent/subagent | `ActivationTerminal` | `subagent.activationTerminal` | 非导出的一段：activationTerminal（裁决表已有理由：只在包内用，所以不导出。） |
 | subagent/subagent | `LifecycleEmitter` | `subagent.lifecycleEmitter` | 非导出的一段：lifecycleEmitter（裁决表已有理由：只在包内用，所以不导出；对外那面是 Runtime.OnStart／OnEnd 这几条登记路。） |
@@ -121,7 +120,7 @@
 
 拿一个带判别字段的结构体接住一整族 TS 判别联合是本仓库的既定做法，所以**塌缩本身不是错**。要查的是：那个 Go 类型的注释里有没有写明并进来了哪几个上游形态、判别字段是什么、以及上游靠类型窄化保证的那些约束在 Go 里由谁来保证。
 
-共 78 组 / 191 条。
+共 77 组 / 189 条。
 
 | go_ref | 条数 | 并进来的上游符号 |
 |---|---|---|
@@ -144,7 +143,6 @@
 | `tools.Runtime` | 3 | `ToolRuntime`(class)、`ToolRuntime`(default)、`ToolRuntimeScheduler`(interface) |
 | `acp.AssistantBlockToACP` | 2 | `assistantBlockToAcp`(function)、`assistantUpdates`(function) |
 | `acp.Bridge` | 2 | `AcpSession`(class)、`apply`(function) |
-| `acp.Bridge.onSessionEvent` | 2 | `toolCallUpdate`(function)、`toolResultUpdate`(function) |
 | `agent.Agent` | 2 | `Agent`(STALE:interface)、`Agent`(interface) |
 | `agentpresets.InvalidPresetIDError` | 2 | `InvalidPresetIdError`(STALE:class)、`InvalidPresetIdError`(STALE:reexport) |
 | `agentpresets.PresetMountError` | 2 | `PresetMountError`(STALE:reexport)、`PresetMountError`(STALE:class) |
@@ -176,10 +174,10 @@
 | `schedule.FoldEvents` | 2 | `applyScheduleChanges`(function)、`foldScheduleEvents`(function) |
 | `sdkserver.Config` | 2 | `HarnessSdkJsonRpcServerOptions`(interface)、`JsonRpcConfig`(interface) |
 | `sdkserver.Server` | 2 | `*`(star)、`HarnessSdkJsonRpcServer`(class) |
-| `session.IsSurfaceEligibleType` | 2 | `SurfaceEventType`(type)、`isSurfaceEligibleType`(function) |
-| `session.TodoItem` | 2 | `TodoItem`(STALE:interface)、`TodoItem`(interface) |
-| `session.TurnEndCancelCause` | 2 | `AgentCancelCause`(type)、`TurnEndCancelCause`(type) |
-| `session.TurnEndReason` | 2 | `TurnEndReason`(type)、`TurnEndReasonMap`(interface) |
+| `sessionlog.IsSurfaceEligibleType` | 2 | `SurfaceEventType`(type)、`isSurfaceEligibleType`(function) |
+| `sessionlog.TodoItem` | 2 | `TodoItem`(STALE:interface)、`TodoItem`(interface) |
+| `sessionlog.TurnEndCancelCause` | 2 | `AgentCancelCause`(type)、`TurnEndCancelCause`(type) |
+| `sessionlog.TurnEndReason` | 2 | `TurnEndReason`(type)、`TurnEndReasonMap`(interface) |
 | `sessionquery.ProjectionResult` | 2 | `LogicalProjectionResult`(type)、`SessionTitleObservationResult`(type) |
 | `sessionref.Install` | 2 | `SessionReferenceResolver`(class)、`SessionReferenceResolver`(default) |
 | `sessiontitle.EventData` | 2 | `SessionTitleEventData`(STALE:interface)、`SessionTitleEventData`(interface) |
@@ -206,17 +204,16 @@
 
 ## 四、溯源密度偏低的包
 
-全仓 4244 条 `// 源:` / 119331 行非测试代码 = **35.6 条/千行**。低于 25 条/千行的列在下面。
+全仓 4493 条 `// 源:` / 127995 行非测试代码 = **35.1 条/千行**。低于 25 条/千行的列在下面。
 
-密度低不等于写错了，它只说明这段代码多半是照着记忆写的而不是照着源码写的——**这一份指的是该去哪儿细读，不是哪一行有 bug**。两类包已排除：本仓自造的 `tools/`，以及包文档里写了 `新增:` 且全包零条 `源:` 的包——后者已经在最显眼的地方交代过自己整份是新写的。
+密度低不等于写错了，它只说明这段代码多半是照着记忆写的而不是照着源码写的——**这一份指的是该去哪儿细读，不是哪一行有 bug**。两类包已排除：本仓自造的 `internal/devtools/`，以及包文档里写了 `新增:` 且全包零条 `源:` 的包——后者已经在最显眼的地方交代过自己整份是新写的。
 
 | 包 | 非测试行数 | `// 源:` | `// 新增:` | 条/千行 |
 |---|---:|---:|---:|---:|
-| storage/storagetest | 724 | 10 | 1 | 13.8 |
-| llm/llmretry | 1393 | 20 | 24 | 14.4 |
-| session | 3242 | 72 | 40 | 22.2 |
-| llm/replay | 1627 | 38 | 15 | 23.4 |
-| session/stats | 419 | 10 | 5 | 23.9 |
+| fs/fstest | 485 | 1 | 2 | 2.1 |
+| storage/storagetest | 1161 | 10 | 4 | 8.6 |
+| adapter/domainjobs | 1463 | 13 | 13 | 8.9 |
+| feature/replay | 1639 | 39 | 15 | 23.8 |
 
 ## 五、包文档有毛病的包
 
@@ -224,9 +221,7 @@
 
 本仓库的写法是每份文件顶上一条 `本文件的作用：…`，和 `package` 子句之间空一行隔开；包文档另写，多数落在 `doc.go` 里。少掉那个空行，Go 就把文件说明当成了整个包的文档——**编译器不会说话，`go doc` 也照样有输出，只是讲的是某一份文件而不是这个包**。这一种自己是看不出来的，只能靠这份报告。
 
-全仓 89 个包，有毛病的 1 个。
+全仓 99 个包，有毛病的 0 个。
 
-| 包 | 毛病 |
-|---|---|
-| internal/devtools/consumercheck | **文件说明被当成了包文档**（main.go 少了 package 前那个空行） |
+没有发现。
 

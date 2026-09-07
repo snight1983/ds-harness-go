@@ -45,4 +45,16 @@
 // 一个 microtask。这删掉了 DSH 的在途 promise 去重、以及三次进去之后的重查。代价
 // 是一条约定：[Session.Append] 会在服务持有自己那把锁的时候被调用，实现方不许
 // 反过来同步地调回本包的任何一个钩子。
+//
+// # 不做什么
+//
+//   - **不缓存标题。**日志是唯一真相，[Service.Get] 每次现折；服务自己那份可变状态
+//     只有并发账，进程重启之后从零开始，标题一个字都不会丢。
+//   - **不生成标题。**上模型那条路归登记进来的那个 [Provider]，本仓库的实现在
+//     [github.com/snight1983/ds-harness-go/feature/sessiontitle/sessiontitlellm]。
+//   - **不判断会话是不是活的。**那件事翻成 [Config.IsLive] 交给手上有具体类型的装配方。
+//   - **不自己订阅事件。**三条订阅是三个显式方法，接哪几条由装配方定；一份只做离线
+//     回放的装配一条都不接，[Service.Get] 照样管用。
+//   - **不盖掉用户改的名字。**[SourceUser] 钉住这个标题，解开只有一条路——一次显式的
+//     [Service.Refresh]。
 package sessiontitle

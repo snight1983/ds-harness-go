@@ -61,4 +61,20 @@
 // 认不出的话这个媒体类型就是假的：调用方声称 image/webp，这边解不出格式，
 // 报的是「这不是一张图」——而它是。所以引 golang.org/x/image/webp，只为它的
 // 文件头解析。png / jpeg / gif 三种走标准库。
+//
+// # 不做什么
+//
+//   - **不重新编码，也不做归一化缩放。**本轮不把编码器带进来，存下来的就是操作者传
+//     上来的那些字节。
+//   - **不实现 [attachment.RequestImageProjector]。**同样要编码器；调用方从
+//     [attachment.ReadImageRequest] 拿到的是
+//     [attachment.CodeAttachmentProjectionUnsupported]。
+//   - **不认 EXIF 旋转。**报的是栅格自己的宽高；那段 EXIF 原样留在字节里，
+//     渲染方照旧转得过来。
+//   - **不决定模型收不收图。**那是模型路由那一层的事，本包只管字节的落与取。
+//   - **不碰本机磁盘。**它建在 [github.com/snight1983/ds-harness-go/fs.FileSystem] 上，
+//     服务端部署下面接的是
+//     [github.com/snight1983/ds-harness-go/adapter/objectstore]。
+//   - **不在存储里放第二份元数据。**引用跟着会话日志走；两个对象会不一致，而不一致
+//     的时候没有办法知道哪一份是对的。
 package imagestore

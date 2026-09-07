@@ -13,6 +13,7 @@ import (
 type listedPackage struct {
 	ImportPath string
 	Directory  string
+	Name       string
 	Synopsis   string
 }
 
@@ -21,11 +22,18 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
-	packages, ignored, err := listPackages(root)
+	listed, ignored, err := listPackages(root)
 	if err != nil {
 		fail(err)
 	}
-	result, err := checkRepository(root, packages)
+	importPaths := make([]string, 0, len(listed))
+	for _, item := range listed {
+		importPaths = append(importPaths, item.ImportPath)
+	}
+	if problems := checkPackageDocs(root, listed); len(problems) > 0 {
+		fail(fmt.Errorf("包注释检查失败：\n- %s", strings.Join(problems, "\n- ")))
+	}
+	result, err := checkRepository(root, importPaths)
 	if err != nil {
 		fail(err)
 	}
@@ -59,11 +67,11 @@ func findRepositoryRoot() (string, error) {
 	}
 }
 
-func listPackages(root string) ([]string, int, error) {
+func listPackages(root string) ([]listedPackage, int, error) {
 	// Doc 是包注释的首句。取它而不是自己去读文件，是因为 go list 已经按编译器
 	// 的规则认过「哪一段是包注释」——一段隔了空行、因而其实不是包注释的注释，在
 	// 这里是空的。
-	command := exec.Command("go", "list", "-f", "{{.ImportPath}}\t{{.Dir}}\t{{.Doc}}", "./...")
+	command := exec.Command("go", "list", "-f", "{{.ImportPath}}\t{{.Dir}}\t{{.Name}}\t{{.Doc}}", "./...")
 	command.Dir = root
 	output, err := command.Output()
 	if err != nil {
@@ -72,13 +80,13 @@ func listPackages(root string) ([]string, int, error) {
 
 	var listed []listedPackage
 	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		fields := strings.SplitN(strings.TrimSpace(line), "\t", 3)
-		if len(fields) < 2 {
+		fields := strings.SplitN(strings.TrimSpace(line), "\t", 4)
+		if len(fields) < 3 {
 			return nil, 0, fmt.Errorf("无法解析 go list 输出：%q", line)
 		}
-		item := listedPackage{ImportPath: fields[0], Directory: fields[1]}
-		if len(fields) == 3 {
-			item.Synopsis = strings.TrimSpace(fields[2])
+		item := listedPackage{ImportPath: fields[0], Directory: fields[1], Name: fields[2]}
+		if len(fields) == 4 {
+			item.Synopsis = strings.TrimSpace(fields[3])
 		}
 		listed = append(listed, item)
 	}
@@ -87,7 +95,7 @@ func listPackages(root string) ([]string, int, error) {
 		return nil, 0, err
 	}
 
-	packages := make([]string, 0, len(listed)-len(ignored))
+	packages := make([]listedPackage, 0, len(listed)-len(ignored))
 	var missing []string
 	for _, item := range listed {
 		rel, relErr := filepath.Rel(root, item.Directory)
@@ -97,7 +105,7 @@ func listPackages(root string) ([]string, int, error) {
 		if _, skip := ignored[filepath.ToSlash(rel)]; skip {
 			continue
 		}
-		packages = append(packages, item.ImportPath)
+		packages = append(packages, item)
 		if item.Synopsis == "" {
 			missing = append(missing, item.ImportPath)
 		}

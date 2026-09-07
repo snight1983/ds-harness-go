@@ -65,4 +65,19 @@
 //   - **账本的保留策略**。终态记录会一直留在表上：属主释放和服务释放都不删它们
 //     （见 [Registry.disposeOwned]），因为一条终态记录是别的副本唯一还能读到这件
 //     活儿结局的地方。谁来清、留多久，本轮没有答案。
+//
+// # 不做什么
+//
+//   - **不是任务队列。**没有排队、没有重试、没有跨副本调度——活儿在哪个副本起就在
+//     哪个副本跑。
+//   - **不代跑别人的活儿。**goroutine 由生产方自己起，本包只记账并持有
+//     [github.com/snight1983/ds-harness-go/feature/jobs.Hooks] 那三只手。
+//   - **不在别的副本上读输出或停活儿。**执行资源出不了那个进程，别的副本一律报错并
+//     点名它在哪个 runner 上，不假装成功。
+//   - **不做跨副本的变更通知。**[Registry.OnJobDone] 与 [Registry.OnJobsChanged] 都是
+//     副本本地的，要补这一条得有一套发布订阅。
+//   - **不清账本。**终态记录一直留着，谁来清、留多久本轮没有答案。
+//   - **不自己碰数据库。**账本落在
+//     [github.com/snight1983/ds-harness-go/storage/domain] 那张表上，SQL 在
+//     [github.com/snight1983/ds-harness-go/adapter/datastore] 里。
 package domainjobs

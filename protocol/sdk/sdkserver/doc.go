@@ -35,4 +35,19 @@
 // `ctx.get('llm')` 探可选的服务。Go 没有那个容器，所以 agent 注册表、会话存储、子
 // agent 运行时、以及那条通道的发送面，全部写在 [Config] 上由装配方交进来，缺一样
 // 就在 [New] 当场拒——而不是等第一个请求进来才空指针。
+//
+// # 不做什么
+//
+//   - **不建 HTTP/WebSocket Listener，也不读进程的标准流。**那条通道由装配方造好
+//     交进 [Config]，本包只在它上面收发。
+//   - **不定线上说什么。**帧与形状归
+//     [github.com/snight1983/ds-harness-go/protocol/sdk/sdkprotocol]，本包只管这一端
+//     怎么办事。
+//   - **不拥有运行时和本进程。**`shutdown` 只拆它自己建出来的那些 agent；拆根上下文
+//     和退出进程留给装配方。
+//   - **不生产任何事实。**四类通知全是转发，事实由运行时和
+//     [github.com/snight1983/ds-harness-go/sessionlog] 那边产生。
+//   - **不认证客户端，也不做租户隔离。**这条线默认已经是可信通道。
+//   - **不自带会话持久化后端。**会话存储由装配方按
+//     [github.com/snight1983/ds-harness-go/feature/persistence] 那道契约交进来。
 package sdkserver

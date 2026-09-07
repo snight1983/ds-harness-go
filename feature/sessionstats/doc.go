@@ -1,4 +1,4 @@
-// Package stats 是「整份日志的会话数字」这个投影单元。
+// Package sessionstats 是「整份日志的会话数字」这个投影单元。
 //
 // 对应 DSH 的 @deepseek-ai/dsh-session-stats（packages/session/session-stats）。
 //
@@ -59,4 +59,17 @@
 //     Object.is 表达没变，所以那份 apply 里每一条不相干的事件都要写
 //     `return state`。Go 这边 [projection.Definition.Apply] 的第二个返回值就是
 //     那件事，理由见 sessionlog/projection 的包文档。
+//
+// # 不做什么
+//
+//   - **不存这些数字。**它是一个投影单元，每个字段都从整份日志现折；把折出来的中间
+//     结果落到耐久介质上归 [github.com/snight1983/ds-harness-go/feature/projectioncache]。
+//   - **不数表面上的节点。**它数的是日志里的事件，所以翻页翻了多少、压缩掉了多少，
+//     都改不了它的答案。
+//   - **不解释这些数字。**计费、配额、告警、报表都不在这里，它只把数字折出来交给
+//     [github.com/snight1983/ds-harness-go/sessionlog/projection] 那条缝送走。
+//   - **不自己注册。**[Definition] 是一份值，登进注册表由装配方调
+//     [github.com/snight1983/ds-harness-go/sessionlog/projection.Register]。
+//   - **不折表面层，也不管压缩。**它只认得日志里那几种生命周期事件，模型看得见什么
+//     是别人的问题。
 package sessionstats

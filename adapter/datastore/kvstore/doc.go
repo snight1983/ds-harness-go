@@ -23,4 +23,17 @@
 // 除此之外一律直通。「同名单元不许重开」「表没声明过时删是空操作」「值必须是
 // 合法 JSON」这些规则都在 datastore 那一层，本包不重写一遍——重写一遍就是
 // 给分叉留一个位置。
+//
+// # 不做什么
+//
+//   - **不写一句 SQL，不开连接池，不认方言。**那些全在
+//     [github.com/snight1983/ds-harness-go/adapter/datastore]。
+//   - **不重写 datastore 已经定下的规则。**同名单元不许重开、表没声明过时删是空操作、
+//     值必须是合法 JSON——一律直通，重写一遍就是给分叉留位置。
+//   - **不填 [github.com/snight1983/ds-harness-go/feature/persistence.Backend]。**
+//     那是另一道接口，会话日志那条在
+//     [github.com/snight1983/ds-harness-go/adapter/datastore/sessionstore]；
+//     填了这条不等于那条也有了。
+//   - **不落本机文件。**键值全在库里，没有任何一条路会退回宿主机的磁盘。
+//   - **不决定租户键、保留期限和访问控制。**那些是装配方的策略。
 package kvstore

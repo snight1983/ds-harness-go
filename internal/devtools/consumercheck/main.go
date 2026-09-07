@@ -1,5 +1,5 @@
-// 本文件的作用：在仓库**外面**真的建一个 Go 模块，用公开 module path 把本仓库
-// 引进去，编译、vet、跑起来。这是 module path 这件事唯一测得到的地方。
+// Command consumercheck 在仓库**外面**真的建一个 Go 模块，用公开 module path 把本
+// 仓库引进去，编译、vet、跑起来。这是 module path 这件事唯一测得到的地方。
 //
 // 新增: DSH 没有对应物——TypeScript 那边靠 `npm pack` 之后装进一个空目录来验同一
 // 件事，而 Go 的对应物只能是「另起一个模块，replace 到本地」。
@@ -14,6 +14,19 @@
 // 它同时是「每一个公开包都能被外部引用」的证据：生成出来的那个程序空引全部
 // 可发布包，任何一个包漏进了 internal 依赖、或者只在仓库内部才解析得开，这里
 // 当场编译不过。
+//
+// # 不做什么
+//
+//   - **不重复 `go build ./...` 已经答过的那一条。**仓库内部编得过恰恰说不出
+//     module path 对不对，这道门禁只为仓库外面那一侧存在。
+//   - **不重新解析依赖。**require 段和 go.sum 直接抄本仓库那一份，让它联网重解一遍
+//     只会把网络抖动算成失败。
+//   - **不证明这个版本在模块代理上取得到。**replace 指的是本地检出，那件事要等打了
+//     tag 之后才验得了。
+//   - **不查命令包、internal 包和被 Git 忽略的目录。**它们本来就不该被外部引进来，
+//     口径与 internal/devtools/doccheck 一致。
+//   - **不查文档、分层、数据库和磁盘那几条界线。**分别归 internal/devtools/doccheck、
+//     internal/devtools/layercheck、internal/devtools/dbcheck、internal/devtools/oscheck。
 package main
 
 import (

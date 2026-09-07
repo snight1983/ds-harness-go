@@ -69,4 +69,17 @@
 //     「[Registry.Drive] 被调到」之间懒建了单元格，那份单元格已经把这条事件
 //     折进去了。DSH 是单线程，这个窗口不存在；本仓库要扛并发读，所以
 //     [Registry.Drive] 先比一次水位。
+//
+// # 不做什么
+//
+//   - **不是权威。**权威永远是 sessionlog 那串事件，投影值随时可以丢掉重折。
+//   - **不订阅任何东西。**推进由会话那一侧在提交之后显式调 [Registry.Drive]，
+//     本包不认识事件总线，域也不持有订阅。
+//   - **不落盘检查点。**[Registry.Checkpoint] 只交出可落盘的字节，
+//     真存起来、再读回来接着折的是 feature/projectioncache。
+//   - **不认识任何具体的域。**待办、用量、统计各自的折叠函数在它们自己的包里
+//     （feature/todo、feature/tokenmeter、feature/sessionstats），
+//     本包只提供登记、驱动、切面和检查点这套框架。
+//   - **不替单元判断变没变。**[Definition.Apply] 自己返回第二个值说变了没有，
+//     框架不做深比较。
 package projection

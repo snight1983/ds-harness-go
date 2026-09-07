@@ -50,6 +50,14 @@ tools.Runtime
 - 不提供 OAuth 登录流程；请求头和凭据由宿主配置。
 - 当前 SDK 无法暴露 task-support 元数据，因此不在注册前拒绝 task-only 工具。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| MCP客户端桥接插件，连接外部MCP服务器并把工具注册到ctx.tools | `mcp/mcp-client` | 需要 | `protocol/mcp` | — |
+
 ## 相关源码
 
 - `protocol/mcp/host.go`

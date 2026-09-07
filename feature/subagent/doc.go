@@ -105,4 +105,22 @@
 // 恰好在同一个孩子还没公布的那几微秒里开出了处置」，以及 submit 里「父那把作用域
 // 正在处置，而调用方手上攥着的正是这个父」。两句都不是死代码——第一句定的是两条
 // 拆解路上谁负责结清，第二句是所有权那道边界的一半。
+//
+// # 不做什么
+//
+//   - **不实现模型循环。**进程内的孩子照样由 [github.com/snight1983/ds-harness-go/harness/agent] 和
+//     [github.com/snight1983/ds-harness-go/harness/agentloop] 驱动；本包做的是挑提供方、验能力、
+//     建父子关系、结算一次运行。
+//   - **不实现任何提供方。**spawn 与 fork 各自成包
+//     （[github.com/snight1983/ds-harness-go/feature/subagent/spawninprocess]、
+//     [github.com/snight1983/ds-harness-go/feature/subagent/forkinprocess]），进程外那条由宿主自己接。
+//   - **不直接面向模型。**工具那一面在
+//     [github.com/snight1983/ds-harness-go/feature/subagent/subagenttool]、
+//     [github.com/snight1983/ds-harness-go/feature/subagent/controltool] 和
+//     [github.com/snight1983/ds-harness-go/feature/subagent/reporttool] 三个包里。
+//   - **不起进程、不开终端。**任何要拉起子进程的提供方在本仓库都没有落地，缺的是
+//     前置而不是代码。
+//   - **不替孩子作证。**一句「完成了」只是原样转述；结果对不对，本包证明不了。
+//   - **不是跨进程的注册中心。**活会话表只代表当前进程；一个冷会话的父子身份是从
+//     [github.com/snight1983/ds-harness-go/sessionlog] 里那些事件重新整理出来的。
 package subagent

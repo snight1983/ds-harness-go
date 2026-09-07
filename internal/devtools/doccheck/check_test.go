@@ -50,11 +50,29 @@ func TestCheckRepositoryRejectsSidebarOmission(t *testing.T) {
 	assertCheckError(t, root, []string{"example/a"}, "映射文档未进入侧栏：docs/modules/a.md")
 }
 
-func TestCheckRepositoryRejectsIncompleteDetailedModule(t *testing.T) {
-	sidebar := "- 详细模块\n  - [A](modules/a.md)\n"
-	root := fixture(t, "| `example/a` | [A](modules/a.md) |\n", sidebar, "")
-	assertCheckError(t, root, []string{"example/a"}, "详细模块文档缺少定位章节")
+func TestCheckRepositoryRejectsIncompleteModuleDoc(t *testing.T) {
+	root := fixture(t, "| `example/a` | [A](modules/a.md) |\n", "- [A](modules/a.md)\n", "")
+	writeTestFile(t, filepath.Join(root, "docs", "modules", "a.md"), "# A\n")
+	assertCheckError(t, root, []string{"example/a"}, "模块文档缺少定位章节")
 }
+
+func TestCheckRepositoryRejectsMissingCapabilitySection(t *testing.T) {
+	root := fixture(t, "| `example/a` | [A](modules/a.md) |\n", "- [A](modules/a.md)\n", "")
+	body := strings.Replace(moduleSkeleton, "## 对应的 DSH 能力\n\n", "", 1)
+	writeTestFile(t, filepath.Join(root, "docs", "modules", "a.md"), body)
+	assertCheckError(t, root, []string{"example/a"}, "模块文档缺少对应的 DSH 能力章节")
+}
+
+// 骨架检查按 docs/modules 目录取，不按侧栏分组取：一篇没进侧栏、也没被任何包映射
+// 的模块文档同样要查，否则把它从侧栏摘掉就能绕过检查。
+func TestCheckRepositoryChecksModuleDocOutsideSidebar(t *testing.T) {
+	root := fixture(t, "| `example/a` | [A](modules/a.md) |\n", "- [A](modules/a.md)\n", "")
+	writeTestFile(t, filepath.Join(root, "docs", "modules", "b.md"), "# B\n")
+	assertCheckError(t, root, []string{"example/a"}, "模块文档缺少定位章节：docs/modules/b.md")
+}
+
+const moduleSkeleton = "# A\n\n## 定位\n\n## 架构\n\n## 生命周期与并发\n\n" +
+	"## 失败语义\n\n## 能力边界\n\n## 对应的 DSH 能力\n\n## 相关源码\n\n"
 
 func fixture(t *testing.T, rows, sidebar, document string) string {
 	t.Helper()
@@ -63,7 +81,7 @@ func fixture(t *testing.T, rows, sidebar, document string) string {
 	writeTestFile(t, filepath.Join(root, "docs", "README.md"), "# docs\n")
 	writeTestFile(t, filepath.Join(root, mappingPath), "# mapping\n\n| Go 包 | 主文档 |\n|---|---|\n"+rows)
 	writeTestFile(t, filepath.Join(root, sidebarPath), sidebar)
-	writeTestFile(t, filepath.Join(root, "docs", "modules", "a.md"), "# A\n\n"+document)
+	writeTestFile(t, filepath.Join(root, "docs", "modules", "a.md"), moduleSkeleton+document)
 	return root
 }
 

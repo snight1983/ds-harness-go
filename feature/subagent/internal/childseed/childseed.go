@@ -13,6 +13,19 @@
 // 新增: 这段判断原先在上面那两个包里各写了一遍，两份逐字相同。当时不共用的理由是
 // 「导出它就等于把一个实现细节的补丁当成契约」——收进 internal/ 之后那条理由不
 // 成立了，因为这里根本不构成对外的公开面。
+//
+// # 不做什么
+//
+//   - **不决定策略是什么。**那份审批策略由这次派发的调用方钉下来，本包只负责把它
+//     落到孩子那条日志上。
+//   - **不种别的东西。**父子身份那一笔是 [github.com/snight1983/ds-harness-go/feature/subagent] 里
+//     描述符播种那条路的活；这里只有审批策略这一样。
+//   - **不建会话、不公布孩子。**它要么往一份已经在手的会话上追加，要么在还没公布的
+//     创建种子上排演一次追加——两条都不碰登记。
+//   - **不打算变成公开面。**收在 internal/ 底下，只有
+//     [github.com/snight1983/ds-harness-go/feature/subagent] 和
+//     [github.com/snight1983/ds-harness-go/feature/subagent/inprocessdriver] 两处用；子树之外导不进来，
+//     也不承诺稳定。
 package childseed
 
 import (

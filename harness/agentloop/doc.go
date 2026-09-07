@@ -38,4 +38,22 @@
 //
 // 取消的**原因**是 [github.com/snight1983/ds-harness-go/sessionlog.TurnEndCancelCause]，它会被记进
 // turn/end 那条事件，所以「这一轮为什么停」在日志里读得出来。
+//
+// # 不做什么
+//
+//   - **不定义任何具体工具或 skill。**本包只调度调用，工具行为归提供方，契约在
+//     [github.com/snight1983/ds-harness-go/tools]，skill 在
+//     [github.com/snight1983/ds-harness-go/feature/skill]。
+//   - **不实现模型协议。**请求交给 [github.com/snight1983/ds-harness-go/llm] 的运行时，
+//     跟某个厂商怎么说话是适配器（例如
+//     [github.com/snight1983/ds-harness-go/adapter/openaicompat]）的事。
+//   - **不决定存储介质。**恢复只要求一个「按身份取一份存档、列出有哪些存档」的最小契约，
+//     介质归 [github.com/snight1983/ds-harness-go/feature/persistence]。
+//   - **不强行终止不响应取消的代码。**Go 没有抢占别人 goroutine 的办法，工具必须自己
+//     应答那条 ctx 取消链。
+//   - **不认识设置系统。**并行工具上限是一个「读出当下值」的函数，把它接到
+//     [github.com/snight1983/ds-harness-go/settings] 上去是
+//     [github.com/snight1983/ds-harness-go/harness] 那一层的事。
+//   - **不给模型交代工作目录。**服务端没有硬盘也没有目录这个概念，DSH 那个工作目录变量
+//     在这里有意不移植——跟模型说有就是撒谎。
 package agentloop

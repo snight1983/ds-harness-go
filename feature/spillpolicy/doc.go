@@ -1,4 +1,4 @@
-// Package policy 决定一份工具结果多大算大，以及把它挪走之后拿什么替换给模型看。
+// Package spillpolicy 决定一份工具结果多大算大，以及把它挪走之后拿什么替换给模型看。
 //
 // 对应 DSH 的 @deepseek-ai/dsh-spill-policy（packages/spill/spill-policy）。
 //
@@ -57,4 +57,16 @@
 // 这次调用已经收敛了。DSH 那边这个监听器同样拿不到调用方的信号。所以存全文用的是
 // 一个独立的背景 ctx：它不该被那次已经结束的调用连累，中途撤掉只会留下一个
 // 存了一半的句柄。
+//
+// # 不做什么
+//
+//   - **不拥有那份存储。**[github.com/snight1983/ds-harness-go/spill.Store] 这个接口和它背后的实现
+//     （本仓库唯一那份生产后端在 adapter/textstore）都不归本包，本包只调它。
+//   - **不做取回。**这条接缝只能写，没有读的方法：取回靠宿主自己的通道，模型照着
+//     那段说明去调别的工具。
+//   - **不管访问控制、保留期和加密。**句柄怎么解析、内容留多久、谁读得到，
+//     全是 Store 背后那套介质的事。
+//   - **不切预览。**截断是 [github.com/snight1983/ds-harness-go/feature/outputretention.TextRetainer] 的活；
+//     本包只决定什么时候动手、以及替换出来的那段长什么样。
+//   - **不保证外置过的内容还在。**外置换来的是更少的上下文，不是一份永久对象。
 package spillpolicy

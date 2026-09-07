@@ -25,6 +25,18 @@
 // [github.com/snight1983/ds-harness-go/feature/subagent/inprocessdriver] 自己那一包的用例要的是一个真的会停在
 // WhenIdle 上的孩子，好把「等孩子跑完」那条边压住。这里不要：那条边归那一包，
 // 这里只问「造法收到的那份 CreateOptions 长什么样」，而它在孩子静不静之前就记下了。
+//
+// # 不做什么
+//
+//   - **不进生产。**它 import 了 testing，装出来的造法是记账用的替身，不是一台能
+//     真跑活的运行时。
+//   - **不是端到端夹具。**上游那份同名的 harness.ts 装的是真模型加真 bash 的整栈，
+//     这里一样都没有，别拿它当对译。
+//   - **不压「等孩子跑完」那条边。**这里的孩子当场就静；那条边归
+//     [github.com/snight1983/ds-harness-go/feature/subagent/inprocessdriver] 自己那一包的用例。
+//   - **不对外发布。**收在 internal/ 底下，只有
+//     [github.com/snight1983/ds-harness-go/feature/subagent/spawninprocess] 和
+//     [github.com/snight1983/ds-harness-go/feature/subagent/forkinprocess] 两个包的用例导入它。
 package providertest
 
 import (

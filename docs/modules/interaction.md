@@ -47,6 +47,17 @@ Provider 代表具体 UI、协议桥或宿主回调。没有 Provider、调用�
 - 审批是一次工具执行决策，不是身份认证或长期权限授予。
 - 命令只处理已注册定义，不是 shell 解释器。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 由插件注册的用户命令注册表，供交互式UI适配器使用 | `interaction/commands` | 需要 | `feature/interaction/commands` | — |
+| 模型侧ask_user_question工具，基于ctx.userQuestions实现 | `interaction/tool-ask-user` | 需要 | `feature/interaction/askuser` | — |
+| 与通道无关的一次性审批seam，request返回allowed-once/rejected/cancelled/unavailable | `interaction/user-approval` | 需要 | `feature/interaction/userapproval` | — |
+| 用户交互Service Definition，定义ctx.userQuestions与提供方注册 | `interaction/user-questions` | 需要 | `feature/interaction/userquestions` | — |
+
 ## 相关源码
 
 - `feature/interaction/commands/`

@@ -47,6 +47,15 @@
 - 计划文本由模型产生，本模块不验证方案质量。
 - 是否允许并行进行中项目是部署策略，不是永久日志规则。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 软引导的plan协作状态，提供/plan命令、/plan off命令和经用户评审的exit_plan_mode退出方式 | `plan/plan-mode` | 需要 | `feature/plan/planmode` | — |
+| 面向模型的todo_write工具，agent的完整任务列表每次调用整体替换 | `todo/tool-todo` | 需要 | `feature/todo` | — |
+
 ## 相关源码
 
 - `feature/plan/planmode/`

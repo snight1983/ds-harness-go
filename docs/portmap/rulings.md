@@ -1,21 +1,54 @@
 # 逐包裁决
 
-227 个包，一包一行，四种取值。依据是 `functions.md` 那 2009 条和 `required.md` 那五条前提，
+一包一行，四种取值。依据是 `functions.md` 那 2009 条和 `required.md` 那五条前提，
 不是包名。
+
+对着 `deepseek-harness-dsh-v0.1.2-alpha.3` 快照，当前 **250 个包**；表里另有 **7 行**是
+上游后来删掉的包，保留不删（理由见第零节），所以表长 257 行。
 
 | 取值 | 含义 | 数 |
 |---|---|---|
-| **需要** | 移过来 | 82 |
-| **抄形状** | 不移这个包，抄它的接口／装配顺序／协议形状 | 15 |
-| **Go 已有等价物** | 行为要，手段不要——Go 标准库里是白送的 | 3 |
-| **不需要** | 有一个我们没有的前置条件 | 127 |
+| **需要** | 移过来 | 83 |
+| **抄形状** | 不移这个包，抄它的接口／装配顺序／协议形状 | 23 |
+| **Go 已有等价物** | 行为要，手段不要——Go 标准库里是白送的 | 8 |
+| **不需要** | 有一个我们没有的前置条件 | 143 |
 | **说不清** | 缺信息，理由里写明缺的是什么 | **0** |
 
 「不需要」不等于「这功能没用」，等于**它有一个我们给不了的前置**（本机磁盘、桌面对话框、
 浏览器 DOM、Node worker thread、本机子进程、**沙箱**）。
 
 **说不清已经清零。**「说不清」当时的含义是「这五条前提没要求它，要不要由消费方定」，
-不是「不要」。227 行现在每一行都有终判。
+不是「不要」。257 行现在每一行都有终判。
+
+## 零、这一版对着哪个快照重对过（2026-09-04）
+
+**前 227 行是对着一份更旧的 DSH 判的。** 重跑 `internal/devtools/capmap` 抽当前快照，
+数出来是 250 个包，不是 227——多 30 个、少 7 个，另有 28 个包体量变化超过四分之一。
+判断的依据变了，判断就得重看，否则表上写的「不需要」是在说一个已经不长那样的包。
+
+**7 个消失的包里只有 1 个是真删，其余 6 个是上游自己重组。** 逐个对过去向：
+
+| 消失的包 | 原裁决 | 去了哪 |
+|---|---|---|
+| `host/apiproxy` | 抄形状 | 拆成 `api/session-controller`＋`api/settings-controller`＋`api/workspace-controller` |
+| `examples/acp-demo` | 抄形状 | 换成 `bundle/acp-app` 的 patch 清单 |
+| `examples/agent-spine-demo` | 抄形状 | 换成 `bundle/base/cordis.patch.yml`（86 行有序挂载）＋`bundle/sdk-minimal` |
+| `examples/jsonrpc-demo` | 抄形状 | 换成 `bundle/sdk-app` 的 patch 清单 |
+| `client/runtime` | 不需要 | 拆成 `client/store`＋`client/ui-session`，仍然是浏览器 |
+| `test-support/acp-snapshot` | 需要 | 扩成 `test-support/session-snapshot`（ACP 只是它的一个适配器） |
+| `session/session-persistence-sqlite` | 不需要 | **真删了**，上游只留 JSONL 一个落盘实现 |
+
+这 7 行不删。删掉的话，「我们当初判过它」这件事就没人看得见了，而下一个人会重新判一遍。
+
+**`examples/agent-spine-demo` 的消失牵动 14 行裁决**，因为那 14 行的理由都写着
+「DSH 自己的主干挂载清单（`examples/agent-spine-demo`）」。核过替代出处，**14 行一行没翻**：
+`bundle/base/cordis.patch.yml` 那 86 行按 id 有序列着每个插件和它的配置，比一个示例应用
+更硬；`bundle/sdk-minimal` 自陈「不叠在 dsh-base 上，这一份 insert 就是完整的 Cordis 树」，
+33 行，是当前快照里作者亲手定义的「跑一个 agent 最少要装什么」。理由列已改指这两处。
+
+**28 个体量漂移的包里，10 个当初判了要（需要 7＋抄形状 3）**，那批的判断依据可能已经不成立，
+逐个记在第五节。剩下 18 个判的是「不需要」，理由是缺前置条件（浏览器、本机磁盘、本机进程），
+体量变大不会长出一块硬盘来，所以不重判。
 
 ## 一、这张表怎么来的
 
@@ -44,9 +77,26 @@
 裁决只回答「要不要」。这一节回答「要的那些，形状是什么」——**这三块是整个仓库里最值钱的
 三份设计，抄错了后面全歪。**
 
-### 2.1 装配顺序（出处 `bundle/headless` + `examples/agent-spine-demo`）
+### 2.1 装配顺序（出处 `bundle/base/cordis.patch.yml` + `bundle/sdk-minimal` + `bundle/headless`）
 
-DSH 自己写了两份「最小可跑」的定义，`headless` 那份连启动步骤都记全了：
+**出处换过一次。** 原来引的是 `examples/agent-spine-demo`，上游已经删了那整棵 `examples/`
+树，现在作者把「装什么、按什么顺序装、每个插件配什么」直接写在 bundle 的 patch 文件里——
+那是可执行的清单，比示例应用更硬。
+
+- `bundle/base/cordis.patch.yml`：**86 行按 id 有序**，共享核心的完整挂载清单，每行带配置。
+- `bundle/sdk-minimal/cordis.patch.yml`：**33 行**，自陈「不叠在 dsh-base 上，这一份 insert
+  就是完整的 Cordis 树」。这是当前快照里唯一一份作者亲口说「完整」的最小树：
+  ```
+  sdk-app → sdk-jsonrpc-server → llm-deepseek → sandbox-local → session-projection
+    → sandbox-policy → subprocess-local → terminal → fs-local
+    → timer → llm → session → session-title → system-prompt → tools → agent
+    → llm-retry → jobs-local → invariants（＋session/agent/scope/agent-loop 各自的 invariant）
+    → agent-loop → 三个工具 → session-persistence-jsonl
+  ```
+  **`agent-loop` 排在几乎最后**，`agent` 在它前面十几行——这不是笔误，是因为 cordis 按服务
+  可用性激活，不按行序加载。抄的时候别把行序当成初始化序。
+
+`headless` 那份连启动步骤都记全了：
 
 ```
 app-boot（启动路径、环境加载、故障处理、Profile）
@@ -97,7 +147,7 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 
 ## 三、还没解决的
 
-- **说不清已经清零**：最后那批 20 个由消费方逐条定完，227 行全部有终判。
+- **说不清已经清零**：最后那批 20 个由消费方逐条定完，257 行全部有终判。
 - `mcp/mcp-client` 的 待核 已经销掉：`transport.ts` 里两个分支，`stdio` 走
   `StdioClientTransport` 要 spawn 子进程，`streamable-http` 走
   `StreamableHTTPClientTransport(new URL(url), {headers})` 就是普通 HTTP。
@@ -154,10 +204,16 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 | `workflow/workflow` | 需要 | 工作流 seam 的服务定义提供 `ctx.workflowEngine`，functions.md 记录有"生命周期观察器"与事件投影，支持前提 5 多 agent 协作的基础设施。 |
 | `workflow/workflow-worker-thread` | **不需要** | `WorkflowEngine` 的唯一实现，但它跑的是 JavaScript 编排脚本、载体是 Node worker thread，Go 侧两样都没有。自陈「每次运行都要支付 worker thread 成本」「不是安全边界」。**暂时不要**——接缝 `workflow/workflow` 已定为需要，`tool-ralph` 是固定工作流不依赖脚本引擎，所以缺这个实现不挡路；以后要跑用户自定义编排再补一个 Go 引擎，接缝不动 |
 
-### `experimental/`（2）— 抄形状 2
+### `experimental/`（8）— 抄形状 2、不需要 6
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
+| `experimental/agent-team-profile` | 不需要 | cordis profile bundle，34 行，内容是一份「装哪几个插件」的清单。接缝 `agent-team` 已判抄形状，装配清单本身不是能力 |
+| `experimental/agent-team-web-profile` | 不需要 | 同上，而且它挂的是浏览器面板 |
+| `experimental/client-ui-agent-team` | 不需要 | 浏览器里的 roster／任务板／队友导航面板，前置是浏览器 |
+| `experimental/inspector` | 不需要 | 跨 realm 的 Chrome DevTools Protocol 调试中枢：Console 求值、Sources、Network 抓包、Elements 树。前置是 CDP 与浏览器 realm，两样都没有 |
+| `experimental/webworker-packer` | 不需要 | 给浏览器运行时打 VFS 镜像的构建期工具，前置是浏览器 |
+| `experimental/webworker-runtime` | 不需要 | 纯浏览器运行时：内存 VFS、模块变换、postMessage 隧道，外加一层让宿主树原样跑起来的 Node 兼容层。前置是浏览器 Web Worker |
 | `experimental/agent-team` | **抄形状** | 全仓库唯一带「持久 peer mailbox + 共享任务板（版本化快照 + CAS）」的多 agent 协作原语：Roster 状态机、Quiet／Wakeup 两档投递、`expectedRevision` 对不上返回 `TEAM_TASK_STALE_REVISION` 的 CAS 任务板（任务之间是 DAG）。**能力要，包不移**——它自陈「单进程、共享 checkout」「mailbox 不保证跨进程 exactly-once」，与前提 1、4 直接相撞，照搬进来等于把单进程假设焊死。但这三样的形状与进程模型无关，换成 Postgres 存储照样成立，CAS 本来就是为并发写设计的。抄形状见第 2.2 节 |
 | `experimental/tool-agent-team` | **抄形状** | `agent-team` 的模型侧工具。抄工具形状（发消息／领任务／改任务带 `expectedRevision`），实现跟着重写的接缝走 |
 
@@ -175,8 +231,8 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 | 包 | 裁决 | 理由 |
 |---|---|---|
 | `jobs/jobs` | 需要 | Job 注册表约定，前提3用户中途离开相关 |
-| `jobs/jobs-local` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
-| `jobs/tool-jobs` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `jobs/jobs-local` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
+| `jobs/tool-jobs` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 
 ### `schedule/`（1）— 需要 1
 
@@ -220,10 +276,19 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 | `typert/protocol` | 不需要 | 提供 `@Remote` 装饰器、`TypertRemoteService` 基类等 TypeScript 编译期元数据标记机制。Go 已有 struct tag、方法集和接口反射作为运行时替代，无需搬运 TypeScript 装饰器与类型擦除模式。 |
 | `typert/registry` | **Go 已有等价物** | 运行时反射信息与可选 Zod schema 的注册表。Go 的 `reflect` + struct tag 白送，不移包。同 `util/brand` 的处理 |
 
-### `util/`（7）— 需要 2、Go 已有等价物 2、不需要 3
+### `util/`（12）— 需要 2、Go 已有等价物 7、不需要 3
+
+**这一支是「Go 已有等价物」最密的地方，五个新包全落在这一档。** 它们解决的都是
+JS 运行时自己的缺口：没有 UUID（安全上下文外 `crypto.randomUUID` 不可用）、没有双端队列、
+没有时区校验、没有防原型伪造的 JSON 快照、没有平台无关的路径拼接。Go 这五样都是标准库。
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
+| `util/crypto` | **Go 已有等价物** | 浏览器安全的 UUID 与字节编码。Go：`crypto/rand` + `encoding/hex`／`encoding/base64` |
+| `util/deque` | **Go 已有等价物** | 摊还常数时间的循环双端队列，还要自己管空位释放。Go：切片本身就是，`container/list` 也在标准库 |
+| `util/time` | **Go 已有等价物** | 只做 IANA 时区名的校验与规范化，不做格式化。Go：`time.LoadLocation` 校验，`Location.String()` 规范化 |
+| `util/values` | **Go 已有等价物** | 无损 JSON 校验、脱钩快照、深冻结、结构相等、穷尽联合。整包在防 JS 对象图的危险（伪造原型、取值器、稀疏数组、环、`-0`、非有限数），Go 里这些要么不存在要么 `encoding/json` 自己就拒。裁决依据与逐条对照已写在 `sessionlog/doc.go` 里 |
+| `util/workspace-path` | **Go 已有等价物** | 相对路径拼接、POSIX home 缩写、显示标题。Go：`path` 包（注意不是 `path/filepath`，本仓库 `oscheck` 禁它） |
 | `util/atomic-write` | **Go 已有等价物** | 原子替换 + 跨进程锁；Go 有 `os.WriteFile` / `os.Rename` / `flock` 等价原语。同 `util/brand`，换手段不换行为 |
 | `util/brand` | **Go 已有等价物** | 原 agent 自己的理由文字就写着「Go 的 type alias 和 unexported 字段可以实现同等效果」。不是砍掉，是换手段 |
 | `util/home-paths` | 不需要 | 解析 DSH 主目录、处理 ~ 展开、读取 $DSH_HOME 环境变量等，functions.md 明确涉及"解析 DeepSeek Harness 的单根主目录"和"为原生文件系统 watcher 提供稳定目标路径"。这是本机路径管理工具，违反服务端不开放本机资源的约束。 |
@@ -236,35 +301,41 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `runtime-diagnostics/invariants` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `runtime-diagnostics/invariants` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 
-### `test-support/`（6）— 需要 5、不需要 1
+### `test-support/`（7）— 需要 6、不需要 1
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `test-support/acp-snapshot` | 需要 | ACP快照测试harness。"launchAcpTestAgent启动器、通过SDK客户端收集会话、runScenario驱动、normalizer + scrubber + defineAcpSnapshotSuite"。如果你用ACP，需要能运行集成测试验证round-trip行为。这个工具让你在不连真model下跑完整agent回合（见下）。 |
+| `test-support/session-snapshot` | 需要 | **`acp-snapshot` 的继任者**，上游把它扩成了通用的会话日志快照核心，ACP 只是它的一个协议适配器。要的是三样：清单化的夹具、身份脱敏（`identity redaction`）、期望输出归一化——没有归一化，任何带时间戳和 ID 的会话日志都没法做快照比对。**它的 workspace 文件快照那部分不要**（二进制文件、符号链接、空目录），那部分的前置是本机文件系统 |
+| `test-support/acp-snapshot` | 需要 | **上游已删**，扩成了 `test-support/session-snapshot`。原判理由：ACP快照测试harness。"launchAcpTestAgent启动器、通过SDK客户端收集会话、runScenario驱动、normalizer + scrubber + defineAcpSnapshotSuite"。如果你用ACP，需要能运行集成测试验证round-trip行为。这个工具让你在不连真model下跑完整agent回合（见下）。 |
 | `test-support/agent-loop-testkit` | 需要 | agent loop测试依赖挂载工具。"mountAgentLoopTestDependencies按序挂LLM、session、system-prompt、tools、agent"。你需要能在单元/集成测试中隔离地测试loop逻辑。这直接支持"跨天活跨进程活下来"的持久化测试。 |
 | `test-support/client-runtime` | **不需要** | cordis + jsdom 的浏览器测试脚手架，前置是 DOM |
 | `test-support/llm-mock-server` | 需要 | 可编脚本OpenAI兼容mock HTTP服务器。"行为脚本(connection_reset/stream_disconnect/.../success/tool_call_success)、时序与内容控制"。这是**不连真模型情况下跑完整round-trip**的工具——正是你需要的。它让"跨天活"的测试不依赖API key和配额。 |
 | `test-support/llm-replay` | 需要 | 无密钥快照测试的LLM回放插件。"根据已记录session JSONL fixture重建模型流、installLlmReplay返回ReplayHandle"。这是**不连真模型跑回合**的主要方式——用既有fixture驱动测试，省掉真实API成本。条目"首次调用顺序脚本绑定假设串行委托、只有普通loop分片和标记本地压缩输出能派生"——限制在"什么场景能用"，不是"用不了"。 |
 | `test-support/loader-smoke` | 需要 | 烟雾测试harness。"resolveExampleLaunch、runLoaderSmoke、runFixtureTurn单轮驱动"。这是"启动 + 执行single turn + 查收output"的端到端脚手架。你需要它验证"应用能启动、能跑、能shutdown"的完整周期。 |
 
-### `examples/`（3）— 抄形状 3
+### `examples/`（3）— 抄形状 3 · **整支上游已删**
+
+三个包连同 `packages/examples/` 整棵树在当前快照里都不存在了。行保留，因为裁决本身没错，
+错的只是出处——装配顺序现在读 `bundle/*/cordis.patch.yml`，见第 2.1 节。
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `examples/acp-demo` | **抄形状** | 示例应用，价值在它记录的装配顺序，不在代码本身 |
-| `examples/agent-spine-demo` | **抄形状** | 示例应用，价值在它记录的装配顺序，不在代码本身 |
-| `examples/jsonrpc-demo` | **抄形状** | 示例应用，价值在它记录的装配顺序，不在代码本身 |
+| `examples/acp-demo` | **抄形状** | **上游已删**，换成 `bundle/acp-app` 的 patch 清单。原判：示例应用，价值在它记录的装配顺序，不在代码本身 |
+| `examples/agent-spine-demo` | **抄形状** | **上游已删**，换成 `bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`。原判：示例应用，价值在它记录的装配顺序，不在代码本身 |
+| `examples/jsonrpc-demo` | **抄形状** | **上游已删**，换成 `bundle/sdk-app` 的 patch 清单。原判：示例应用，价值在它记录的装配顺序，不在代码本身 |
 
-### `llm/`（5）— 需要 4、不需要 1
+### `llm/`（7）— 需要 4、抄形状 1、不需要 2
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `llm/llm` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `llm/deepseek-llm-api-extensions` | **抄形状** | 「附加请求字段注册表」：让别的插件往模型请求的**顶层**塞自己的字段，字段的生命周期归贡献方管。这个形状我们要——`adapter/openaicompat` 现在没有任何让宿主追加提供方私有字段的接缝，宿主要加一个字段就得改适配器。要的是注册表这个形状，不是 DeepSeek 官方接口那套具体字段 |
+| `llm/plugin-package-inventory-deepseek` | 不需要 | 靠 cordis Loader 反查「当前进程装了哪些插件包」，再作为元数据附进官方 DeepSeek 请求。两个前置都没有：cordis 插件容器、官方接口 |
+| `llm/llm` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 | `llm/llm-deepseek` | 不需要 | 依赖 DeepSeek 官方接口，题目明确不走官方接口 |
 | `llm/llm-pi-ai` | 需要 | 通用多提供方适配器支持 OpenAI 兼容协议，服务自建本地推理 |
-| `llm/llm-retry` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `llm/llm-retry` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 | `llm/token-meter` | 需要 | token 测量与 session 投影单元，支持恢复历史对话 |
 
 ### `web/`（6）— 不需要 6
@@ -288,10 +359,10 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `skill/skill` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `skill/skill` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 | `skill/skill-badge` | 不需要 | 仅内置 DSH 标志资源，不服务五条前提 |
 | `skill/skill-filesystem` | 不需要 | 本地文件系统 skill 扫描，读写本地目录违反规则 |
-| `skill/tool-skill` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `skill/tool-skill` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 
 ### `interaction/`（5）— 需要 5
 
@@ -329,29 +400,31 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `core/agent` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `core/agent` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 | `core/agent-default-model` | **需要** | 记住默认用哪个模型：`currentSelection()` / `saveSelection()`，一份 `{provider, model, reasoningEffort}`，创建 agent 时没指定就用它。不装的话每开一个会话都得由调用方点名模型。**它自陈只有一项进程级默认值**，「每个会话的选择仍由入口负责」——多用户下「这个用户偏好哪个模型」是每人各自的，要在它上面按用户叠一层（和 `credentials` 同一个归属做法） |
-| `core/agent-loop` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `core/agent-loop` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 | `core/agent-tool-presentation` | **不需要** | 它的职责是在 `native` / `code` / `both` 三者里选一个。`code` 类模式要 `ctx.codeRuntime`（`code-runtime-worker-thread`，已判不要），所以只剩 `native` 一个可选值——而 `native` 本来就是 `dsh-tools` 的默认。一行插件选唯一值，等于不装 |
 | `core/scope` | 需要 | required.md 第二层第 3 组（前提 1 多用户）：`ScopedLayers`：全局层 + 作用域链，近的层盖远的层 |
-| `core/session` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
-| `core/system-prompt` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
-| `core/tools` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `core/session` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
+| `core/system-prompt` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
+| `core/tools` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 
-### `session/`（13）— 需要 10、不需要 3
+### `session/`（15）— 需要 11、不需要 4
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
+| `session/session-turn-outline` | **需要** | 整份日志的回合大纲投影（`turnOutline`）：每个回合一条，够客户端做全会话回合导航而不必拉整份日志。**零前置条件**——它是纯投影，输入是事件日志，输出是一个列表。我们的 `sessionlog/projection` 没有这个单元，而「几千轮的会话，客户端要能跳到第 300 轮」这件事在服务端比在单机 CLI 更要紧 |
+| `session/session-log-deepseek` | 不需要 | 把会话日志增量无损上传进 DeepSeek 官方请求的元数据字段。两个前置都没有：官方接口、`llm/deepseek-llm-api-extensions` 那套具体字段。**注意别和 `llm/deepseek-llm-api-extensions` 混了**——那个判了抄形状，要的是注册表形状；这个是往注册表里塞的一条具体内容 |
 | `session/session-checkpoint-policy` | 需要 | required.md 第二层第 2 组（前提 2/3/4 会话可恢复）：三个落盘点决定「崩在哪儿丢多少」 |
 | `session/session-persistence` | 需要 | required.md 第二层第 2 组（前提 2/3/4 会话可恢复）：接缝本身：`create/append/prepare/load/readFrom/list` |
 | `session/session-persistence-jsonl` | 不需要 | "项目目录保留规范化 cwd 的可读形式"、"平铺文件布局不加载"、"不删除会话文件"、"POSIX 需硬链接支持"——全部依赖本机文件系统与路径操作，消费方已决定用 Postgres 后端。 |
-| `session/session-persistence-sqlite` | 不需要 | "SQLite 会话存储后端"、"物理打包行存储"——服务端已定用 Postgres，此为本机 SQLite 实现。 |
+| `session/session-persistence-sqlite` | 不需要 | **上游已删**，是 7 个消失的包里唯一一个真删、没有继任者的——当前快照只剩 JSONL 一个落盘实现。原判："SQLite 会话存储后端"、"物理打包行存储"——服务端已定用 Postgres，此为本机 SQLite 实现。 |
 | `session/session-projection` | 需要 | required.md 第二层第 2 组（前提 2/3/4 会话可恢复）：事件日志投影成喂给模型的消息序列 |
 | `session/session-projection-cache` | 需要 | 文件明写"持久投影缓存"、"每会话一条记录"在 storage-domain 中落地，跨进程恢复投影状态直接服务"进程重启后活要跨天活下来"。 |
 | `session/session-stats` | **需要** | 每会话的 turn / step / token 计数投影。多用户服务里钱是平台的，而 `goal/*` 自陈不管预算——这是那个预算闸门的数据源 |
 | `session/session-telemetry` | **需要** | 遥测外发接缝（emit / flush / shutdown），零本机前置。DSH 那个往本机日志导出的实现不要，后端换成 OTLP over HTTP——和 `mcp` 只取 `streamable-http` 是同一条界线 |
 | `session/session-telemetry-otel` | 不需要 | "OpenTelemetry 后端"、"OTLP/HTTP 导出"纯粹向外部服务投递遥测，与服务端 agent 运行时无关。 |
-| `session/session-title` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `session/session-title` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 | `session/session-title-all-prompts-llm` | **需要** | 总结全部消息生成标题，质量更好、代价更高。和上一条是同一接缝的两个可选后端 |
 | `session/session-title-first-prompt-llm` | **需要** | 按首条消息生成会话标题。纯 `ctx.llm` 调用，零本机前置。默认走这条，最省 |
 | `session/session-title-llm` | **需要** | 三个标题提供方的共享策略与路由。`session/session-title` 在 DSH 主干挂载清单里，接缝没有实现方就是空的 |
@@ -387,7 +460,7 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `context/agent-instructions` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`examples/agent-spine-demo`），作者定义的「跑一个 agent 最少要装什么」 |
+| `context/agent-instructions` | 需要 | required.md 第二层第 1 组：DSH 自己的主干挂载清单（`bundle/base/cordis.patch.yml` 与 `bundle/sdk-minimal`），作者定义的「跑一个 agent 最少要装什么」 |
 | `context/file-reference` | 不需要 | "@file 语法"、"文件补全查询"依赖工作区文件导航，但服务端"不开放本机资源"禁止 agent 访问文件系统。 |
 | `context/file-reference-local` | 不需要 | "本地文件系统实现"明确"工作区索引"、"cwd 为根目录"依赖本地文件系统遍历，违反"服务端不开放本机资源"。 |
 | `context/session-reference` | 需要 | "@[label](uri) 跨会话 mention"、"prepare/listCandidates"直接支撑多 agent 协作时对其他会话上下文的注入，服务前提 5。 |
@@ -398,7 +471,7 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `host/apiproxy` | **抄形状** | 会话管理 / 历史分页 / 投影推送 / 待处理队列 / 后台任务——这份方法清单就是对外 API 的形状，值得照抄；但 DSH 的实现绑在 cordis Remote 上，不移植 |
+| `host/apiproxy` | **抄形状** | **上游已删**，拆成 `api/` 底下三个控制器，裁决已继承过去（见 `api/` 那一组）。原判：会话管理 / 历史分页 / 投影推送 / 待处理队列 / 后台任务——这份方法清单就是对外 API 的形状，值得照抄；但 DSH 的实现绑在 cordis Remote 上，不移植 |
 | `host/directory-picker` | **不需要** | 本机目录选择能力，服务端不开放本机资源。DESIGN.md 第六节已删 `dirpicker/` |
 | `host/directory-picker-auto` | **不需要** | 只是在上面两个后端之间选，两个后端都不要，它没有可选对象 |
 | `host/directory-picker-browse` | **不需要** | 同上；`host.listDirectory/createDirectory` 直接读写服务器磁盘。DESIGN.md 第六节已删 `dirbrowse/` |
@@ -407,19 +480,25 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 | `host/plugin-inventory` | **不需要** | cordis 插件加载状态的只读投影，我们不要 cordis 那个容器 |
 | `host/webserver` | **不需要** | DSH 的 HTTP/upgrade 路由注册与端口绑定。DESIGN.md 第六节已删 `webserver/` |
 
-### `boot/`（2）— 需要 1、不需要 1
+### `boot/`（2）— 不需要 2
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `boot/app-boot` | 需要 | 启动路径、环境加载、故障处理、Profile机制。五条前提都需要：多用户共享启动配置、恢复冷会话需要环境加载、跨进程重启需要Profile持久化。 |
+| `boot/app-boot` | **不需要** | **本轮改判，原判「需要」。** 改的理由不是 DSH 变了，是这一行和符号账本打架：`portmap.tsv` 里这个包 66 个符号**全部** `GO_NATIVE`，理由写的是「cordis Loader 的启动胶水，Go 里这件事是 main() 里写构造函数」。原来那条「需要」给的是五条前提的泛论，没落到任何一个符号上。见第五节 |
 | `boot/cmdline` | **不需要** | 桌面启动器的命令行参数注入（`ctx.cmdlineArgs` / `ctx.appExit`），服务端的入参走 HTTP 不走 argv |
 
-### `bundle/`（3）— 抄形状 3
+### `bundle/`（6）— 抄形状 6
+
+**`examples/` 删掉之后，这一支成了装配顺序的唯一出处。** 每个 bundle 都是一份
+`cordis.patch.yml`，按 id 列着装什么、配什么，代码只有几十行——**值钱的是那份 yml，不是代码**。
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `bundle/base` | **抄形状** | 共享核心插件行。要抄的是装配顺序，不是这个 bundle |
-| `bundle/headless` | **抄形状** | DSH 自陈的第二份「最小可跑」定义，见下文「怎么抄」第二节 |
+| `bundle/base` | **抄形状** | 共享核心插件行，**86 行有序挂载**，是当前快照里最全的一份装配清单。要抄的是这份顺序，不是这个 bundle。见第 2.1 节 |
+| `bundle/sdk-minimal` | **抄形状** | **当前快照里唯一一份作者亲口说「完整」的最小树**：自陈「不叠在 dsh-base 上，这一份 insert 就是完整的 Cordis 树」，33 行。它顶替了已删的 `examples/agent-spine-demo`，而且比后者硬——示例应用可以省事，这个是真跑的 profile |
+| `bundle/sdk-app` | **抄形状** | SDK 的 stdio JSON-RPC 进程外壳，90 行。顶替已删的 `examples/jsonrpc-demo`。我们走 HTTP 不走 stdio，要的只是「协议服务端 + 进程生命周期」这两件的分界 |
+| `bundle/acp-app` | **抄形状** | ACP 的 stdio 外壳，76 行。顶替已删的 `examples/acp-demo`。patch 里有一条值得记：它**显式关掉 `session-title-llm`**——自动化场景不该为起标题额外烧一次模型调用 |
+| `bundle/headless` | **抄形状** | DSH 自陈的第二份「最小可跑」定义，见第 2.1 节 |
 | `bundle/web-app` | **抄形状** | 浏览器表层组合，里面挂的 webserver / web-runtime 都判了不需要 |
 
 ### `extensions/`（4）— 不需要 4
@@ -431,12 +510,12 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 | `extensions/tool-cordis` | **不需要** | 让模型在运行时定义并执行插件（`cordis_define` / `run`），正是我们判掉的那件事：执行任意代码的前置是沙箱 |
 | `extensions/ui-cordis` | 不需要 | 浏览器侧cordis UI面板。"覆盖整个框架的面板"、"shell.overlay条目"、"卡片在对话流里"——全是DSH Web桌面UI的表现层。你说有自己前端且无桌面UI，这整个包是Web exclusive。 |
 
-### `hooks/`（3）— 需要 1、不需要 2
+### `hooks/`（3）— 不需要 3
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `hooks/hook-protocol` | 需要 | 共享hook原语库。"Matcher校验、Hook执行、输出解码、脱离运行追踪"——这些是无前端依赖的纯协议原语，被hook-claude-code和hooks-codex导入。Hook本质是"agent进程中特定点执行用户脚本"的能力。虽然条目没提multi-agent/恢复，但hook作为可选extension不违反前提，且两个方言桥可能有不同需求。 |
-| `hooks/hooks-claude-code` | **不需要** | Claude Code hook 方言桥。接缝 `hooks/hook-protocol` 已定为需要，两个方言实现不要——它们各自只映射对方产品的钩子点 |
+| `hooks/hook-protocol` | **不需要** | **本轮改判，原判「需要」。** 改的理由和 `boot/app-boot` 那条一样：这一行和符号账本打架，而且打不过。`portmap.tsv` 里这个包 49 个符号**全部** `OUT_OF_SCOPE`，`docs/DESIGN.md` 第四节也早写了「整包出局」——只有这一行还是「需要」。读源码后符号账本是对的：`src/runner.ts` 第一句就 `import type { ShellExecutor } from '@deepseek-ai/dsh-shell'`，整个包的动作是**经 `ctx.shell` 在本机跑用户写的命令**；`types.ts` 的 `HookDialect` 和 `matcher.ts` 的 `MatcherMode` 都只有 `'claude-code' \| 'codex'` 两个取值，`codec.ts` 解的是这两个产品的 `hookSpecificOutput`。`shell/*` 全族已因「服务端不提供沙箱」出局，执行器随之没有；两个消费方也已出局。原判给的是「hook 作为可选 extension 不违反前提」的泛论，没落到任何一个符号上 |
+| `hooks/hooks-claude-code` | **不需要** | Claude Code hook 方言桥，只映射对方产品的钩子点 |
 | `hooks/hooks-codex` | **不需要** | Codex hook 方言桥，同上 |
 
 ### `settings/`（2）— 需要 1、不需要 1
@@ -465,17 +544,34 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 |---|---|---|
 | `workspace/workspace` | 需要 | 工作区实体注册表，前提1多用户会话组织 |
 
+### `webhook/`（2）— 需要 1、抄形状 1
+
+**上游新增的一支，而且它是少见的「服务端正命题」——DSH 其余部分都在假设有人坐在屏幕前，
+这一支假设的正好相反：外部事件到了，没有人在场，自动开一个会话把活干了。**
+
+| 包 | 裁决 | 理由 |
+|---|---|---|
+| `webhook/webhook` | **需要** | 规则运行时：一条规则把「什么外部事件」映射到「用哪个工作区、哪个预设、哪个模型、哪套权限，开一个会话跑什么提示词」，fire-and-forget。**零本机前置**，需要的东西（`workspace`／`agent-presets`／`agent-default-model`／`permission-presets`／`session-title`）我们全有。这是一块实打实的缺口：现在的运行时只能被人从协议层叫醒 |
+| `webhook/webhook-github` | **抄形状** | GitHub 的签名校验与事件路由。要抄的是形状（HMAC 验签 → 解事件 → 交给规则运行时），不是这个包——它绑在 `host/webserver` 上，而本仓库不强制宿主用哪个 HTTP 框架。凭据取用要挂到 `credentials` 的归属校验上，理由同 `mcp/mcp-client` 那条 |
+
 ### `acp/`（1）— 需要 1
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
 | `acp/acp` | 需要 | 可创建新会话、接收提示词、返回已提交答案。5条前提都适用：多用户（一个连接多会话）、恢复（跨重启会话持久化）、中途离开（连接关闭重新取消）、跨天运行（可创建新会话）、多agent协作（subagent-acp生产客户端）。"已提交答案"与无逐token实时数据一致与设计。 |
 
-### `api/`（2）— 抄形状 2
+### `api/`（5）— 抄形状 5
+
+**这一支是已删的 `host/apiproxy` 拆出来的。** 原来那一个包判了抄形状，理由是
+「会话管理／历史分页／投影推送／待处理队列／后台任务——这份方法清单就是对外 API 的形状」。
+现在同一份清单拆成三个控制器，裁决跟着继承：**要的是方法表和状态传输的形状，不是 cordis Remote 的实现**。
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
-| `api/gateway` | **抄形状** | Host 侧注册业务能力 + Client 侧挂生成的贡献项，是协议形状；实现绑在 cordis 上 |
+| `api/session-controller` | **抄形状** | 三个里最重的一个（7299 行 / 32 文件），会话控制面的完整方法表：create／resume／prompt／fork／rename／list／search／cancel／select-model／update-queue，外加历史分页（`SessionPage`／`SessionChunkRun`）和实时投影推送（`ProjectionsBaseline` + 增量）。**「baseline + 增量」这个形状是要点**：客户端断线重连时先要一份基线再续增量，不是从头重放整份日志。我们的 `protocol/sdk/sdkserver` 现在只有 prompt 一条路径，这份方法表是缺口清单 |
+| `api/settings-controller` | **抄形状** | 设置与凭据的远程属主。**要的是「脱敏读」这一条**：凭据能被列出、能被引用、但读回来是打码的。我们的 `credentials` 有归属校验，没有这条读路径 |
+| `api/workspace-controller` | **抄形状** | 工作区的远程命令与**断线重连安全**的状态传输（`WorkspaceBaseline` + `WorkspaceFollowSink`）。同样是 baseline + 增量的形状。它依赖的 `host-directory-picker` 是本机目录选择框，那一半不要 |
+| `api/gateway` | **抄形状** | Host 侧注册业务能力 + Client 侧挂生成的贡献项，是协议形状；实现绑在 cordis 上。**体量从 1406 涨到 4381 行**，重看结论见第五节 |
 | `api/remotes` | **抄形状** | 双侧 BFF 与身份解析，同上 |
 
 ### `sdk/`（3）— 需要 2、抄形状 1
@@ -486,15 +582,22 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 | `sdk/protocol` | 需要 | JSON-RPC wire format与协议类型定义。"按换行分帧的JSON-RPC 2.0、协议方法表(initialize/session/prompt/shutdown、session.event/status/subagent*)、错误响应"。这是你server与client的契约，所有多frontend都经过这套协议。 |
 | `sdk/server` | 需要 | JSON-RPC服务器插件。"通过stdio提供JSON-RPC、initialize等待树加载完成、session/prompt排队、shutdown刷新退出、session.event流式发出、session.status全局转换"。你的服务进程必须expose协议——要么自己实现，要么用这个插件。条目"自动挂载适配器仅支持DeepSeek"是可配项，不是hard barrier。 |
 
-### `client/`（40）— 不需要 40
+### `client/`（45）— 不需要 45
+
+整支的前置都是浏览器。五个新包不改变这一点，逐行列出只为让「一个都没漏判」看得见。
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
+| `client/store` | 不需要 | React-free 的可观察快照存储契约，底下是 Zustand/Immer。前置是浏览器 |
+| `client/ui-approval` | 不需要 | 浏览器审批面板，答宿主的权限请求。审批**接缝**在 `interaction/user-approval`，已判需要；这是它的浏览器表现层 |
+| `client/ui-chat` | 不需要 | 浏览器聊天界面，9167 行 / 70 文件，是 `client/` 里最大的一个。渲染会话对话节点、详情、历史图片、滚动位置 |
+| `client/ui-schedule` | 不需要 | 会话头部那个只读的定时提醒目录。`feature/schedule` 已判需要，这是它的浏览器表现层 |
+| `client/ui-session` | 不需要 | 会话控制器的 React 适配器与会话作用域插槽。**和已删的 `client/runtime` 是同一件事**——上游把它拆成了这个加 `client/store` |
 | `client/connection` | 不需要 | 浏览器 HTTP POST 与双条只下行 WebSocket、Host 头信任栅栏 |
 | `client/hmr` | 不需要 | 浏览器订阅 SSE 通道接收 rebuilt 帧，React 状态重载 |
 | `client/locale` | 不需要 | 浏览器 navigator 语言、DSH_HOME/settings.yaml 仅限桌面 UI |
 | `client/modules` | 不需要 | window.__ModuleLoader__ bundle 物化属浏览器侧模块加载 |
-| `client/runtime` | 不需要 | SlotRegistry 与 SessionRuntime 拥有 Session，client-side 投影消费 |
+| `client/runtime` | 不需要 | **上游已删**，拆成 `client/store`＋`client/ui-session`，两个都还是浏览器。原判：SlotRegistry 与 SessionRuntime 拥有 Session，client-side 投影消费 |
 | `client/ui-agent-preset` | 不需要 | chip 选择与设置页属 UI，preset 打开操作驱动宿主桌面 |
 | `client/ui-attachment` | 不需要 | 图片缩略图、灯箱预览、拖放遮罩属浏览器 DOM/React 交互 |
 | `client/ui-brand-official` | 不需要 | 填充 sidebar.brand 与 conversation.hero.brand 占位者属 UI |
@@ -575,10 +678,11 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 | `terminal/terminal-bash` | 不需要 | PTY后端实现（2220-2231），启动交互bash PTY，违反硬约束 |
 | `terminal/tool-terminal` | 不需要 | 终端工具（2237-2244），提供6个交互式终端工具，违反硬约束 |
 
-### `subprocess/`（2）— 不需要 2
+### `subprocess/`（3）— 不需要 3
 
 | 包 | 裁决 | 理由 |
 |---|---|---|
+| `subprocess/win32-process` | 不需要 | Win32 的进程、stdio 和 Job Object 底层原语，给 Windows ACL 沙箱用。三重前置全缺：本机进程、Windows、沙箱 |
 | `subprocess/subprocess` | **不需要** | 起进程。沙箱：执行命令/代码/终端的前置是沙箱，服务端不提供沙箱（消费方裁定）
 | `subprocess/subprocess-local` | 不需要 | 本地子进程实现（2191-2198），启动本机子进程，违反硬约束 |
 
@@ -606,3 +710,169 @@ DSH 走的是 stdio（子进程驱动），我们走 HTTP——**换的是承载
 | `e2b/fs-e2b` | 不需要 | E2B文件系统实现（1767），虽非本机但向E2B远程服务读写，五条前提不要求文件系统 |
 | `e2b/subprocess-e2b` | **不需要** | E2B 远程沙箱的子进程实现，五条前提不要求子进程 |
 
+
+## 五、体量漂移的 10 个包重看（2026-09-04）
+
+第零节点出 28 个包体量变化超过四分之一，其中 **10 个当初判了要**（需要 7＋抄形状 3）。
+这一节是那 10 个的重看结果。
+
+**方法是比导出面，不是比行数。** 拿 `dsh-capabilities.md` 的上一版和这一版对着比
+**导出的类与接口**——行数涨了不代表长出新能力，测试、注释、内部拆文件都会让它涨。
+只有导出面变了，才说明作者对外承诺的东西变了。
+
+| 包 | 老→新 | 导出面 | 结论 |
+|---|---|---|---|
+| `session/session-projection` | 559→734 | **没变** | 原判不动 |
+| `attachment/attachment` | 385→484 | **没变** | 原判不动 |
+| `bundle/headless` | 237→309 | **没变** | 原判不动 |
+| `sdk/client` | 952→1201 | ＋2 | 涨的正是原判排掉的那块，原判更站得住 |
+| `api/gateway` | 1406→4381 | ＋29 | 同上 |
+| `boot/app-boot` | 1298→1756 | ＋2 | **改判**，但改的理由和漂移无关 |
+| `acp/acp` | 847→1854 | ＋6 | 原判不动；揪出 5 行账本错记 |
+| `subagent/tool-subagent` | 506→1257 | ＋5 | 原判不动；是一处真缺口 |
+| `llm/token-meter` | 1027→1478 | ＋5 −1 | 原判不动；是两处真缺口 |
+| `preset/agent-presets` | 1684→2495 | ＋7 −6 | 原判不动；**减掉的 6 个我们已经抄了** |
+
+### 5.1 三个包白涨，一个符号没多
+
+`session/session-projection`、`attachment/attachment`、`bundle/headless` 三个包体量涨了
+四分之一到三分之一，导出的类和接口**一个没加也一个没减**。涨的全在包内部。
+它们的原判依据是导出面，导出面没动，判断就没有重看的余地。
+
+### 5.2 两个包涨的正好是原判排掉的那一半
+
+- `sdk/client` 多出 `DshNodeLaunch` 和 `RuntimeProcessOptions`——「起一个 node 子进程来跑运行时」。
+  原判「抄形状：子进程驱动这件事我们不做」排掉的就是这块，它长大了不改变我们没有本机进程这件事。
+- `api/gateway` 多出一整层远程事件流复用（`RemoteStreamMuxClient`／`RemoteStreamMuxServer`／
+  `RemoteJournalStream`／`RemoteSnapshotStream` 等 29 个符号），实现仍然绑在 cordis 上。
+  原判「抄形状」指的就是「协议形状抄、cordis 实现不抄」，多出来的这层照样落在形状那一侧。
+
+两条原判不但不翻，证据比原来更足。
+
+### 5.3 重看真正揪出来的：两处账本自相矛盾
+
+漂移本身一条判断都没翻。但为了核对漂移，把这 10 个包的符号行逐条读了一遍，
+撞出两处**账本内部打架**——这两处和 DSH 变没变无关，是我们自己的记录出了错。
+
+#### （1）`acp/acp` 有 5 行写着「我们没做」，其实做了
+
+| 符号 | `portmap.tsv` 现在写的 | Go 里实际在哪 |
+|---|---|---|
+| `AcpMcpConfigError` | SKIP：「按会话 MCP 服务器整体不承诺」 | `protocol/acp/mcp.go` 的 `MCPConfigError` |
+| `mountAcpMcpServers` | SKIP：「不承诺按会话挂载 MCP」 | `protocol/acp/mcp.go` 的 `MountMCPServers` |
+| `AcpModelConfigError` | SKIP：「一个会话配置项都不摆」 | `protocol/acp/modelcontrol.go` 的 `ModelConfigError` |
+| `AcpModelControl` | SKIP：「模型路由固定在构造时，运行期不可改」 | `protocol/acp/modelcontrol.go` 的 `ModelControl` |
+| `ResumeAcpSessionOptions` | SKIP：「不声明 `sessionCapabilities.resume`」 | `Bridge.ResumeSession` |
+
+这 5 行的理由列还在说 `SetSessionConfigOption` 回 `MethodNotFound`、`resume` 能力不声明，
+而 `protocol/acp/bridge.go` 现在两样都声明了，`Bridge.SetSessionConfigOption` 也真的在改配置项。
+**这 5 行的出处路径写的还是 `acp/acp/...`**，那是 `protocol/` 那次搬家之前的坐标——
+写下它们的时候是对的，后来我们把活干了，账本没跟上。
+
+**这类错比漏判更糟。** 漏判是「有个坑」，这类是「账本说有坑，其实没有」——照着它走，
+会有人去做一件已经做完的事，做完发现重了，然后开始怀疑整张表。
+
+处置：这 5 行改 `PORTED` 并填 `go_ref`。
+
+#### （2）`boot/app-boot` 的包级裁决和它 66 个符号全反着
+
+包级写着「需要：启动路径、环境加载、故障处理、Profile 机制」，而 `portmap.tsv` 里这个包
+**66 个符号全部 `GO_NATIVE`**，理由一致写着「cordis Loader 的启动胶水……Go 里这件事是
+main() 里写构造函数，编译期就查得出来，不需要包」。
+
+哪一边对？符号那边。它落到了具体的 `node:fs`／`~/.dsh/profiles`／`process.exit(1)`／
+cordis Loader 上；包级那条给的是五条前提的泛论，没落到任何一个符号。而且我们的
+`harness/` 底下确实一个 profile 机制都没有，也不打算有——装配在宿主的 `main()` 里。
+
+处置：包级改判「不需要」，本节表头计数已跟着改（需要 85→84，不需要 141→142）。
+
+### 5.4 顺带确认的三处真缺口
+
+漂移不改裁决，但它让三块「包要、包里缺一角」的地方浮出来。三处在 `portmap.tsv` 里
+都已经有行、有理由、有补的入口——不是新发现，是这一轮把它们从几千行里捞出来点了名，
+好让第一步那张能力覆盖表的「缺口说明」列有东西可写。
+
+| 缺口 | DSH 出处 | 我们现在有的 | 补的入口 |
+|---|---|---|---|
+| 子 agent 的模型选择授权表 | `subagent/tool-subagent` 的 `model-selection*.ts` 共 21 个符号 | `descriptor.go` 上的 `AgentProvider`／`AgentModel` 是装配期定死的：模型自己挑不了，也没有一张「许挑哪几条路由」的授权表 | 三处一起：工具 schema 加 provider／model／reasoning_effort 三个字段；授权表以 `subagent/model-selection-policy` 事件进日志（只进日志、不进模型历史）；配一个投影单元读回来 |
+| 单回合精确用量 | `llm/token-meter` 的 `deriveTurnTokenUsage` | `feature/tokenmeter` 是整份日志**累计**，同一 turn/step 的重复采样 last-wins，切不出「这一个回合花了多少、走了哪几条路由」 | `feature/tokenmeter` 加一个吃 `turn/start`..`turn/end` 事件切片的纯函数 |
+| 路由感知的图片计价 | `llm/token-meter` 的 `priceSurface` ＋ `llm` 的 `LlmImageRequestPricing` | 图片按固定启发式估价，`llm` 包里根本没有计价这条接缝 | `llm` 加一个图片计价接口，`feature/tokenmeter` 按路由把图片节点重估一遍 |
+
+### 5.5 反向的那一类：我们抄了上游已经删掉的东西
+
+`preset/agent-presets` 是这 10 个里唯一**减了导出面**的：上游删掉 6 个符号，我们其中 5 个
+已经抄过来了，而且账本上是 `PORTED`。
+
+| 上游删掉的 | 我们这边 |
+|---|---|
+| `InvalidPresetIdError` | `agentpresets.InvalidPresetIDError` |
+| `PresetExistsError` | `agentpresets.PresetExistsError` |
+| `PresetMountError` | `agentpresets.PresetMountError` |
+| `PresetNotWritableError` | `agentpresets.PresetNotWritableError` |
+| `UnknownPresetError` | `agentpresets.UnknownPresetError` |
+| `PresetBearingSession` | 判的 `GO_NATIVE`，本来就没抄 |
+
+`llm/token-meter` 的 `SurfaceTokenFold` 同理，我们抄成了 `tokenmeter.surfaceTokenFold`。
+
+**这不是错误，抄的那一刻上游有。** 账本也已经记着了：这几行的 `kind` 列是
+`STALE:class`／`STALE:reexport`，意思是「机器清单里已经没有这个符号，但这一行不删」。
+全表这样的行有 **1423 条**，其中 **34 条的裁决是 `PORTED`**——那 34 条才是要逐条看的：
+它们说的是「我们抄了一个上游已经没有的东西」。
+
+**看不等于删。** `PresetMountError` 这一类我们自己在用，上游删掉它是因为上游那边的调用点
+没了，不是因为这个概念错了。要判的是「我们这边还需不需要它」，答案多半是需要。
+
+### 5.6 那 34 条逐条看完了（2026-09-04）
+
+**结论先说：34 条里只有 3 条真是「上游没了」，其余 31 条是账本坐标过期。**
+上一节把这 34 条整体叫「我们抄了上游已经删掉的东西」，看完之后这个说法太粗——
+`STALE` 的含义是「按记着的坐标找不到」，而找不到有六种原因，只有最后一种才是真删。
+
+做法：拿这 34 行的符号名，先在它自己那个包的 `src` 里搜，搜不到再搜整个 250 包快照，
+再搜不到才判真删。
+
+| 情形 | 行数 | 说明 | 该怎么办 |
+|---|---|---|---|
+| **A. 符号还在原包，只是换了文件** | 10 | `core/agent` 的 `Agent`、`credentials` 的 `CredentialInfo`、`session-title` 六个、`subagent` 的 `SubagentListEntry` 两行 | 重挂坐标，跟 NOT_FOUND 1805 条同一批活 |
+| **B. 符号搬去了别的包** | 2 | `TodoItem` 从 `core/session` 搬到 `todo/tool-todo`；`deepEqualJson` 从 `settings` 搬进新包 `util/values` | 重挂到新包 |
+| **C. 改名或换形态，概念没变** | 4 | `CallId`→`ToolCallId`；`OFFLOADED_IMAGE_TEXT` 从常量变函数 `offloadedImageText()`；`offloadRequestImages`→`offloadRequestImagesWithPolicy`；`settingsNamespace` 变成私有的 `parseSettingsNamespace` | 重挂到新名 |
+| **D. 上游取消公共导出，下放给各消费方各写一份** | 1 | `isTokenDelta`：`llm/llm` 不再导出，`session/session-stats` 和 `client/ui-trajectory` 各自留了一份私有的 | 保留我们的 `llm.IsTokenDelta`，见下 |
+| **E. 上游换了整套形状** | 14 | `agent-presets` 五个错误类加 `resolveSessionPreset`（各 class／reexport 两行，共 12 行）、`PERSONA_ORDER`、`UserQuestionProvider` | 要判，见下 |
+| **F. 全快照无继任者，真没了** | 3 | `tokenmeter` 的 `SurfaceTokenFold` 与 `foldSurfaceTokens`；`plan-mode` 的 `foldPlanMode` | 要判，见下 |
+
+**A、B、C 共 16 行不是分歧，是坐标过期**，和 reanchor 那 1805 条是一回事，
+下一轮重挂坐标时一起清。这一节不动它们。
+
+#### 剩下 18 行的判断
+
+**D · `llm.IsTokenDelta` 留着。** 上游把它从 `llm/llm` 的公共导出撤下来，改成两个消费方
+各自私有一份。那是 TypeScript 单仓库内部的整理——两处复制在 monorepo 里不痛。
+我们这边 `llm` 是**契约包**，「一个流式分片算不算 token 增量」是契约语义不是消费方细节，
+放契约里只有一份定义。**不跟这次下放。**
+
+**E · `agent-presets` 五个错误类留着，这是 Go 与 TS 的错误模型之差。**
+上游现在统一抛 `RemoteError<'agent-preset/read-only'>` 这种**带字符串码的单一类型**。
+Go 里对应的做法是 `errors.Is` / `errors.As` 配具名类型，字符串码要靠比字符串——
+`internal/devtools` 那几个门禁里没有一条能防住拼错的字符串码，具名类型编译期就挡住了。
+**五个类型不合并。**
+
+**E · `resolveSessionPreset` 留着。** 上游把它折进了 `agentPresetProjectionDefinition`，
+包外不再看得见这个函数。折进投影是 cordis 投影模型的做法；我们这边「按会话解析出该用哪个
+预设」是 `webhook`、`subagent`、会话创建三处共同的入口，**收成私有会让它们各写一遍**。
+
+**E · `PERSONA_ORDER` 与 `UserQuestionProvider` 两条要跟。**
+前者上游拆成了 `PERSONA_SECTION` 常量加 `SECTION_ORDERS` / `CONTEXT_ORDERS` 两张序表——
+从「一个写死的顺序」变成「一组具名顺序，装配时挑一个」，这是能力变强，该跟。
+后者上游从 `Provider` 接口改成了 `UserQuestionService` 服务类，形状变了，**但那是 cordis
+服务模型**，我们没有 cordis，接缝仍按 Go 惯例定在使用方。**跟它的能力，不跟它的载体。**
+
+**F · 三条真没了，全部留着。**
+`SurfaceTokenFold` / `foldSurfaceTokens` 是把多路 token 计数折成一份面向展示的汇总；
+上游删它是因为它的调用点在 `client/` 的展示层，那一支我们整支不要，**但服务端要
+按会话汇总用量**（`session-stats` 是预算闸门的数据源，第三节写过），所以这个折叠本身要。
+`foldPlanMode` 上游现在只剩测试文件里的一个私有 helper，`src` 不再导出；
+我们的 `planmode.FoldMode` 是从事件流判「当前是不是计划模式」，那是运行期要答的问题，留。
+
+**这 18 行的裁决不变，全部维持 `PORTED`。** 变的是理由：从「抄的那一刻上游有」
+变成「看过继任者了，我们这边有不跟的理由」。理由写在这一节，不逐行改 `portmap.tsv`——
+`kind` 列的 `STALE` 是机器算出来的事实，不该手改。

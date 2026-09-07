@@ -35,6 +35,15 @@
 
 - 这些工具不提供持久化、压缩、日志采样或分布式 deadline 协议。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 轻依赖保留库，为工具提供有界面向模型输出 | `util/output-retention` | 需要 | `feature/outputretention` | — |
+| 零依赖超时时序与分类纯函数库 | `util/timeout` | 需要 | `feature/timeout` | — |
+
 ## 相关源码
 
 - `feature/outputretention/`

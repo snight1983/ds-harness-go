@@ -719,6 +719,25 @@ flowchart TB
 
 ---
 
+## 对应的 DSH 能力
+
+本篇是汇总文档，下表是它覆盖的各篇详细模块文档的并集，由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) join 得到。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 事件溯源的会话日志和内存存储，为agent保留全部交互历史 | `core/session` | 需要 | `sessionlog` | — |
+| 在模型适配器前与工具正文前为事件溯源会话创建检查点，持久化前一响应与工具结果 | `session/session-checkpoint-policy` | 需要 | `feature/checkpointpolicy` | — |
+| 会话持久化能力接缝，定义会话事件存储、加载与列表接口 | `session/session-persistence` | 需要 | `feature/persistence` | — |
+| 会话投影Service Definition与驱动注册表，对已提交事件驱动客户端读模型 | `session/session-projection` | 需要 | `sessionlog/projection` | — |
+| 持久投影缓存，把投影单元状态保存为检查点 | `session/session-projection-cache` | 需要 | `feature/projectioncache` | — |
+| 折叠会话日志事件为step计数、轮数、LLM时间、工具时间等数字 | `session/session-stats` | 需要 | `feature/sessionstats` | — |
+| 遥测Service Definition，捕获会话记录传给上报后端 | `session/session-telemetry` | 需要 | `feature/telemetry` | — |
+| 日志支持的会话标题，提供确定性回退与可选异步提供方 | `session/session-title` | 需要 | `feature/sessiontitle` | — |
+| 通过LLM总结所有用户消息的会话标题提供方 | `session/session-title-all-prompts-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
+| 通过LLM总结第一条用户消息的会话标题提供方 | `session/session-title-first-prompt-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
+| 模型支持的会话标题提供方共享实现 | `session/session-title-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
+| 无损 JSON 校验、分离式快照、深度冻结、JSON 结构相等与封闭联合的穷尽失败 | `util/values` | Go 已有等价物 | `sessionlog` | 整包在防 JS 对象图的危险（伪造原型、取值器、稀疏数组、环、-0、非有限数），Go 里要么不存在要么 encoding/json 自己就拒。逐条对照写在 sessionlog/doc.go |
+
 ## 相关源码
 
 | 路径 | 内容 |

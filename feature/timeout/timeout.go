@@ -33,6 +33,18 @@
 // 可观察的归类行为没有变：清理之后 Of 返回 nil，也就是「不是超时」，
 // 和 DSH 那条测试断言的 timeoutOf(d.signal) === undefined 一致。
 // 变的只是 ctx.Done() 会闭合——而在 Go 里，作用域退出时 defer cancel() 本来就是对的。
+//
+// # 不做什么
+//
+//   - **不终止任何东西。**它只把一个可归因的原因挂到取消上、再认回来；真正停下手上
+//     的活是各个能力自己的事。
+//   - **不决定期限是多少。**代号和时长由调用方给。「工具声明了 timeoutMs 就照着强制
+//     执行」那条策略在 [github.com/snight1983/ds-harness-go/feature/guard/timeoutpolicy]。
+//   - **不重试。**认出一次超时之后重不重、退避多久、算不算失败，都是调用方的判断。
+//   - **不提供跨进程的期限协议。**这里的一切都在一个 [context.Context] 树里，把
+//     deadline 传给另一个进程不在范围内。
+//   - **没有可注入的时钟。**计时走的是 [time.AfterFunc] 的真实时钟，没有留一个换掉
+//     它的口子。
 package timeout
 
 import (

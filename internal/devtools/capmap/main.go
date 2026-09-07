@@ -22,6 +22,17 @@
 // 前提下动笔的地方。
 //
 // 输出同样逐字节可复现，理由和导出清单一样：清单被人改过就是可检测的。
+//
+// # 不做什么
+//
+//   - **不是门禁。**它只产清单，一次都不判红；拿它的输出当阻断判据是错的，
+//     真正阻断的是 internal/devtools/portcheck 的 check 模式。
+//   - **不抽导出符号清单。**「这个函数抄了没有」那一份由 internal/devtools/portmap 出，
+//     两份清单回答的不是同一个问题。
+//   - **不裁决。**某条能力抄不抄、抄到了哪儿，写在裁决表里，由 internal/devtools/rule
+//     填、由 internal/devtools/portcheck 验。
+//   - **不替包作者概括。**description 和 README 第一段有则抽、没有就空着，不替它编。
+//   - **不读 Go 侧源码。**它只看 DSH 快照，Go 里有没有对应物不归它答。
 package main
 
 import (

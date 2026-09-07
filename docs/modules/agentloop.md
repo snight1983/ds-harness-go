@@ -68,7 +68,7 @@ flowchart TD
 
 ---
 
-## 回合和步骤
+## 架构：回合和步骤
 
 这是理解整个包的坐标系。
 
@@ -466,6 +466,14 @@ flowchart LR
 - **不给模型交代工作目录。** 服务端没有硬盘也没有目录这个概念，`deepseek-harness-dsh-v0.1.2-alpha.3` 那个工作目录变量在这里有意不移植——跟模型说有就是撒谎。
 
 ---
+
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| agent唯一具体实现和循环驱动器，驱动会话、轮次和步骤的生命周期 | `core/agent-loop` | 需要 | `harness/agentloop` | — |
 
 ## 相关源码
 

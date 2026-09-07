@@ -191,6 +191,15 @@ flowchart LR
 
 ---
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 为新建agent提供部署级的默认模型选择 | `core/agent-default-model` | 需要 | `harness/agentdefaultmodel` | — |
+| 用户设置Service Definition，管理按namespace分节的schema默认值、组合base与用户层解析 | `settings/settings` | 需要 | `harness/agentdefaultmodel` | — |
+
 ## 相关源码
 
 | 路径 | 内容 | 行数 |

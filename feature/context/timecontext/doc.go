@@ -105,4 +105,20 @@
 // 边界会让 [PrecedingStepContextTime] 跨过回合去取基线，而那是一段**静默**
 // 错掉的耗时——模型会读到一个看起来很正常、实际上把用户离开的几个小时算进去的
 // 数字，没有任何地方会报错。
+//
+// # 不做什么
+//
+//   - **不是调度器。**它只往对话里落一条读数给模型看；到点要发生一件事归
+//     [github.com/snight1983/ds-harness-go/feature/schedule]。
+//   - **不猜时区。**时区由 [Config.TimeZone] 传进来，缺省是 [DefaultTimeZone]。
+//     服务端没有「当前用户的浏览器」，DSH 那套按本回合用户消息重推时区的东西
+//     连同它的 mixed / missing 两条分支一起没有对应物。
+//   - **不 import time/tzdata。**往每个依赖方的二进制里塞四百多 KB 时区数据不是一个库
+//     该替人做的决定；缺省那条路压根不碰文件系统。
+//   - **不自己往日志里写。**读数是步骤准入决定里的一条消息，真正把它追加在
+//     `step/start` 之后的是 [github.com/snight1983/ds-harness-go/harness/agentloop]。
+//   - **不接不变量注册表。**[ValidateSession] 在这里写完了，把它接进
+//     [github.com/snight1983/ds-harness-go/invariants] 是装配方的事。
+//   - **不因为算不出耗时就拦下步骤。**读日志失败时记一行警告原样放行，
+//     也不退而求其次去注一条基线可疑的读数——那句耗时会被模型当成事实。
 package timecontext

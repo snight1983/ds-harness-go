@@ -100,4 +100,20 @@
 // 里那次 [SeedCoversPrefix] 失败和 [Coordinator.loadLiveSnapshot] 里那次
 // [github.com/snight1983/ds-harness-go/sessionlog.InterruptedTurnClosers] 失败（两者都要求一条负载
 // 排不出去／解不回来的事件，而它们进不了一个活会话）。
+//
+// # 不做什么
+//
+//   - **不实现任何介质。**[Backend] 是那道缝，本仓库的生产实现在
+//     [github.com/snight1983/ds-harness-go/adapter/datastore/sessionstore]；本包不知道下面是文件、
+//     行还是对象，这条界线由 internal/devtools/dbcheck 把着。
+//   - **不是键值那条缝。**[Backend] 说的是「一份会话日志怎么读、怎么写、怎么截尾」，
+//     [github.com/snight1983/ds-harness-go/storage.Backend] 说的是键值介质的生命周期——两个接口
+//     互不相干，别拿一个去顶另一个。
+//   - **不迁移旧格式。**版本对不上直接拒收（见
+//     [github.com/snight1983/ds-harness-go/sessionlog.FormatVersion]），所以也没有任何升级器。
+//   - **不管投影和检查点。**折叠归
+//     [github.com/snight1983/ds-harness-go/sessionlog/projection]，把折出来的中间结果存起来归
+//     [github.com/snight1983/ds-harness-go/feature/projectioncache]。
+//   - **不决定攒批的节奏。**窗口和条数上限由装配方给，[WriteBehind] 只按给定的节奏写，
+//     写失败就把缓冲留着。
 package persistence

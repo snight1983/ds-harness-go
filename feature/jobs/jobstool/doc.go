@@ -38,4 +38,17 @@
 //     对每一份规范化过的结果恰好被调一次，所以那一次就是它的摘除点。
 //   - 两张表都被同一把 [sync.Mutex] 罩着：结算来自生产方那条协程，工具调用来自
 //     模型那条。
+//
+// # 不做什么
+//
+//   - **不管作业本身。**id、状态、取消、等待、属主清理全在
+//     [github.com/snight1983/ds-harness-go/feature/jobs] 的注册表上，本包只是它面向模型的那一层。
+//   - **不决定一条通知投给谁。**够得着哪些监听器由注册表按结算属主的作用域链算出来，
+//     本包只决定够得着之后**怎么**投（注入还是唤醒）。
+//   - **不定输出预算。**一条通知和一份 job_output 能占多少字节由生产方给，本包只按
+//     [github.com/snight1983/ds-harness-go/feature/outputretention] 的规矩一级一级往下让。
+//   - **不自己计超时。**job_output 那段等待有预算，而工具整体的截止时间是
+//     [github.com/snight1983/ds-harness-go/tools.Definition.Timeout]，由工具运行时统一执行。
+//   - **不认识别的作业种类的语义。**三件工具与 kind 无关，状态行里那段细节原样取自
+//     [github.com/snight1983/ds-harness-go/feature/jobs.Snapshot.Detail]。
 package jobstool

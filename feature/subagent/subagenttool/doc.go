@@ -38,4 +38,17 @@
 //   - `AggregateError` 换成 [errors.Join]。
 //   - `ctx.get('jobs')` 那次可选取用换成 [Deps.Jobs]：不给它，一次性后台那条路
 //     照样报同一句话，而前台和可续两条路不受影响。
+//
+// # 不做什么
+//
+//   - **不跑孩子。**开工、等待、取消、结算全在
+//     [github.com/snight1983/ds-harness-go/feature/subagent] 的运行时；本包只把一次调用送上前台、
+//     一次性后台、可续后台这三条路里的一条。
+//   - **不让模型挑提供方或路由。**[Config.Provider] 在装配那一刻就点名了，工具 schema
+//     里没有 provider／model／reasoning_effort 这类参数，也没有一张「许挑哪几条路由」
+//     的授权表——这一角在能力账本里明写着是缺口。
+//   - **不实现后台作业。**一次性后台那条路把活交给
+//     [github.com/snight1983/ds-harness-go/feature/jobs]；排队、并发和取消都是那一包的规矩。
+//   - **不管派完之后的事。**可续那条路当场把耐久的孩子 id 交回去，后续的投递、打断和
+//     列举归 [github.com/snight1983/ds-harness-go/feature/subagent/controltool]。
 package subagenttool

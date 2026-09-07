@@ -120,6 +120,18 @@ SQLite 那一支有两件事本模块管不了，得由装配方在 DSN 上设�
 
 不拿 sqlmock 之类的东西刷覆盖率：那验的是「我拼出了我以为我会拼的那句 SQL」，而这里真正会出事的地方恰恰是假库看不见的。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 存储中心SQLite后端，单个数据库提供kv facet | `storage/storage-sqlite` | 抄形状 | `adapter/datastore` | 抄键值怎么映射成表、迁移怎么走；后端已定 Postgres |
+| SQL 方言底座：把键值与日志映射成表，Postgres 与 SQLite 共用一套语句 | （无上游出处） | 本仓库自有 | `adapter/datastore` | 替代 storage/storage-sqlite。服务端无磁盘，后端定 Postgres |
+| 挑测试跑在哪种库上的夹具 | （无上游出处） | 本仓库自有 | `adapter/datastore/internal/dbtest` | 只有 datastore 子树用，收进 internal |
+| 键值存储后端 | （无上游出处） | 本仓库自有 | `adapter/datastore/kvstore` | storage 契约的生产实现 |
+| 会话日志与查询的存储后端 | （无上游出处） | 本仓库自有 | `adapter/datastore/sessionstore` | sessionlog 与 feature/sessionquery 的生产实现，抄 session-query-sqlite 的表与索引形状 |
+
 ## 相关源码
 
 | 路径 | 内容 |

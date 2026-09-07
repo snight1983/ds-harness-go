@@ -55,6 +55,22 @@
 //	          off: ''
 //	          high: high
 //	          max: ultra
+//
+// # 不做什么
+//
+//   - **只说 OpenAI 兼容这一条协议。**openai-responses 与 anthropic-messages 不做，
+//     WebSocket 传输也不做。
+//   - **不带内置提供方目录。**路由全靠手工声明的端点、凭据引用与请求头，没有基于
+//     目录的模型发现短路。
+//   - **不做 OAuth 登录流程。**凭据由
+//     [github.com/snight1983/ds-harness-go/credentials] 解，本包只按引用去读。
+//   - **不让宿主往请求顶层追加提供方私有字段。**上游那张扩展注册表在这里没有对应物，
+//     要加字段只能改本包。
+//   - **不管 Agent 回合与工具循环。**那在
+//     [github.com/snight1983/ds-harness-go/harness/agentloop]；本包只把一次请求发出去、
+//     把流按 [github.com/snight1983/ds-harness-go/llm] 的词汇交回来。
+//   - **不做用户鉴权与租户计费。**用量的计量在
+//     [github.com/snight1983/ds-harness-go/feature/tokenmeter]。
 package openaicompat
 
 import "errors"

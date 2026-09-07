@@ -93,6 +93,22 @@ go list ./... -> packages.md -> doccheck -> 文档覆盖门禁
 - `oscheck` 认的是语法上的 `os.X` 调用，拦不住经由反射或第三方库间接摸到磁盘的写法；它守的也是「别在别处开这扇门」。
 - `consumercheck` 用 `replace` 指到本地检出，所以它证明不了「这个版本在模块代理上取得到」——那要等打了 tag 之后才验得了。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 能力账本工具 | （无上游出处） | 本仓库自有 | `internal/devtools/capmap` | 门禁 |
+| 消费方 import 路径校验 | （无上游出处） | 本仓库自有 | `internal/devtools/consumercheck` | 门禁：全仓库唯一按路径索引的地方 |
+| 数据库约定校验 | （无上游出处） | 本仓库自有 | `internal/devtools/dbcheck` | 门禁 |
+| 分层校验 | （无上游出处） | 本仓库自有 | `internal/devtools/layercheck` | 门禁：docs/layers.tsv 的执行者 |
+| 本机资源禁用校验 | （无上游出处） | 本仓库自有 | `internal/devtools/oscheck` | 门禁：服务端无磁盘这条的执行者 |
+| 符号账本工具 | （无上游出处） | 本仓库自有 | `internal/devtools/portmap` | 门禁 |
+| 规则库 | （无上游出处） | 本仓库自有 | `internal/devtools/rule` | 门禁共用 |
+| 裁决表工具 | （无上游出处） | 本仓库自有 | `internal/devtools/rulingtable` | 门禁共用 |
+| 工具路径校验 | （无上游出处） | 本仓库自有 | `internal/devtools/toolpath` | 门禁 |
+
 ## 相关源码
 
 - `internal/devtools/portmap/`

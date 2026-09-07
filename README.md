@@ -231,6 +231,8 @@ ds-harness-go/
 
 完整包列表以 `go list ./...` 的输出为准，逐包到文档的映射在 [`docs/packages.md`](docs/packages.md) 里，由 `internal/devtools/doccheck` 校验。
 
+每个包的包注释末尾都有一节「不做什么」，3 到 6 条，逐条写这个包不负责什么、那件事归哪个包。这一节是**强制**的，缺了 `doccheck` 就变红。理由是一个包该干什么、读它的导出符号大致读得出来，**不该**干什么读不出来——那是当初排除掉的东西，不写下来就只活在写的人脑子里，下一个人照着「这里加一下最方便」就把它加了进来。
+
 ## 当前状态
 
 项目仍处于开发阶段：核心运行时和主要扩展包已经落地，但尚未发布稳定版本，也尚未提供一行代码完成全部装配的顶层 Builder。会话持久化提供接口、写后队列、恢复原语和活会话协调器（`persistence.Coordinator`），落盘实现在 `adapter/datastore/sessionstore`；连接池由装配方 `sql.Open` 出来传进去，驱动仍是部署期的选择。换别的介质就自己实现 `persistence.Backend`。宿主需要按自身需求显式创建并连接各组件。
@@ -311,6 +313,7 @@ go run ./internal/devtools/layercheck
 - `docs/portmap/rulings.md`：DSH 包级裁决。
 - `docs/portmap/decisions.md`：符号级裁决依据。
 - `docs/portmap/portmap.tsv`：机器读取的逐符号状态表。
+- `docs/portmap/capability-coverage.tsv`：能力覆盖表，一行一个能力，写清落在哪个 Go 包、缺哪个前置条件。
 
 ## 移植规则
 

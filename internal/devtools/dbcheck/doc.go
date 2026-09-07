@@ -35,4 +35,15 @@
 // **internal/devtools/dbcheck 自己整个跳过。**这个工具的源码里必然有 "database/sql" 这个串、
 // 也必然有一条认得出 SQL 的正则，而那条正则认得出它自己。不跳过的话它每次都
 // 判自己红。
+//
+// # 不做什么
+//
+//   - **不判断 SQL 写得对不对。**它认的是 import 和字符串字面量，守的是「别在别处
+//     开这扇门」，不是「别写出坏 SQL」。
+//   - **拦不住运行期拼出来的语句。**在别处拼好再传进来的 SQL，语法上看不出来；
+//     这道墙防的是不经意，不是刻意绕。
+//   - **不管 adapter/datastore/ 内部怎么写。**那里三条规则全放——它就是被授权知道
+//     下面是个数据库的那一处。
+//   - **不管文件系统。**磁盘那一半归 internal/devtools/oscheck，两者是同一件事的两半。
+//   - **不管 import 的方向合不合档。**那是 internal/devtools/layercheck 按 docs/layers.tsv 判的。
 package main

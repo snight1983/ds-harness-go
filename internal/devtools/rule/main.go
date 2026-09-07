@@ -18,6 +18,17 @@
 //     而不是攒到最后跑门禁时才一起冒出来。
 //
 // 它不做的事：不判断裁决对不对。那是人的活，也是事后 git diff 要看的东西。
+//
+// # 不做什么
+//
+//   - **不判断裁决对不对。**填进去的那句理由站不站得住，只有人看得出来。
+//   - **不批量填。**没有通配符、没有多行模式——「一次把一整个包标成 SKIP」正是
+//     这张表要防的事。
+//   - **不产生行。**表里有哪些行由 internal/devtools/portmap 抽出、
+//     由 internal/devtools/portcheck 的 sync 模式落进去，它只改已经在表上的那一行。
+//   - **不跑门禁。**它顺手查的那几条只是让错误在填的时候就出现，真正的判红在
+//     internal/devtools/portcheck 的 check 模式。
+//   - **不自己解析 TSV。**列序、补列和排序统一走 internal/devtools/rulingtable。
 package main
 
 import (

@@ -27,4 +27,17 @@
 // 新增: DSH 用 `...x !== undefined ? { k: x } : {}` 这种展开来省掉没给的可选字段。
 // Go 的零值天然就是「没给」，翻过去时直接赋值即可——一个空的 header 和没有 header
 // 在界面上是同一件事。
+//
+// # 不做什么
+//
+//   - **不校验请求。**一批空问题、一个被拥有的子 agent、一个对不上的呈现意图，
+//     全由 [github.com/snight1983/ds-harness-go/feature/interaction/userquestions] 那道接缝拒掉；
+//     这里只做形状转换。
+//   - **不画界面，也不等人。**真正把问题摆到人面前的是那道接缝上的提供方，
+//     一个无界面的装配根本不接它，这件工具也就问不出问题来。
+//   - **不造错误话术。**接缝报的错原样成为这次工具调用的失败，
+//     ErrorName / ErrorCode 由 [github.com/snight1983/ds-harness-go/tools]
+//     那道结果收敛抄进 Failure.Info，模型和上层都不必解析错误文本。
+//   - **不自己找那道接缝。**[Config.Questions] 是显式依赖，没有它就造不出这件工具——
+//     没有 cordis 那种从上下文上摸一个服务出来的路。
 package askuser

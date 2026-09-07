@@ -35,4 +35,19 @@
 // 「同一个 id 底下不许换一份头」那一比在 datastore 里比的是**字节**。
 // [session.SessionHeader] 没有自定义编解码，encoding/json 排结构体又是定序的，
 // 所以字节比等价于逐字段比。
+//
+// # 不做什么
+//
+//   - **不写一句 SQL，不开连接池，不认方言。**那些全在
+//     [github.com/snight1983/ds-harness-go/adapter/datastore]。
+//   - **不填 [github.com/snight1983/ds-harness-go/storage.Backend]。**那是另一道接口，
+//     键值那条在 [github.com/snight1983/ds-harness-go/adapter/datastore/kvstore]；
+//     两道接口各有各的适配层。
+//   - **不实现 [persistence.LocatingBackend]，也不交原始存档。**所有会话装在同一份
+//     介质里，没有「那个会话那份存档」可指。
+//   - **不落本机文件。**会话日志全在库里，不会退回宿主机的磁盘。
+//   - **不猜一份递错的凭据。**一次写就是一个事务，不存在断尾；收到非 nil 的 torn
+//     一律当场拒绝，而不是揣测它是什么意思。
+//   - **不认识会话里的业务语义。**它只知道头是一段 JSON、事件按 seq 排；语义归
+//     [github.com/snight1983/ds-harness-go/sessionlog]。
 package sessionstore

@@ -38,6 +38,15 @@
 - Mock Server 只覆盖本项目使用的 OpenAI 兼容表面，不追求实现完整 API。
 - 脚本和捕获日志可能包含敏感内容，存档前由调用方脱敏。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 可编脚本的 OpenAI 兼容 HTTP 服务器，无需密钥即可测试 LLM 适配器和 agent 循环 | `test-support/llm-mock-server` | 需要 | `cmd/llmmockserver` `llm/mockserver` | — |
+| 从已记录会话日志回放 LLM 模型流，使快照测试无需 API 密钥 | `test-support/llm-replay` | 需要 | `feature/replay` | — |
+
 ## 相关源码
 
 - `feature/replay/`

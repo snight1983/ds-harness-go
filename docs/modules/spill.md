@@ -65,6 +65,16 @@ spill.Store.SaveText -> spill.Ref
 - 访问控制、保留期、加密和 Locator 解析由 Store 背后的那套介质负责。
 - 外置减少模型上下文，不保证外部对象永久存在。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| spill能力Service Definition，定义后端存储过大工具文本并返回定位信息与取回指引 | `spill/spill` | 需要 | `spill` | — |
+| 本地文件系统spill实现，将工具结果保存到会话级私有文件，定位信息是文件路径 | `spill/spill-local` | 不需要 | `adapter/textstore` | 服务端替代实现见 adapter/textstore；缺前置：本机文件系统 |
+| 工具结果spill策略，对过大纯文本结果执行spill并替换为有界预览与取回指引 | `spill/spill-policy` | 需要 | `feature/spillpolicy` | — |
+
 ## 相关源码
 
 - `spill/spill.go`

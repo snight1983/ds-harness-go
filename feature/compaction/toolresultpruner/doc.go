@@ -84,4 +84,17 @@
 //   - **负载排不出去。**排的是 [compaction.PruneData] 和一份刚从日志里解回来的
 //     [session.ToolResultData]——后者能解回来就说明它排得出去，而这一趟只换掉了
 //     里面那条工具结果块的正文，换上去的正文本身也是从同一份内容里切出来的。
+//
+// # 不做什么
+//
+//   - **不问模型。**一次调用都不发，所以它给不出语义摘要，也砍不了对话本身；
+//     那条路在 [github.com/snight1983/ds-harness-go/feature/compaction/basic]。
+//   - **不决定什么时候砍。**压力怎么算、超窗之后先砍一遍还是直接去总结，
+//     归 compaction/basic 那个引擎和装配层。
+//   - **不篡改程序化的原始结果。**砍掉的只是模型可见的那份正文，落进日志的是新写的
+//     一条替换件，被砍之前的那条事件原样留在那里。
+//   - **不自己计量。**[Estimator] 是 [Pruner.PruneSession] 的参数而不是 [Pruner] 的字段，
+//     计量归 [github.com/snight1983/ds-harness-go/feature/tokenmeter]；另外三个方法一个都用不上它。
+//   - **不管砍完之后要不要重试。**出错时它把到那一刻为止的真实账目交出来就收手，
+//     照着这个数决定下一步是调用方的事。
 package toolresultpruner

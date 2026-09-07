@@ -107,4 +107,20 @@
 //
 // 剩下 connection.go:199 那个 `default:`（清单变更 channel 满了就丢）在覆盖率
 // 里算零个语句，但它同样只在两条通知贴着到达时才走得到，靠不住地复现不了。
+//
+// # 不做什么
+//
+//   - **不实现 MCP Server。**本包是客户端这一半，只把别人报的工具接进来。
+//   - **不做 stdio 传输，也不起子进程。**子进程那一块在本仓库整块不移，只留
+//     Streamable HTTP 这条腿。
+//   - **不做 OAuth 登录。**请求头与凭据由装配方配好交进来，凭据的解算在
+//     [github.com/snight1983/ds-harness-go/credentials]。
+//   - **不拥有工具的执行。**注册进去的东西最终由
+//     [github.com/snight1983/ds-harness-go/tools] 那套运行时调，本包只管命名、
+//     同步与转发。
+//   - **不自己存图，也不判模型收不收图。**存不存得下由
+//     [github.com/snight1983/ds-harness-go/attachment] 那条准入回答，
+//     能不能收由装配方经 [Options.ImageAdmission] 回答。
+//   - **不在注册前拒绝只能按 task 执行的工具。**当前 SDK 的 `mcp.Tool` 不解那个
+//     字段，本包拿不到这条信息。
 package mcp

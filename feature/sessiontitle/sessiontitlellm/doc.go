@@ -50,4 +50,18 @@
 // 稳定码 [TimeoutCode]。DSH 那边 timeoutMs 有个 MAX_TIMER_DELAY_MS 上限，那是
 // JS setTimeout 把超过 32 位的延迟截成 1 毫秒这个坑的护栏；Go 的 time.Duration
 // 没有这个坑，所以那道上限跟着消失。
+//
+// # 不做什么
+//
+//   - **不管标题怎么排期、怎么去重、什么时候作废。**那些在
+//     [github.com/snight1983/ds-harness-go/feature/sessiontitle] 的服务里，本包只是它认的那个
+//     [sessiontitle.Provider]。
+//   - **不往日志里写标题。**它只在派发之前落一条 [EventTitleLLMRequest]，把名字定下来
+//     的那条事件由服务追加。
+//   - **不要一整台运行时。**它收的是只有一个 Stream 方法的 [Streamer]；路由背后是哪个
+//     厂商、凭据从哪儿来，归 [github.com/snight1983/ds-harness-go/llm] 和
+//     [github.com/snight1983/ds-harness-go/credentials]。
+//   - **不挡语义上的劝说。**把消息装成 JSON 数组挡住的是**结构上的**伪造，模型仍然
+//     可能被用户那段字说服。
+//   - **不上模型可见表面。**那条请求事件只进日志，也不进派生历史。
 package sessiontitlellm

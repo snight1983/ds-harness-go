@@ -47,6 +47,15 @@ Go 不支持运行时 import npm 包，因此组合行通过 `ComposerSet` 查�
 - 预设根是宿主配置：装配方把根路径填进 `Config.Roots`，本包只在这些根底下读写。走的是同一个 `fs.FileSystem` 接口，但接的是哪一个后端由装配决定。
 - Persona 只影响系统提示词，不授予工具或外部权限。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 按preset组装agent，工具和提示词仅存在一份供所有已加入agent使用 | `preset/agent-presets` | 需要 | `feature/preset/agentpresets` | — |
+| 可组装的agent人设，可遮蔽部署级人设或成为完整系统提示词 | `preset/persona` | 需要 | `feature/preset/persona` | — |
+
 ## 相关源码
 
 - `feature/preset/agentpresets/`

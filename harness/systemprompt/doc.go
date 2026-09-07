@@ -62,4 +62,17 @@
 // 新增: DSH 的 structuredClone(parameters) 换成 bytes.Clone。[llm.ToolSchema].Parameters
 // 是一段 json.RawMessage，也就是一个字节切片；不拷一份，一条装配规则改到的就是
 // 提供方自己留着的那份。
+//
+// # 不做什么
+//
+//   - **不提供任何内容。**一段提示词、一个工具、一个变量都不自带，全部由登记方送进来。
+//   - **不知道工具是什么。**只把提供方报上来的定义排个序；定义、可见性、执行全在
+//     [github.com/snight1983/ds-harness-go/tools]。
+//   - **不发请求。**装配结果交给 [github.com/snight1983/ds-harness-go/harness/agentloop]
+//     去拼模型请求，本包不认识
+//     [github.com/snight1983/ds-harness-go/llm] 的运行时。
+//   - **不缓存。**每次装配把每个提供方重新问一遍，没有失效通知这回事。
+//   - **不读写存储，不起后台任务，不计时。**
+//   - **不管快照什么时候进会话。**只交出文本；什么时候插、插几次、旧的怎么办，是
+//     [github.com/snight1983/ds-harness-go/harness/agentloop] 的事。
 package systemprompt

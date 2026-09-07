@@ -35,4 +35,19 @@
 // `void this.handleLine(line)` 一发了之，同时在办多少件完全由对面说了算。本包给这
 // 两处各加了一条可调的上限，见 [TransportOptions]：超长的那一行按坏行处理（丢掉，
 // 连接照常），名额满了则让读循环停下来等，把压力顺着流还给对面。
+//
+// # 不做什么
+//
+//   - **不做传输本身。**只定义按行分帧和两端共用的形状，Reader/Writer 由装配方给，
+//     这里不建 HTTP、不建 WebSocket、不碰进程的标准流。
+//   - **不实现任何一端的行为。**服务端那一半在
+//     [github.com/snight1983/ds-harness-go/protocol/sdk/sdkserver]，客户端是各语言的 SDK。
+//   - **不自己写 JSON-RPC 的通用机制。**id 生成、请求响应配对、错误码折叠、断开时
+//     打回等待中的请求，全交给 github.com/sourcegraph/jsonrpc2。
+//   - **不覆盖完整的会话控制面。**这条线上只有 `session/prompt`；会话的建、续、
+//     分叉、改名、列举、检索、取消、选模型与历史分页都不在协议里。
+//   - **不认证对端，也不加密。**这条线默认已经是一条可信通道，那是部署边界的事。
+//   - **不是 ACP、也不是 MCP。**那两条对外协议在
+//     [github.com/snight1983/ds-harness-go/protocol/acp] 与
+//     [github.com/snight1983/ds-harness-go/protocol/mcp]。
 package sdkprotocol

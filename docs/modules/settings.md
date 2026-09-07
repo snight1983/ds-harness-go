@@ -49,6 +49,15 @@ Backend -> settings.Provider -> Namespace Registration -> Scope[T]
 - 不负责加密秘密；脱敏只保护展示路径。
 - 不提供跨进程共识，修订语义取决于 Backend 实现。
 
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 浏览器配置界面的 Host Remote 属主，提供脱敏 settings 与凭据元数据读取、不回传密钥的写入，并在 Host 桌面打开 settings 或 preset 位置 | `api/settings-controller` | 抄形状 | `settings` | 缺口：credentials 有归属校验，没有「凭据可列出、可引用、读回来打码」这条脱敏读路径 |
+| 用户设置Service Definition，管理按namespace分节的schema默认值、组合base与用户层解析 | `settings/settings` | 需要 | `settings` | — |
+
 ## 相关源码
 
 - `settings/settings.go`

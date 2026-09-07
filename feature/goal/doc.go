@@ -66,4 +66,20 @@
 // 经由 goal 那几件工具原样变成工具结果，是模型据以改写下一次调用的唯一线索。
 // [FoldError] 的 Reason 相反，它说的是「日志坏了，坏在哪条不变量上」，那是只有
 // 读日志的人才用得上的话，所以是中文。
+//
+// # 不做什么
+//
+//   - **不面向模型，也不面向人。**get_goal / create_goal / update_goal 那三件工具在
+//     [github.com/snight1983/ds-harness-go/feature/goal/goaltool]，`/goal` 那条命令在
+//     [github.com/snight1983/ds-harness-go/feature/goal/goalcommand]；这里只有服务和折日志。
+//   - **不自动推进目标。**一转空闲就递一条续推提示词是
+//     [github.com/snight1983/ds-harness-go/feature/goal/goalrounddriver] 干的，
+//     本包只记「此刻是 armed 还是 disarmed」。
+//   - **不替业务定义什么叫做完。**阶段跃迁合不合法它验，目标本身达没达成它不知道；
+//     `complete` 是一条被写下来的声明，不是一次验收。
+//   - **不做分布式锁，也不排外部工作队列。**并发冲突只有一条 compare-and-set：
+//     修订号对不上当场拒（[CodeStaleRevision]）。
+//   - **不做跨会话的项目管理。**目标挂在这一段会话日志上，分叉出去的是另一份。
+//   - **不自己接线。**词汇表、投影和不变量三件事各自独立，全要装配方显式装上去；
+//     少了不变量那一件，破规矩的改动会先落进日志、下次装载才炸。
 package goal

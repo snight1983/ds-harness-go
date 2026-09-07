@@ -47,4 +47,21 @@
 // [github.com/coder/acp-go-sdk.Agent] 实现），装配方拿它去造连接，再把连接当
 // [Peer] 交回 [Bridge.Install]。这个环是协议本身的形状——DSH 用 `makeAgent(connection)`
 // 那个闭包绕的也是同一个环。
+//
+// # 不做什么
+//
+//   - **不做 ACP 的客户端那一半。**本包只实现 agent 端，客户端是接进来的那个自动化
+//     程序自己的事。
+//   - **不建监听端口、不管本进程的存活。**那条流和这个进程都是装配方交进来的，
+//     只有它知道这里还有没有别的活儿。
+//   - **不做认证体系，也不做租户隔离。**`Authenticate` 只表达这套部署支持哪几种协议
+//     行为；凭据的解算在 [github.com/snight1983/ds-harness-go/credentials]。
+//   - **不发没落进会话日志的东西。**原始流片段、计划、标题、重试标记一条都不搬，
+//     发什么由 [github.com/snight1983/ds-harness-go/sessionlog] 上已提交的事件定。
+//   - **不自带会话持久化后端。**存与取归 [github.com/snight1983/ds-harness-go/feature/persistence]
+//     和 [github.com/snight1983/ds-harness-go/adapter/datastore/sessionstore]；挂了持久化，
+//     这里才声明 `session/list` 与 `session/resume`。
+//   - **不把一次性审批折成耐久授权。**耐久的那一种归
+//     [github.com/snight1983/ds-harness-go/feature/interaction/userapproval]，
+//     这条线上认不出的回答一律不升格。
 package acp

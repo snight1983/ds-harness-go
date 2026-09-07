@@ -96,4 +96,22 @@
 //
 // [Inbox] 不加锁。它是一个 agent 自己那份投影，只该被那个 agent 的循环碰——
 // 和会话日志「只该有一个写者」是同一条规则，理由也一样。
+//
+// # 不做什么
+//
+//   - **不造 agent。**创建和恢复由外部装上来的 [Factory] 做，本仓库里那份实现在
+//     [github.com/snight1983/ds-harness-go/harness/agentloop]。
+//   - **不跑回合、步骤和工具循环。**本包只定义扩展点，驱动它们的是
+//     [github.com/snight1983/ds-harness-go/harness/agentloop]。
+//   - **不发模型请求，不定义工具，不拼提示词。**这三样分别归
+//     [github.com/snight1983/ds-harness-go/llm]、
+//     [github.com/snight1983/ds-harness-go/tools]、
+//     [github.com/snight1983/ds-harness-go/harness/systemprompt]。
+//   - **不持久化。**只往活会话追加事件，事件怎么落盘是
+//     [github.com/snight1983/ds-harness-go/feature/persistence] 的事。
+//   - **不做模型路由，不管凭据。**见
+//     [github.com/snight1983/ds-harness-go/llm] 与
+//     [github.com/snight1983/ds-harness-go/credentials]。
+//   - **不碰传输协议，也不提供一行接入的顶层装配器。**各组件仍要由
+//     [github.com/snight1983/ds-harness-go/harness] 那一层显式装。
 package agent

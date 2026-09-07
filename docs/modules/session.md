@@ -15,6 +15,45 @@ Session 模块保存 Agent 运行的长期事实，并把这些事实转换成�
 
 持久化、查询、统计等模块只依赖 `session` 的值和规则，不需要依赖活会话注册表。
 
+## 架构
+
+一条事件写进来之后要走四段路。**只有第一段是事实，后面三段都是从事实算出来的**：
+
+```mermaid
+flowchart LR
+    A["① 事件日志<br/>只追加 · 唯一的权威"] --> B["② 当前状态<br/>按固定规则折出来"]
+    B --> C["③ 状态缓存<br/>省掉冷启动重算"]
+    A --> D["④ 存档<br/>写后队列落盘"]
+    D -.冷启动读回.-> A
+    C -.冷启动读回.-> B
+```
+
+四段各由一族包负责：
+
+```mermaid
+flowchart TB
+    subgraph Fact["事实：发生过什么"]
+        S1["sessionlog<br/>事件词汇 · 负载 · 校验"]
+        S2["harness/session<br/>活会话对象 · 追加入口"]
+    end
+    subgraph Derived["派生：现在是什么"]
+        P1["sessionlog/projection<br/>状态计算注册表"]
+        P2["feature/sessionstats · sessiontitle · telemetry<br/>各自维护一份结果"]
+    end
+    subgraph Durable["落盘"]
+        D1["feature/persistence<br/>接缝 · 写后队列 · Coordinator"]
+        D2["feature/checkpointpolicy<br/>什么时候必须落盘"]
+        D3["feature/projectioncache<br/>状态检查点"]
+    end
+    S2 --> S1
+    S1 --> P1 --> P2
+    S1 --> D1
+    D2 --> D1
+    P1 --> D3
+```
+
+**这张图上只有一条箭头是反的**：冷启动时存档和缓存回填内存。除此之外信息一律从事实流向派生，没有一处派生结果会写回事件日志。
+
 ## 事件日志
 
 事件日志按顺序记录“发生过什么”。核心事件包括：
@@ -172,7 +211,7 @@ Session ID 与 Agent ID 在运行时必须一致。
 
 这些能力读取同一份事件事实，但各自维护独立的当前结果和生命周期。
 
-## 并发
+## 生命周期与并发
 
 - `Session` 与 `Store` 各自有锁，但不会同时持有两把锁调用外部代码。
 - Observer 在锁外运行。
@@ -180,7 +219,27 @@ Session ID 与 Agent ID 在运行时必须一致。
 - 会话 Store 负责事件追加契约；状态缓存使用自己的 `storage/domain` 写链，两者不是同一个 Backend。
 - Flush 是耐久屏障，不等于普通内存更新。
 
-## 边界
+## 失败语义
+
+失败分成两类，处理方式相反：
+
+```mermaid
+flowchart TB
+    A["读不出来<br/>缓存缺失 · 损坏 · 版本不符<br/>水位落在被弹掉的那一段里"] --> A2["退回去重算<br/>算不全就交出残缺的那份<br/>不报错"]
+    B["写不进去<br/>Flush 没成功"] --> B2["当场拦住<br/>模型请求 · 工具 · 步骤都不许往下走"]
+```
+
+分开的理由是**副作用有没有发生**。读失败时什么都还没做，交一份残缺状态好过让会话打不开；写失败时下一步就要发请求或跑工具，放行等于让副作用落在一份没落盘的日志上。
+
+其余几条：
+
+- **不认识的事件分两种。** 声明为可忽略的透传过去；不可忽略的**阻止恢复**——旧程序静默误读新语义，比打不开更糟。
+- **落在起点之前的 `Seq` 是被弹掉了，不是日志坏了。** 存档按条数封顶、从最老的一头丢，凡是拿 `Seq` 定位的地方都要先减起点再核对。
+- **崩溃尾部只修能安全判断的那部分。** 判断不了就失败，不猜。
+- **重入追加直接拒绝。** 一个会话只许一个写者；Observer 回调里再追加会被挡下。
+- **缓存写失败只影响下次冷启动的速度**，不改变已提交的事实。
+
+## 能力边界
 
 Session 模块负责：
 
@@ -195,6 +254,25 @@ Session 模块不负责：
 - 提供具体 HTTP API。
 - 把状态缓存当成权威数据。
 - 自动修复所有语义损坏；不可安全判断时必须失败。
+
+## 对应的 DSH 能力
+
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+
+| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+|---|---|---|---|---|
+| 事件溯源的会话日志和内存存储，为agent保留全部交互历史 | `core/session` | 需要 | `sessionlog` | — |
+| 在模型适配器前与工具正文前为事件溯源会话创建检查点，持久化前一响应与工具结果 | `session/session-checkpoint-policy` | 需要 | `feature/checkpointpolicy` | — |
+| 会话持久化能力接缝，定义会话事件存储、加载与列表接口 | `session/session-persistence` | 需要 | `feature/persistence` | — |
+| 会话投影Service Definition与驱动注册表，对已提交事件驱动客户端读模型 | `session/session-projection` | 需要 | `sessionlog/projection` | — |
+| 持久投影缓存，把投影单元状态保存为检查点 | `session/session-projection-cache` | 需要 | `feature/projectioncache` | — |
+| 折叠会话日志事件为step计数、轮数、LLM时间、工具时间等数字 | `session/session-stats` | 需要 | `feature/sessionstats` | — |
+| 遥测Service Definition，捕获会话记录传给上报后端 | `session/session-telemetry` | 需要 | `feature/telemetry` | — |
+| 日志支持的会话标题，提供确定性回退与可选异步提供方 | `session/session-title` | 需要 | `feature/sessiontitle` | — |
+| 通过LLM总结所有用户消息的会话标题提供方 | `session/session-title-all-prompts-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
+| 通过LLM总结第一条用户消息的会话标题提供方 | `session/session-title-first-prompt-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
+| 模型支持的会话标题提供方共享实现 | `session/session-title-llm` | 需要 | `feature/sessiontitle/sessiontitlellm` | — |
+| 无损 JSON 校验、分离式快照、深度冻结、JSON 结构相等与封闭联合的穷尽失败 | `util/values` | Go 已有等价物 | `sessionlog` | 整包在防 JS 对象图的危险（伪造原型、取值器、稀疏数组、环、-0、非有限数），Go 里要么不存在要么 encoding/json 自己就拒。逐条对照写在 sessionlog/doc.go |
 
 ## 相关源码
 
