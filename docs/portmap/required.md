@@ -92,8 +92,8 @@ DSH 是桌面单机工具，人走了进程也就关了，它从来不需要面�
 | **约定是进程内的** | `jobs/jobs` | 4 | 是**接缝**自陈，不是实现自陈——换个实现也补不上。而 jobs 在主干里 |
 | 任务只存在于进程本地 | `jobs/jobs-local` | 4 | 后台任务不跨天 |
 | 待领通知无法在 owner 释放后存活 | `jobs/tool-jobs` | 3 | 任务完成通知投不到已离开的用户 |
-| 单进程、共享 checkout | `experimental/agent-team` | 1 4 | 唯一带持久 peer mailbox + 共享任务板（CAS 版本化）的协作原语，用不了 |
-| mailbox 不保证跨进程 exactly-once | `experimental/agent-team` | 1 | 同上 |
+| 单进程、共享 checkout | `experimental/agent-team` | 1 4 | 唯一带持久 peer mailbox + 共享任务板（CAS 版本化）的协作原语，包本身用不了。**这条已补上**：形状取形重写进 `feature/agentteam`，状态落在三张表上而不是队长的会话日志里 |
+| mailbox 不保证跨进程 exactly-once | `experimental/agent-team` | 1 | **补的时候没硬补**：`feature/agentteam` 明说只承诺至少一次，消息带认领人与认领时刻，抓着它的副本掉线就过期重送。真要恰好一次，得让「送到收件人」和「记下送到了」进同一个事务，而收件人可能在另一台机器上 |
 | 没有日志化或恢复 | `workflow/workflow` | 4 | 工作流中断即丢。（`tool-workflow` 的编排脚本是跑在 worker thread 上的 JavaScript，本来也移不过来） |
 | 变更仅进程内可见 | `storage/storage-domain` | 1 | 两个进程看不到对方的写 |
 | 无删除或保留接口 | `session/session-persistence` | 1 | 用户会话清理没接口 |
@@ -120,6 +120,6 @@ DSH 是桌面单机工具，人走了进程也就关了，它从来不需要面�
 不含任何「不进范围」的裁决。上面没列到的包不等于不要——只等于**这五条前提没要求它**。
 要不要，由消费方定。
 
-逐包的裁决在 `docs/portmap/rulings.md`（227 行全部有终判：需要 82 / 抄形状 15 /
+逐包的裁决在 `docs/portmap/rulings.md`（227 行全部有终判：需要 82 / 取形重写 15 /
 Go 已有等价物 3 / 不要 127 / 说不清 0），它以这份和 `functions.md` 为依据。
 `docs/DESIGN.md` 第三、四节已按那张表重写，恢复效力。

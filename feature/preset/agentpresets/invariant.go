@@ -62,7 +62,7 @@ func checkJoined(roster *Roster, agentID string, agentKey *scope.Key) string {
 //
 // 源: packages/preset/agent-presets/src/invariant.ts:33-80
 //
-// # 没有照抄的那一条
+// # 没有照录的那一条
 //
 // **新增: DSH 的 leakedServices 那条检查在 Go 里违反不了，所以这里没有它。** 那条查的是
 // cordis 的服务领域：一行插件把服务发布进**根领域**就变成了进程级的，第二个会话装

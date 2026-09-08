@@ -201,7 +201,7 @@ func (d *RetryData) UnmarshalJSON(data []byte) error {
 // 源: packages/llm/llm-retry/src/types.ts:42-48
 //
 // 它刻意只带得起「是哪一次尝试」这一件事：别的都在它配对的那条 [EventRetry] 上，
-// 抄一份过来只会多出一处可以和原件漂移的副本。
+// 写一份过来只会多出一处可以和原件漂移的副本。
 type RetryStartedData struct {
 	// RetryID 是那条重试链的身份，和配对的 [EventRetry] 上的一样。
 	RetryID RetryID `json:"retryId"`

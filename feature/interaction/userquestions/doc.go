@@ -37,7 +37,7 @@
 // 新增: DSH 的 UserQuestionError 继承 HarnessError，靠 instanceof 认。Go 里
 // [Error] 只是一个普通错误类型，靠 errors.As 认；它同时带上 ErrorName 和
 // ErrorCode 两个方法，于是 [github.com/snight1983/ds-harness-go/tools] 那道结果收敛能把它的身份
-// 原样抄进 Failure.Info，下游不必解析错误文本。
+// 原样写进 Failure.Info，下游不必解析错误文本。
 //
 // 新增: DSH 里 detail 和 custom 都能是 undefined。Go 的字符串零值就是空串，
 // 本包把「没给」和「给了空串」当成同一回事：一份空的计划正文和没有计划正文一样

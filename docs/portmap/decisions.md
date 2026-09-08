@@ -25,7 +25,7 @@ DSH 自己的源码树，产出：
 ### 它为什么存在
 
 因为 **TypeScript 的类型在运行期是不存在的**。类型信息在编译时被擦掉，运行期想知道
-「这个参数是什么形状」只能靠构建期先把它抄下来。这个包就是那台抄写机。
+「这个参数是什么形状」只能靠构建期先把它照着写下来。这个包就是那台誊写机。
 
 ### Go 里这个前提不成立
 
@@ -296,7 +296,7 @@ ds-harness-go 要对外提供的第三条通道**，那这个包的 wire 契约�
 
 ---
 
-## api/* —— 五个 BFF 包整包 SKIP（裁的是门面，不是门面后面的能力）
+## api/* —— 五个 BFF 包：门面不取，门面后面的能力另有归属
 
 **规模**：`api/gateway` 4378 行、`api/remotes` 405 行、`api/session-controller` 7292 行、
 `api/settings-controller` 560 行、`api/workspace-controller` 1426 行，合计 14061 行；
@@ -343,6 +343,23 @@ DSH 那一侧唯一说这套帧的客户端是 `client/*`，已整包裁掉。
 `api/session-controller/src/client/` 有 20 个文件、3900 多行：观察量快照、React 相关的
 投影仓、按「上台的会话」决定作用域生死的分阶段生命周期。这一半和 `client/*` 同类，
 按同一条线裁。
+
+### 裁掉的是门面，不是形状——三个领域属主各有一部分落了地
+
+上面三条针对的是 **cordis Remote 那层机制**。三个领域属主身上另有一样东西不随机制一起
+裁掉：**它们的方法表和请求／结果的形状**。那部分按各自的领域重写进了 Go 侧对应的门面，
+所以这五个包如今不是齐刷刷一片 SKIP：
+
+| 包 | 落了什么 | 落在哪 |
+|---|---|---|
+| `api/session-controller` | 会话控制面十个方法的线上形状与服务端这一端 | `protocol/sdk/sdkprotocol`、`protocol/sdk/sdkserver` |
+| `api/settings-controller` | 引用批量描述的扇出上限与引用名守卫 | `credentials.DescribeRefs` |
+| `api/workspace-controller` | 一次读回全部字段的自洽工作区值 | `feature/workspace` 的 `Snapshot` |
+| `api/gateway`、`api/remotes` | 什么都不落，见下一节 | — |
+
+三个属主的浏览器半一律不落。会话那一半最大（20 文件 3900 余行），它的
+`ProjectionsBaseline` + 增量在 Go 侧由 `sessionlog/projection` 的整值投影承担：
+断线重连就重取整值，不续增量。
 
 ### 一处刻意的分歧，记在这里
 
@@ -445,7 +462,7 @@ alpha.3 还在这批旁边新加了 `ApiSessionCwdConflict`（`:30`）与
 
 ---
 
-## experimental/* —— 八个包整包裁掉（六个 OUT_OF_SCOPE，两个 SKIP 且值得抄形状）
+## experimental/* —— 八个包里七个裁掉（六个 OUT_OF_SCOPE，一个 SKIP），agent-team 已取形重写
 
 **规模**：`experimental/inspector` 15615 行、`experimental/webworker-runtime` 12925 行、
 `experimental/agent-team` 2451 行、`experimental/webworker-packer` 1111 行、
@@ -455,25 +472,27 @@ alpha.3 还在这批旁边新加了 `ApiSessionCwdConflict`（`:30`）与
 
 八个包的 `package.json` 全都写着 `"private": true`——上游自己不发布它们。这不构成裁掉的
 理由（`host/*` 里也有 private 包被移了），但它解释了为什么这八个包的对外契约可以随时改：
-**没有仓库外的消费方**，所以「照抄以保持兼容」这个动机在这里不存在。
+**没有仓库外的消费方**，所以「照录以保持兼容」这个动机在这里不存在。
 
 这一节是**新写的**。此前的缺陷是可量的：`inspector` 的 554 行共用一句包级理由，
 `webworker-runtime` 的 590 行共用另一句，`agent-team` 有 17 行挂着自动补扫的尾巴
 「alpha.3 新增符号，按本包已有的包级裁决处理」。1304 行里真正互不相同的理由只有八句。
 现在两个大包按**子树**给理由（`inspector` 12 个子树、`webworker-runtime` 11 个子树），
-六个小包按**文件**给。
+五个小包按**文件**给，`agent-team` 那 76 行移植之后按**符号**逐行给。
 
-### 三组，三种裁法
+### 四组，四种裁法
 
 | 组 | 包 | 裁决 | 一句话 |
 | --- | --- | --- | --- |
 | 浏览器宿主 | `webworker-runtime`、`webworker-packer` | OUT_OF_SCOPE | 把 Node 宿主搬进浏览器；Go 进程本身就是宿主 |
 | 调试外壳 | `inspector` | OUT_OF_SCOPE | 跨 realm 的 CDP 中枢；Go 侧是 pprof 与 delve |
-| 多 Agent 协作 | `agent-team`、`tool-agent-team` | SKIP（**抄形状**） | 全仓库唯一的持久 peer mailbox + 共享任务板 |
+| 多 Agent 协作 | `agent-team` | **已移植**（`feature/agentteam`） | 全仓库唯一的持久 peer mailbox + 共享任务板 |
+| 模型侧工具面 | `tool-agent-team` | **已取形重写**（`feature/agentteam/agentteamtool`） | 上面那套能力的工具封装：十件工具加一段团队策略指引 |
 | 装配清单 | `agent-team-profile`、`agent-team-web-profile`、`client-ui-agent-team` | OUT_OF_SCOPE | bundle 与 React 组件树，两头都在范围外 |
 
-前两组和第三组的分界要说清楚：**前两组是「Go 侧不需要」，第三组是「Go 侧还没有」**。
-把它们写成同一句「experimental 不移」会把一条待办藏进一条裁决里。
+这几组的分界要说清楚：浏览器宿主、调试外壳和装配清单是**「Go 侧不需要」**，
+`agent-team` 和 `tool-agent-team` 曾经是**「Go 侧还没有」**。把它们写成同一句
+「experimental 不移」会把待办藏进裁决里——这两条正是这样的待办，现在两条都已落地。
 
 ### 浏览器宿主：`webworker-runtime` + `webworker-packer`
 
@@ -530,32 +549,41 @@ cordis 容器（见 `typert/generator` 一节与本表 `invariants` 的裁法）
 任何其它版本号**，没有兼容窗口。这佐证了上面「private 包可以随时改契约」那句——它连自己的
 线格式都不打算向后兼容。
 
-### 多 Agent 协作：`agent-team` + `tool-agent-team`（**这两个是待办，不是不要**）
+### 多 Agent 协作：`agent-team` 已落在 `feature/agentteam`
 
-这是全仓库唯一带「持久 peer mailbox + 共享任务板」的多 Agent 协作原语，Go 侧**目前没有**
-对应物。`subagent/*` 那 8 个包做的是父子关系（spawn / fork / report / control），不是
-peer 之间的消息与共享任务：
+这是全仓库唯一带「持久 peer mailbox + 共享任务板」的多 Agent 协作原语。`subagent/*` 那 8 个
+包做的是父子关系（spawn / fork / report / control），不是 peer 之间的消息与共享任务，所以
+这一套没有现成的替代品，只能自己长一个出来。
 
-| 上游文件 | 行数 | 形状里值得留的东西 |
-| --- | --- | --- |
-| `src/roster.ts` | 486 | 花名册状态机：`TeamMemberPhase = 'provisioning' \| 'active' \| 'failed'`（`types.ts:44`），加 roster 自己拥有的拆除 |
-| `src/mailbox.ts` | 338 | 持久投递：`delivery: 'quiet' \| 'wakeup'` 两档（`types.ts:111`、`types.ts:163`），加确认与恢复 |
-| `src/task-board.ts` | 297 | 共享任务 DAG 命令，写入靠 `expectedRevision` 做 CAS（`task-board.ts:119`） |
-| `src/task-graph.ts` | 69 | 对当前任务快照做完整依赖校验 |
-| `src/projection.ts` | 317 | Host 侧从已提交 Session 事件增量折出团队状态 |
-| `src/journal.ts` | 73 | 团队事务串行化到 Lead Session 的那一条日志上 |
-| `src/lifecycle.ts` | 87 | 共享的准入截止与有界收尾 |
-| `src/activity.ts` | 87 | 一次性的变更等待者，与耐久投影分开 |
+上游那八个实现文件里，四个照形状取过来了，四个换成了别的东西：
+
+| 上游文件 | 行数 | Go 侧的落点 | 变了什么 |
+| --- | --- | --- | --- |
+| `src/roster.ts` | 486 | `agentteam.Roster` 加 `Service.Spawn` / `Members` / `Interrupt` | 状态机原样：`provisioning → active / failed` 三档 |
+| `src/mailbox.ts` | 338 | `agentteam.Message` 加 `Service.Send` / `Deliver` | `quiet` / `wakeup` 两档原样；去重换成消息自己那一列 |
+| `src/task-board.ts` | 297 | `agentteam.Board` 加 `Service.CreateTask` / `UpdateTask` | 八个动作与 `expectedRevision` 原样 |
+| `src/task-graph.ts` | 69 | `agentteam.ValidateGraph`、`GraphError` | 原样 |
+| `src/projection.ts` | 317 | —— | 换成 `Spec()` 声明的三张表 |
+| `src/journal.ts` | 73 | —— | 换成介质的比较并交换 |
+| `src/lifecycle.ts` | 87 | —— | 换成 `context.Context` |
+| `src/activity.ts` | 87 | `agentteam.Service.Wait` | 换成介质上的条件轮询，只承诺看得见本次调用之后的改动 |
+
+后四行是同一个理由的四种表现：**这个模块要能多副本部署**。DSH 把团队状态定义成队长会话
+事件流折出来的东西，状态只活在那个进程的内存里，于是它需要一份投影（`projection.ts`）、
+一条按进程排的事务队列（`journal.ts`）、一个进程级的准入开关（`lifecycle.ts`）和一张
+进程内的等待者名单（`activity.ts`）。这四样东西全都以「只有一个进程」为前提。Go 这边团队
+状态是三张表上的整值，并发靠版本号退避，取消靠 `ctx`。等待这件事没有照着翻——那张名单等
+不到别的副本上那次改动，照翻只会得到一个在生产里静默失效的 API——改成从介质上轮询三张表
+的水位，只承诺看得见本次调用之后的改动，看不见就到点返回 `timedOut`。
 
 `tool-agent-team`（436 行）是它的模型侧工具面：发消息 / 领任务 / 改任务，改任务那条把
-`expected_revision` 直接暴露给模型（`tool-agent-team/src/index.ts:378`）。
+`expected_revision` 直接暴露给模型（`tool-agent-team/src/index.ts:378`）。**它已经落在
+`feature/agentteam/agentteamtool`**：十件工具连同那段团队策略指引，工具说明和给模型看的
+报错话逐字保留，`expected_revision` 那个暴露决定原样留着。团队身份换了拿法——DSH 装工具
+时现问成员表，Go 这边由装配方在 `Config.Team` 上写死。
 
-**裁决是 SKIP 而不是 PORTED，也不是 OUT_OF_SCOPE**，含义是：这一版不移，但它是待办而非
-弃件。真要移的时候，形状抄这八个文件，实现跟着 Go 侧已有的接缝走——投影走
-`session/projection`、日志走 `session/persistence`、子 Agent 供给走 `subagent/subagent`、
-工具面走 `core/tools`。**不要**抄的是 cordis 服务声明合并（`index.ts` 里那段
-`declare module '@deepseek-ai/cordis'`）和 `TypertRemoteService` 继承——前者 Go 没有这个
-机制，后者是 `api/*` 一节裁掉的门面层。
+**不要**取的是 cordis 服务声明合并（`index.ts` 里那段 `declare module '@deepseek-ai/cordis'`）
+和 `TypertRemoteService` 继承——前者 Go 没有这个机制，后者是 `api/*` 一节裁掉的门面层。
 
 ### 装配清单与 Web 呈现
 
@@ -572,15 +600,18 @@ peer 之间的消息与共享任务：
 | 类别 | 裁决 | 依据 |
 | --- | --- | --- |
 | 两个大包的实现文件 | OUT_OF_SCOPE | 按上表的子树给理由 |
-| `agent-team`、`tool-agent-team` 的实现文件 | SKIP | 逐文件说形状里留什么 |
+| `agent-team` 的实现文件 | 逐符号：33 PORTED、25 GO_NATIVE、10 SKIP | 已移植，每一行各自给理由，不共用包级句 |
+| `tool-agent-team` 的实现文件 | 逐符号：3 PORTED、5 GO_NATIVE | 已取形重写，落在 `feature/agentteam/agentteamtool` |
 | 三个装配 / 呈现包的实现文件 | OUT_OF_SCOPE | 发行形态或浏览器渲染 |
-| 各包的 `src/invariant.ts` | 跟随本包的包级裁决：六个 OUT_OF_SCOPE、两个 SKIP | 同 `api/*` 一节：整包不移时伴生插件跟着走，不拆桶 |
-| 各包的 `tsdown.config.ts` | OUT_OF_SCOPE | 打包配置；Go 是 `go build` |
+| 七个被裁包的 `src/invariant.ts` | 跟随本包的包级裁决：六个 OUT_OF_SCOPE、一个 SKIP | 同 `api/*` 一节：整包不移时伴生插件跟着走，不拆桶 |
+| `agent-team` 的 `src/invariant.ts` | `name` / `apply` PORTED，`inject` GO_NATIVE | 落在 `agentteam.RegisterInvariants`，装的是一条空检查——三张表的校验体在编解码两头已经守过了 |
+| 各包的 `tsdown.config.ts` | 被裁的七个 OUT_OF_SCOPE，`agent-team` GO_NATIVE | 打包配置；Go 是 `go build` |
 
 ### 想推翻这条的话
 
-只有一条会推翻：**要多 Agent 协作**。那时推翻的是 `agent-team` + `tool-agent-team` 那两句
-SKIP，另外六个包不受影响——它们裁在「Go 侧不需要」上，和这个需求无关。
+`agent-team` 和 `tool-agent-team` 那两句都已经被推翻了，推翻它们的是「要多 Agent 协作」
+这条需求，结果是 `feature/agentteam` 和 `feature/agentteam/agentteamtool`。剩下六个包不受
+影响——它们裁在「Go 侧不需要」上，和这个需求无关。
 
 前两组要被推翻，前提是这个仓库要在浏览器里跑（`webworker-*`）或者要自建调试协议端点
 （`inspector`）。这两件事都不是 agent 运行时的能力，也都各有 Go 侧现成替代。
@@ -922,7 +953,7 @@ Go 的 `testing` 没有收集期——`TestXxx` 是编译期就定下来的函�
 
 要 Go 侧先出现一个**可执行的 ACP agent 程序**（今天 `cmd/` 里只有
 `llmmockserver`）。就算出现了，该写的也不是这个包的译本，而是上面那种
-golden 文件套件；这一节到那时是用来说明「为什么不照抄」的，不是待办。
+golden 文件套件；这一节到那时是用来说明「为什么不照录」的，不是待办。
 
 ---
 

@@ -115,7 +115,7 @@ func (StepEndData) sealedEventData() {}
 //
 // 新增: DSH 那边这个负载**就是**那条消息本身，没有外层对象。Go 里用内嵌：
 // [llm.Message] 自己的 MarshalJSON 与 UnmarshalJSON 被提升上来，排出去、
-// 读回来的字节和 DSH 完全一致，不需要在这里再抄一遍消息的介质形状。
+// 读回来的字节和 DSH 完全一致，不需要在这里再写一遍消息的介质形状。
 type UserMessageData struct {
 	llm.Message
 }

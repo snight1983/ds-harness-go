@@ -243,7 +243,7 @@ func (i *Inbox) mutate(
 	// Array.prototype.splice 的夹取规则：负的起点从末尾往回数，超界的往两头夹。
 	//
 	// 新增: 它那几步 Math.trunc / Number.isNaN 在 Go 里不存在——start 和
-	// deleteCount 是 int，既不会是小数也不会是 NaN。剩下的夹取照抄，因为落进
+	// deleteCount 是 int，既不会是小数也不会是 NaN。剩下的夹取照录，因为落进
 	// 日志的必须是一份可以直接照做的坐标，见 [SplicedData] 上的注释。
 	actualStart := start
 	if actualStart < 0 {

@@ -98,7 +98,7 @@ func NormalizeAPIKey(raw string) APIKeyCheck {
 // 新增: 诊断里点名网页 Models 页面，是因为它**通常**是写下这个值的那一方，不是
 // 唯一一方——同一个值也可能来自手改的 .env 或者一句 export，而那种部署里可能
 // 根本没挂凭据接缝，把人指到一个它不提供的页面上就是条死路。这句括号里的话
-// 照抄 DSH，理由也照抄。
+// 照录 DSH，理由也照录。
 func AssertUsableAPIKey(raw, pkg, ref string) (string, error) {
 	checked := NormalizeAPIKey(raw)
 	if checked.OK {

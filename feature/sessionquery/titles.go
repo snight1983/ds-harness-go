@@ -34,7 +34,7 @@ type TitleObservation struct {
 	// Titled 说这个会话有没有过标题。
 	//
 	// 新增: DSH 那边 title 是可选字段，「没有标题」由它缺席表达。Go 这边
-	// [sessiontitle.FoldSnapshot] 已经用第二个返回值表达同一件事，照抄它，
+	// [sessiontitle.FoldSnapshot] 已经用第二个返回值表达同一件事，照录它，
 	// 而不是换成一个 *Snapshot——一个空标题和一个没有标题在界面上是两件事，
 	// 用零值表达前者会把它们混起来。
 	Titled bool

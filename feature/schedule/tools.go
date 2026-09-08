@@ -671,7 +671,7 @@ func (s *toolSet) create(
 // 源: packages/schedule/schedule/src/tools.ts:363-375
 //
 // 次序照 DSH：at 先于 after_seconds 先于 every_seconds。这里的次序其实不重要
-// ——[parseCreateArgs] 已经保证了三个里恰好有一个——但照抄能让两边的分支一一对上。
+// ——[parseCreateArgs] 已经保证了三个里恰好有一个——但照录能让两边的分支一一对上。
 func (s *toolSet) buildRecord(id ID, input createArgs) (Record, error) {
 	now := s.now()
 	switch {

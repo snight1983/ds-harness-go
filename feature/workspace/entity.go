@@ -182,6 +182,34 @@ func filterAccounted(host entityHost, workspaceID WorkspaceID, record Record) []
 	return kept
 }
 
+// Snapshot 实现 [Workspace.Snapshot]。
+//
+// 源: packages/api/workspace-controller/src/feed.ts:23-32（workspaceView）
+//
+// 全部自洽性都来自这里只有**一次** [entity.read]：那一次读交回来的是介质上
+// 某一个修订的整条记录，所以底下摊开的六个字段说的是同一个时刻。
+// 会话账目仍旧过一遍归属判据，和 [entity.SessionIDs] 是同一条判据、同一份值。
+//
+// 新增: DSH 那边这个投影是一个自由函数，从一个已经攥在手上的实体上取属性
+// （那边的实体缓存着记录，取属性不碰介质）。本包的实体不攥记录，取属性就是
+// 一次往返，于是「一次读、摊成一份值」这件事必须由实体自己做——写在外面的
+// 自由函数只能挨个调那六个取值方法，那正是它要避免的那种撕裂。
+func (e *entity) Snapshot(ctx context.Context) (Snapshot, error) {
+	record, err := e.read(ctx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return Snapshot{
+		ID:         e.id,
+		TargetKey:  record.TargetKey,
+		Path:       record.DisplayPath,
+		Title:      record.Title,
+		SessionIDs: filterAccounted(e.host, e.id, record),
+		CreatedAt:  record.CreatedAt,
+		UpdatedAt:  record.UpdatedAt,
+	}, nil
+}
+
 // SetTitle 实现 [Workspace.SetTitle]。
 //
 // 源: packages/workspace/workspace/src/entity.ts:105-107

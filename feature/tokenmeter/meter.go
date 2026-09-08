@@ -24,13 +24,17 @@ import (
 	"github.com/snight1983/ds-harness-go/sessionlog/projection"
 )
 
-// measurementAnchor 是一次「提供方亲口报过」的锚点。
+// measurementAnchor 是一次「提供方亲口报过」的锚点，记的是**原始事实**。
 //
-// 源: packages/llm/token-meter/src/index.ts:28-32
+// 源: packages/llm/token-meter/src/index.ts:35-48（MeasurementAnchor）
 //
-// 它由一条带用量的助手消息立起来，记住立锚那一刻的请求头和表面总价。
-// 后来的每一次测量，只要请求头和它一致，就用这个锚当基准，再加上表面从那时起
-// 的带符号位移——于是启发式只用来量**变化的那一小段**，绝对值始终锚在提供方那边。
+// 它由一条落定的助手消息立起来，记住立锚那一刻的请求头、那一刻的表面快照、
+// 提供方那一侧输出的固定估价，以及它报回来的那份用量（报了才有）。
+//
+// 这里刻意**不存基准**：基准由 [TokenMeter.Measure] 每次现算。表面的价是
+// 跟着路由变的（见 routepricing.go），锚那张快照必须和当次拿来比的当前表面
+// 在**同一条路由**下重新定价，那个带符号的差才是拿同一把尺子量出来的。
+// 立锚时把基准算死，等于把立锚那一刻的路由永久钉在这个锚上。
 type measurementAnchor struct {
 	// header 是立锚那一刻在手的请求头。
 	header sessionlog.EpochHeader
@@ -40,22 +44,26 @@ type measurementAnchor struct {
 	// ——[optionalHeaderEquals] 里「都没有」算相等、「一边有一边没有」算不等，
 	// 而一份零值的 [sessionlog.EpochHeader] 和「没有头」在这个判断上是两件事。
 	hasHeader bool
-	// surfaceTokens 是立锚那一刻的表面总价。
-	surfaceTokens int
-	// baseline 是这个锚交出去的基准，它的 Kind **一定不是** [BaselineNone]。
-	baseline MeasurementBaseline
+	// nodes 是这次请求所依据的那张表面快照。
+	nodes []meterNode
+	// assistantTokens 是提供方那一侧输出在固定尺子下的价。
+	//
+	// 它不跟着路由重新定价：那是模型吐出来的文本，里面没有请求图片。
+	assistantTokens int
+	// usage 是这次调用报回来的用量；nil 表示没报、或者报的时候还没见过请求头。
+	usage *llm.TokenUsage
 }
 
-// stepMark 是一个开着的步骤，外加它开起来那一刻的表面总价。
+// stepMark 是一个开着的步骤，外加它开起来那一刻的表面快照。
 //
-// 源: packages/llm/token-meter/src/index.ts:38
+// 源: packages/llm/token-meter/src/index.ts:54
 //
-// 那个总价是锚的**起算点**：一次请求看见的表面是「这个步骤开始之前的全部」
+// 那张快照是锚的**起算点**：一次请求看见的表面是「这个步骤开始之前的全部」
 // 加上「这一步自己产出的那条助手消息」，中间那些工具结果是这一步之后才进去的。
 type stepMark struct {
-	turn          int
-	step          int
-	surfaceTokens int
+	turn  int
+	step  int
+	nodes []meterNode
 }
 
 // replayState 是一个会话在计量器这边的重放状态。
@@ -75,10 +83,8 @@ type replayState struct {
 	header sessionlog.EpochHeader
 	// hasHeader 说明有没有见过请求头。
 	hasHeader bool
-	// surface 是整张表面节点表，逐节点带价。
-	surface []SurfaceNode
-	// surfaceTokens 是整张表的合计。
-	surfaceTokens int
+	// surface 是整张表面节点表，逐节点带固定估价和那次出现的图片引用。
+	surface []meterNode
 	// stepStart 是当前开着的那个步骤；nil 表示没有步骤开着。
 	stepStart *stepMark
 	// anchor 是最近立起来的那个锚；nil 表示还没有过。
@@ -96,9 +102,15 @@ type replayState struct {
 type TokenMeter struct {
 	mu     sync.Mutex
 	states map[sessionlog.SessionID]*replayState
+	// llmRuntime 是解那条路由的图片计价用的；nil 表示一律用固定估价。
+	llmRuntime *llm.Runtime
 }
 
 // New 建一个计量器。
+//
+// llmRuntime 给了才有路由感知的图片计价：一条路由的适配器报价时，那条路由下的
+// 每一张图按它报的视觉 token 加那段模型可见文本计价。为 nil 时（以及路由不报价时）
+// 每个节点都留着固定估价——这正是 DSH `ctx.get('llm')?.` 那个可选取用的意思。
 //
 // 新增: DSH 那边构造函数里还做两件事，Go 这边都挪走了：
 //
@@ -109,8 +121,11 @@ type TokenMeter struct {
 //     那纯粹是保温：[TokenMeter.Measure] 自己会把落后的部分补上，答案一模一样。
 //     Go 这边不订阅，代价只是折叠的时机从「事件到达」推到「有人来问」，
 //     顺带把折叠的报错也一起推到那时候——那正是调用方接得住错误的地方。
-func New() *TokenMeter {
-	return &TokenMeter{states: map[sessionlog.SessionID]*replayState{}}
+func New(llmRuntime *llm.Runtime) *TokenMeter {
+	return &TokenMeter{
+		states:     map[sessionlog.SessionID]*replayState{},
+		llmRuntime: llmRuntime,
+	}
 }
 
 // RegisterProjections 把三个投影单元一起登进注册表，返回把它们一起注销的函数。
@@ -206,14 +221,18 @@ func (m *TokenMeter) Forget(id sessionlog.SessionID) {
 // 源: packages/llm/token-meter/src/index.ts:116-147
 //
 // requestHeader 给了就用它当「下一次请求要发的那份头」，nil 表示用日志里最新的那份。
+// 那份头里的提供方／模型**同时决定了这次测量按哪条路由给图片定价**：一条报价的
+// 路由把每一张留下来的图按它自己报的价算，别的路由留着固定估价。
+//
 // 三种基准按这个次序挑：
 //
-//   - 手上那个锚的头和这次要问的头**一致**：用锚的基准，位移是表面从立锚起的净变化。
-//     这是常态，也是唯一一条让绝对值锚在提供方那边的路。
+//   - 手上那个锚的头和这次要问的头**一致**：拿锚那张表面快照按**同一条路由**
+//     重新定一遍价当起算点，位移是当前表面减掉它。这是常态，也是唯一一条让
+//     绝对值锚在提供方那边的路。
 //   - 没有头、表面也是空的：[BaselineNone]，整张账是 0。
-//   - 其余（换过模型、改过系统提示、或者还没有过任何一次带用量的响应）：
-//     整份重新估价，位移归零。锚对不上就不能再拿它当基准——那等于把 A 请求的
-//     绝对值配上 B 请求的增量。
+//   - 其余（换过模型、改过系统提示、或者还没有过任何一次响应）：整份重新估价，
+//     位移归零。锚对不上就不能再拿它当基准——那等于把 A 请求的绝对值配上
+//     B 请求的增量。
 func (m *TokenMeter) Measure(view projection.SessionView, requestHeader *sessionlog.EpochHeader) (Measurement, error) {
 	state, err := m.sync(view)
 	if err != nil {
@@ -225,13 +244,44 @@ func (m *TokenMeter) Measure(view projection.SessionView, requestHeader *session
 		header, hasHeader = sessionlog.CanonicalHeader(*requestHeader), true
 	}
 
+	pricing := m.routeImagePricing(header, hasHeader)
+	surface, err := priceSurface(state.surface, pricing)
+	if err != nil {
+		return Measurement{}, err
+	}
+
 	var baseline MeasurementBaseline
 	surfaceDeltaTokens := 0
 	switch anchor := state.anchor; {
 	case anchor != nil && optionalHeaderEquals(anchor.header, anchor.hasHeader, header, hasHeader):
-		baseline = anchor.baseline
-		surfaceDeltaTokens = state.surfaceTokens - anchor.surfaceTokens
-	case !hasHeader && state.surfaceTokens == 0:
+		// 两份头一致就意味着两边是同一条路由，锚那张快照于是能按当前这份计价
+		// 重新定价，那个带符号的差才是拿同一把尺子量出来的。
+		anchorSurface, priceErr := priceSurface(anchor.nodes, pricing)
+		if priceErr != nil {
+			return Measurement{}, priceErr
+		}
+		anchorSurfaceTokens := anchorSurface.surfaceTokens + anchor.assistantTokens
+		headerTokens, estimateErr := EstimateHeader(header)
+		if estimateErr != nil {
+			return Measurement{}, estimateErr
+		}
+		estimatedAnchorTokens := headerTokens + anchorSurfaceTokens
+
+		// 带符号的启发式增量只有挂在一个**不小于**同口径全量估价的锚上才是保守的：
+		// 锚比估价小的时候，后面每一次「减掉一段」都会从一个本来就偏低的绝对值上
+		// 再减一刀，越减越离谱。这种时候宁可整份用估价，至少口径是自洽的。
+		baseline = MeasurementBaseline{Kind: BaselineEstimated, Tokens: estimatedAnchorTokens}
+		if anchor.usage != nil {
+			if providerTokens := usageTokens(*anchor.usage); providerTokens >= estimatedAnchorTokens {
+				baseline = MeasurementBaseline{
+					Kind:   BaselineUsage,
+					Tokens: providerTokens,
+					Usage:  *anchor.usage,
+				}
+			}
+		}
+		surfaceDeltaTokens = surface.surfaceTokens - anchorSurfaceTokens
+	case !hasHeader && surface.surfaceTokens == 0:
 		baseline = MeasurementBaseline{Kind: BaselineNone}
 	default:
 		headerTokens, estimateErr := EstimateHeader(header)
@@ -240,21 +290,38 @@ func (m *TokenMeter) Measure(view projection.SessionView, requestHeader *session
 		}
 		baseline = MeasurementBaseline{
 			Kind:   BaselineEstimated,
-			Tokens: headerTokens + state.surfaceTokens,
+			Tokens: headerTokens + surface.surfaceTokens,
 		}
 	}
 
-	measurement := Measurement{
+	// 节点表是 priceSurface 当场新造的，不和重放状态共享，所以这里不必再复制一次
+	// ——DSH 那边同样的位置是 deepFreeze(structuredClone(...))，防的是它那份
+	// 按引用共享的 state.surface。
+	return Measurement{
 		LogRevision:        state.consumedEvents,
 		Baseline:           baseline,
 		SurfaceDeltaTokens: surfaceDeltaTokens,
 		TotalTokens:        max(0, baseline.Tokens+surfaceDeltaTokens),
-		SurfaceTokens:      state.surfaceTokens,
-		Nodes:              state.surface,
+		SurfaceTokens:      surface.surfaceTokens,
+		Nodes:              surface.nodes,
+	}, nil
+}
+
+// routeImagePricing 解出这份请求头那条路由的图片计价，没有就是 nil。
+//
+// 源: packages/llm/token-meter/src/index.ts:179-184（_routeImagePricing）
+//
+// 三种情况都落到 nil：没有请求头、没交 llm 运行时、那条路由不报价。三者对
+// 定价的后果一样（整张表面留着固定估价），所以不分。
+func (m *TokenMeter) routeImagePricing(header sessionlog.EpochHeader, hasHeader bool) llm.ImageRequestPricing {
+	if !hasHeader || m.llmRuntime == nil {
+		return nil
 	}
-	// 交出去的节点表必须是一份复制品：调用方（压缩那边）会把它留着，而这里那一张
-	// 还要继续被后面的折叠改。DSH 那边同样的位置是 deepFreeze(structuredClone(...))。
-	return measurement.Clone(), nil
+	pricing, ok := m.llmRuntime.ImageRequestPricing(header.Config.Provider, header.Config.Model)
+	if !ok {
+		return nil
+	}
+	return pricing
 }
 
 // EstimateMessage 按计量器那把尺子给一条消息估价。
@@ -335,8 +402,13 @@ func (m *TokenMeter) foldEvent(view projection.SessionView, state *replayState, 
 		if err := json.Unmarshal(event.Data, &data); err != nil {
 			return fmt.Errorf("token 计量器：seq %d 的 step/start 读不回来：%w", event.Seq, err)
 		}
-		// 记下这个步骤开起来那一刻的表面：锚就是从这里起算的。
-		nextStepStart = &stepMark{turn: data.Turn, step: data.Step, surfaceTokens: state.surfaceTokens}
+		// 记下这个步骤开起来那一刻的表面快照：锚就是从这里起算的。快照要复制一份，
+		// 后面的折叠会把 state.surface 换掉。
+		nextStepStart = &stepMark{
+			turn:  data.Turn,
+			step:  data.Step,
+			nodes: append([]meterNode(nil), state.surface...),
+		}
 	case sessionlog.EventStepEnd:
 		var data sessionlog.StepEndData
 		if err := json.Unmarshal(event.Data, &data); err != nil {
@@ -374,8 +446,8 @@ func (m *TokenMeter) foldEvent(view projection.SessionView, state *replayState, 
 			return fmt.Errorf("token 计量器：seq %d 的 assistant/message 没能折进表面", event.Seq)
 		}
 
-		var anchorSurfaceTokens int
-		var baseline MeasurementBaseline
+		assistantTokens := surface.tokens
+		var usage *llm.TokenUsage
 		if data.Usage != nil && nextHasHeader {
 			// 提供方看见的是它自己那趟流产出的内容，而落进日志的那条消息可能已经
 			// 被改写过（比如打断只留了一个前缀）。锚要跟提供方对齐，所以按来源
@@ -384,44 +456,19 @@ func (m *TokenMeter) foldEvent(view projection.SessionView, state *replayState, 
 			if err != nil {
 				return err
 			}
-			anchorSurfaceTokens = stepStart.surfaceTokens + providerAssistantTokens
-
-			headerTokens, err := EstimateHeader(nextHeader)
-			if err != nil {
-				return err
-			}
-			estimatedAnchorTokens := headerTokens + anchorSurfaceTokens
-			providerTokens := usageTokens(*data.Usage)
-
-			// 带符号的启发式增量只有挂在一个**不小于**同口径全量估价的锚上才是保守的：
-			// 锚比估价小的时候，后面每一次「减掉一段」都会从一个本来就偏低的绝对值上
-			// 再减一刀，越减越离谱。这种时候宁可整份用估价，至少口径是自洽的。
-			baseline = MeasurementBaseline{Kind: BaselineEstimated, Tokens: estimatedAnchorTokens}
-			if providerTokens >= estimatedAnchorTokens {
-				baseline = MeasurementBaseline{
-					Kind:   BaselineUsage,
-					Tokens: providerTokens,
-					Usage:  *data.Usage,
-				}
-			}
-		} else {
-			// 没有用量（或者还没见过请求头）：照样立锚，只是基准是估出来的。
-			// 立了它，后面的测量至少有个起算点，位移那一路的逻辑不用分叉。
-			anchorSurfaceTokens = stepStart.surfaceTokens + surface.tokens
-			headerTokens, err := EstimateHeader(nextHeader)
-			if err != nil {
-				return err
-			}
-			baseline = MeasurementBaseline{
-				Kind:   BaselineEstimated,
-				Tokens: headerTokens + anchorSurfaceTokens,
-			}
+			assistantTokens = providerAssistantTokens
+			// 复制一份：data 是这次折叠的局部变量，但这个指针要活到后面每一次测量。
+			reported := *data.Usage
+			usage = &reported
 		}
+		// 没有用量（或者还没见过请求头）：照样立锚，只是后面每次测量都会算出一个
+		// 估出来的基准。立了它，位移那一路的逻辑不用分叉。
 		nextAnchor = &measurementAnchor{
-			header:        nextHeader,
-			hasHeader:     nextHasHeader,
-			surfaceTokens: anchorSurfaceTokens,
-			baseline:      baseline,
+			header:          nextHeader,
+			hasHeader:       nextHasHeader,
+			nodes:           stepStart.nodes,
+			assistantTokens: assistantTokens,
+			usage:           usage,
 		}
 	}
 
@@ -429,7 +476,6 @@ func (m *TokenMeter) foldEvent(view projection.SessionView, state *replayState, 
 	state.stepStart = nextStepStart
 	if folded {
 		state.surface = surface.nodes
-		state.surfaceTokens += surface.deltaTokens
 	}
 	state.anchor = nextAnchor
 	return nil

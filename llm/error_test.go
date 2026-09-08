@@ -88,7 +88,7 @@ func TestNormalizeFailureRejectsInvalidCarriedFailure(t *testing.T) {
 }
 
 // TestNormalizeFailureForeignErrors 确认外来错误一律挂 UNKNOWN：第三方 SDK
-// 自己那套码不是本装置的分类学，照抄进来会让上层按一个它其实不认识的码去路由。
+// 自己那套码不是本装置的分类学，照录进来会让上层按一个它其实不认识的码去路由。
 func TestNormalizeFailureForeignErrors(t *testing.T) {
 	failure := NormalizeFailure(errors.New("boom"))
 	if failure.Code != "UNKNOWN" || failure.Message != "boom" {

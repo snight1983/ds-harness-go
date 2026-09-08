@@ -112,8 +112,8 @@ func (s *Store) Lstat(ctx context.Context, path string, cwd string) (fs.PathInfo
 	if err != nil || !found {
 		return fs.PathInfo{}, false, err
 	}
-	// 两个类型的字段逐个对得上，所以能直接转。用转换而不是逐字段抄：以后哪一边
-	// 多长出一个字段，这里就编译不过，而逐字段抄会把新字段悄悄丢掉。
+	// 两个类型的字段逐个对得上，所以能直接转。用转换而不是逐字段照写：以后哪一边
+	// 多长出一个字段，这里就编译不过，而逐字段照写会把新字段悄悄丢掉。
 	return fs.PathInfo(info), true, nil
 }
 

@@ -156,7 +156,7 @@ type Controller struct {
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:186-205
 //
-// 那几句话是给运维看的，但字段名照抄 DSH，因为它们就是照着配置字段写的。
+// 那几句话是给运维看的，但字段名照录 DSH，因为它们就是照着配置字段写的。
 func New(config Config) (*Controller, error) {
 	provider := config.SubagentProvider
 	if provider == "" {

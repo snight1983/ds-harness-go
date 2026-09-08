@@ -126,7 +126,7 @@ type Source struct {
 //
 // 源: packages/interaction/commands/src/types.ts:84-110
 //
-// 两条**都不上表面**：它们只进日志，模型的抄本里一条都看不见。
+// 两条**都不上表面**：它们只进日志，模型的誊本里一条都看不见。
 const (
 	// EventRun 记下一条解析得出来的斜杠命令进了它的处理器。
 	//
@@ -162,7 +162,7 @@ type RunData struct {
 	// Args 是命令名后面那段一字不改的输入。
 	//
 	// 定义里把 RecordInput 设成假时这个字段整个不出现——那种命令有一条自己的
-	// 权威领域事件拥有这份负载，不该在日志里再抄一遍。
+	// 权威领域事件拥有这份负载，不该在日志里再写一遍。
 	Args string `json:"args,omitempty"`
 	// Source 是这一行的来源。
 	Source Source `json:"source"`

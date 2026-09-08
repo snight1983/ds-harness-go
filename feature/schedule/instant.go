@@ -107,7 +107,7 @@ func fieldsOf(instant time.Time) calendarFields {
 // 3 月 2 日，于是一个写错的日期会变成一个合法的提醒，在错的那一天响。所以算完
 // 再把字段读回来逐个比一遍，动过就是不合法。
 //
-// 那句话是给模型看的，所以是英文；用词照抄 DSH——本地日历那条路上出的这个错
+// 那句话是给模型看的，所以是英文；用词照录 DSH——本地日历那条路上出的这个错
 // 也用这一句，因为它是同一个检查。
 func (f calendarFields) utcMillis() (int64, error) {
 	instant := time.Date(f.year, time.Month(f.month), f.day, f.hour, f.minute, f.second,

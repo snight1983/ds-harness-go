@@ -3,9 +3,10 @@
 //
 // 源: packages/llm/llm/src/index.ts:177-260
 //
-// 新增: DSH 那边是一个抽象基类 LlmAdapter：一个抽象方法 stream，另外五个带默认
-// 实现的方法。Go 这边拆成「一个最小接口 + 五个可选接口 + 五个运行时侧的兜底函数」，
-// 理由是**内嵌不是继承**：如果照抄成一个可内嵌的 BaseAdapter 结构体，
+// 新增: DSH 那边是一个抽象基类 LlmAdapter：一个抽象方法 stream，另外六个带默认
+// 实现的方法。Go 这边拆成「一个最小接口 + 六个可选接口 + 六个运行时侧的兜底函数」
+// （第六件是图片计价，它自成一处，在 imagepricing.go），
+// 理由是**内嵌不是继承**：如果照录成一个可内嵌的 BaseAdapter 结构体，
 // BaseAdapter.PrepareCall 里那句 this.resolveModel 只会调到 BaseAdapter 自己那份
 // ResolveModel，永远调不到外层类型覆盖的那一份——Go 的方法集没有虚派发。那不是
 // 写法上的差别，是行为上的差别：DSH 的 prepareCall 默认实现明确要走覆盖后的

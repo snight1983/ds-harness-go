@@ -278,6 +278,17 @@ func newLog(t *testing.T, name string) *LogUnit {
 	return unit
 }
 
+// newDocs 在一份全新介质上开一个文档集。
+func newDocs(t *testing.T, name string) *DocUnit {
+	t.Helper()
+
+	unit, err := newMedium(t).OpenDocs(t.Context(), DocSpec{Name: name, Version: 1})
+	if err != nil {
+		t.Fatalf("打开文档集 %q 失败：%v", name, err)
+	}
+	return unit
+}
+
 // seqsOf 把一段条目的 seq 抽出来，好和期望的那串比。
 func seqsOf(entries []Entry) []int64 {
 	seqs := make([]int64, 0, len(entries))

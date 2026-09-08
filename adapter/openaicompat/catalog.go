@@ -18,7 +18,7 @@ import (
 //
 // 新增: DSH 那七个取值来自 pi-ai 的 ModelThinkingLevel，还配了一张 Record 门禁表
 // 让 pi-ai 升级增删档位时**编译失败**。这边没有那个上游可以漂移，所以门禁表连同
-// 它的理由一起不需要，取值集合就写在这里。名字照抄 pi-ai 的拼法不是为了兼容它，
+// 它的理由一起不需要，取值集合就写在这里。名字照录 pi-ai 的拼法不是为了兼容它，
 // 而是因为这几个词（off/low/medium/high）已经是 OpenAI 兼容端点上 reasoning_effort
 // 的通用词汇，换一套拼法只会让写配置的人多记一层。
 const (

@@ -33,7 +33,7 @@ type Streamer interface {
 //
 // 源: packages/compaction/compaction-basic/src/summarizer.ts:157
 //
-// 字面量照抄 DSH 的包名：它会跟着那条消息一起被提供方看见，也会进重放脚本，
+// 字面量照录 DSH 的包名：它会跟着那条消息一起被提供方看见，也会进重放脚本，
 // 换掉它等于换掉一个协议里的字面量。
 const compactionPlugin = "dsh-compaction-basic"
 
@@ -46,7 +46,7 @@ const compactionPlugin = "dsh-compaction-basic"
 // 前面，这次额外的调用就恰好是上一次路由请求的一个前缀，提供方那边的 KV 缓存
 // 因此是复用而不是作废。换成独立的系统提示词，整个前缀就变了。
 //
-// 英文原样照抄，一个字都没动：这是给模型读的指令，而且里面那对
+// 英文原样照录，一个字都没动：这是给模型读的指令，而且里面那对
 // [summaryOpenTag]／[summaryCloseTag] 要让下一次总结认出「上面那段是一份更早的
 // 检查点」。翻译它等于换掉一个协议里的字面量。
 const compactionInstruction = `You are now acting as a compaction engine for this AI coding assistant. Condense the conversation ABOVE into a structured checkpoint that lets another model resume the work with no loss of essential context.

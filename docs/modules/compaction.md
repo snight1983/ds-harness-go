@@ -2,7 +2,15 @@
 
 ## 定位
 
-`compaction` 定义压缩事务、事件、不变量和后端接口；`feature/compaction/basic` 实现基于模型摘要的压缩；`feature/compaction/toolresultpruner` 实现工具结果裁剪。压缩不会删除历史事件，而是追加事件，改变模型当前看到的表面。
+`compaction` 定义压缩事务、事件、不变量和后端接口；`feature/compaction/basic` 实现基于模型摘要的压缩；`feature/compaction/toolresultpruner` 实现工具结果裁剪；`feature/compaction/compactcommand` 把 `/compact` 这条人敲的斜杠命令接到同一道接缝上。压缩不会删除历史事件，而是追加事件，改变模型当前看到的表面。
+
+接缝有三个入口，共用同一把持久锁：
+
+```text
+     压力线到了 ──▶ feature/compaction/basic ─┐
+  提供方说超窗了 ──▶ feature/compaction/basic ─┼─▶ compaction.Engine ─▶ 会话
+   人敲 /compact ──▶ compactcommand ──────────┘
+```
 
 ## 架构与事务模型
 
@@ -27,6 +35,7 @@ compaction/end
 | `BalanceIndex` | 判断切点是否拆开工具调用与工具结果 |
 | `basic.Engine` | 根据上下文压力选区、调用摘要模型并提交事务 |
 | `toolresultpruner.Pruner` | 对过大的旧工具结果做确定性裁剪 |
+| `compactcommand.Controller` | 把 `/compact` 翻成一次 `CompactNow`，再把结局排成一句人读的话 |
 
 `basic.Config` 支持全局策略和按 provider/model 覆盖；`PressureMeter`、`ModelInfoResolver` 与摘要 `Streamer` 均由宿主注入。
 
@@ -64,6 +73,7 @@ compaction/end
 | Service Definition定义压缩做什么，判定历史过大并摘要为单个表层节点 | `compaction/compaction` | 需要 | `feature/compaction` | — |
 | 基础压缩后端，使用token压力和摘要器实现压缩 | `compaction/compaction-basic` | 需要 | `feature/compaction/basic` | — |
 | 不依赖模型的工具结果剪枝服务，改写超大结果为头部加尾部 | `compaction/compaction-tool-result-pruner` | 需要 | `feature/compaction/toolresultpruner` | — |
+| 通过/compact命令提供面向用户的手动压缩控制 | `compaction/command-compact` | 需要 | `feature/compaction/compactcommand` | — |
 
 ## 相关源码
 
@@ -72,3 +82,4 @@ compaction/end
 - `feature/compaction/toolpairing.go`
 - `feature/compaction/basic/`
 - `feature/compaction/toolresultpruner/`
+- `feature/compaction/compactcommand/`

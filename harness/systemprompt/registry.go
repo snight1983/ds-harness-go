@@ -66,7 +66,7 @@ type promptLayer struct {
 //
 // 源: packages/core/system-prompt/src/index.ts:312-325
 //
-// 这几句诊断照抄 DSH 的英文原文：它们是登记方（也就是插件作者）读的，和 mcp、skill
+// 这几句诊断照录 DSH 的英文原文：它们是登记方（也就是插件作者）读的，和 mcp、skill
 // 那边的重名诊断同一条规矩。
 func newPromptLayer(key *scope.Key) *promptLayer {
 	duplicate := func(kind string) func(string) error {

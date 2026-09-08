@@ -478,7 +478,7 @@ func TestCompactionInstruction认得上一份检查点(t *testing.T) {
 	t.Parallel()
 
 	// 那条指令里必须带着 [summaryOpenTag]，下一次总结才认得出「上面那段是一份
-	// 更早的检查点」——认不出来就会把它整段抄下去，一次压缩等于没压。
+	// 更早的检查点」——认不出来就会把它整段照着写下去，一次压缩等于没压。
 	if !strings.Contains(compactionInstruction, summaryOpenTag) {
 		t.Fatal("那条指令里没有开标签")
 	}

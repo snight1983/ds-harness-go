@@ -1,7 +1,19 @@
 // Package sdkprotocol 是进程外 SDK 和这套运行时之间那条线上说的话：一条按行分帧的
-// JSON-RPC 2.0 通道，加上两端共用的那三对请求/结果和四种通知的形状。
+// JSON-RPC 2.0 通道，加上两端共用的那十三对请求/结果和四种通知的形状。
 //
-// 源: packages/sdk/protocol/src/index.ts:1-25
+// 源: packages/sdk/protocol/src/index.ts:1-25, packages/api/session-controller/src/types.ts
+//
+// # 线上有哪些话
+//
+// 三件是这条线本身的事：`initialize` 握手、`session/prompt` 排一轮输入、`shutdown`
+// 收摊。另外十件是会话控制面：建、续、分叉、改名、列举、检索、取消、换模型、改排队、
+// 翻历史。
+//
+// 会话那十件里有四个字段是 `*int` 或 `*string` 而不是值——分叉点、翻页起点、推理档位、
+// 标题。它们各自都有一个「没给」和「给了零值」必须分得开的语义：从第 0 条分和从最后
+// 一个收了尾的回合分是两件事，翻第 0 条之前是空的一页而从最新那头翻起不是，不选推理
+// 档位和明说一个空档位是两份不同的调用配置，从没命名过的会话和被改成空标题的会话在
+// 界面上该长得不一样。折成值类型这四处都会静静地错。
 //
 // # 谁在两端
 //
@@ -44,8 +56,13 @@
 //     [github.com/snight1983/ds-harness-go/protocol/sdk/sdkserver]，客户端是各语言的 SDK。
 //   - **不自己写 JSON-RPC 的通用机制。**id 生成、请求响应配对、错误码折叠、断开时
 //     打回等待中的请求，全交给 github.com/sourcegraph/jsonrpc2。
-//   - **不覆盖完整的会话控制面。**这条线上只有 `session/prompt`；会话的建、续、
-//     分叉、改名、列举、检索、取消、选模型与历史分页都不在协议里。
+//   - **不带浏览器那一半的会话控制面。**DSH 的 api/session-controller 里有近一半是
+//     给浏览器前端准备的：一份增量订阅、一套流式 patch、以及围绕它们的重放游标。
+//     Go 这边同一语义由 [github.com/snight1983/ds-harness-go/sessionlog/projection]
+//     的整值投影承担——重连就重取整值，所以这条线上没有增量帧。
+//   - **不定检索的查询语法。**`session/search` 只把查询串原样送过去，怎么解释由挂
+//     在服务端那一侧的检索后端说了算。
+//   - **不做工作区、设置、凭据这三个面。**它们各自有自己的门面，不挤进这条线。
 //   - **不认证对端，也不加密。**这条线默认已经是一条可信通道，那是部署边界的事。
 //   - **不是 ACP、也不是 MCP。**那两条对外协议在
 //     [github.com/snight1983/ds-harness-go/protocol/acp] 与

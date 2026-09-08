@@ -15,7 +15,7 @@ import (
 //
 // 源: packages/compaction/compaction-tool-result-pruner/src/config.ts:6
 //
-// 英文原样照抄：它落进工具结果的正文，是给模型读的。
+// 英文原样照录：它落进工具结果的正文，是给模型读的。
 const PruneMarker = "\n\n[... tool result middle pruned ...]\n\n"
 
 // 三档字符预算的默认值，按编程助手的工具输出定的。

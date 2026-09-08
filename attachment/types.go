@@ -31,7 +31,7 @@ type VariantID string
 //
 // 源: packages/attachment/attachment/src/types.ts:7-8
 //
-// 它是**线上可见**的字符串，原样跟着请求和引用走，所以取值照抄 DSH，不做本地化。
+// 它是**线上可见**的字符串，原样跟着请求和引用走，所以取值照录 DSH，不做本地化。
 // 这里不设「是不是合法媒体类型」的全局校验：DSH 那边这是一个 TS 联合类型，
 // 只在编译期成立；真正的准入判据是部署自己配的 [ImageLimits.MediaTypes]，
 // 见 [ValidateImageBatch]。

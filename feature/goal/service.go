@@ -663,7 +663,7 @@ func (s *Service) snapshotChange(entry *cache, operation Operation, goal Snapsho
 // 源: packages/goal/goal/src/index.ts:507-512
 //
 // 严格回放要求 updatedAt 不早于上一次（见 [validateSnapshotTransition]），所以
-// 一次时钟回拨如果直接照抄，写下的那条改动会当场破掉本包自己的不变量。
+// 一次时钟回拨如果直接照录，写下的那条改动会当场破掉本包自己的不变量。
 func (s *Service) nextMutationTime(entry *cache) int64 {
 	return max(s.now().UnixMilli(), entry.state.UpdatedAt)
 }

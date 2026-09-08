@@ -1,20 +1,20 @@
 能力	DSH出处包	要不要	落在哪个Go包	缺口说明
 Agent Client Protocol仅自动化JSON-RPC服务器，通过stdio驱动harness agent	acp/acp	需要	protocol/acp	
-Typert RPC endpoint提供Host侧ctx.typertGateway与Client侧ctx.remote服务	api/gateway	抄形状	（未落地）	缺口：Host 侧能力注册＋Client 侧贡献项挂载这套双侧协议形状没有对应物
-双侧BFF为Host Remote能力提供客户端外观，包含Goal Remote与插件清单	api/remotes	抄形状	（未落地）	缺口：双侧 BFF 与身份解析没有对应物
-Host 的 ctx.sessionController 服务与生成的 Client session／skills／fileReferences namespace，负责会话生命周期与历史、模型目录、工作区路径打开、可调用 skill 发现与文件引用	api/session-controller	抄形状	protocol/sdk/sdkprotocol	缺口：sdkprotocol 只有 session/prompt。create／resume／fork／rename／list／search／cancel／select-model／update-queue 与历史分页、实时投影推送都没有
-浏览器配置界面的 Host Remote 属主，提供脱敏 settings 与凭据元数据读取、不回传密钥的写入，并在 Host 桌面打开 settings 或 preset 位置	api/settings-controller	抄形状	credentials settings	缺口：credentials 有归属校验，没有「凭据可列出、可引用、读回来打码」这条脱敏读路径
-Host 的 ctx.workspaceController 与 Client workspace namespace，负责 Workspace 增删改序、Session 重排与归档、完整 Workspace 投影跟随，并拥有选目录 seam	api/workspace-controller	抄形状	feature/workspace	缺口：断线重连安全的 baseline＋增量状态传输（WorkspaceBaseline／WorkspaceFollowSink）没有
+Typert RPC endpoint提供Host侧ctx.typertGateway与Client侧ctx.remote服务	api/gateway	不需要	—	已裁决不做：Go 侧对外通道是 protocol/sdk 与 protocol/acp 两条，各有线格式且都已落地；再译一套帧会得到第三条互不兼容的通道，而它没有客户端（DSH 那侧说这套帧的只有 client/*，已整包不取）。@Remote 靠 cordis 服务容器加 TS 装饰器反射，Go 侧同一件事的形态就是 sdkserver 里那张显式 handler 表。推翻条件见 docs/portmap/decisions.md 的 api/* 一节：这个仓库长出一个浏览器前端。
+双侧BFF为Host Remote能力提供客户端外观，包含Goal Remote与插件清单	api/remotes	不需要	—	已裁决不做：本身是装配清单，不含能力，随 api/gateway 一并不做。转发事件白名单对应的能力 Go 侧都有，只是不经这条通道转发。理由与推翻条件同上，见 docs/portmap/decisions.md 的 api/* 一节。
+Host 的 ctx.sessionController 服务与生成的 Client session／skills／fileReferences namespace，负责会话生命周期与历史、模型目录、工作区路径打开、可调用 skill 发现与文件引用	api/session-controller	取形重写	protocol/sdk/sdkprotocol protocol/sdk/sdkserver	缺口：实时投影推送不做（同一语义走 sessionlog/projection 的整值投影，重连重取整值）；工作区路径打开、skill 发现、文件引用三个 namespace 各有自己的门面，不并进这条线
+浏览器配置界面的 Host Remote 属主，提供脱敏 settings 与凭据元数据读取、不回传密钥的写入，并在 Host 桌面打开 settings 或 preset 位置	api/settings-controller	取形重写	credentials settings	缺口已补：配置界面那条只读路径落在 credentials 的 DescribeRefs（一次问一批引用，带语法关与扇出上限）。上游同样不打码、不枚举引用——脱敏靠「没有任何一条读路径交出值」，不是靠掩码；settings 那一半的 RedactSecrets 早已落地
+Host 的 ctx.workspaceController 与 Client workspace namespace，负责 Workspace 增删改序、Session 重排与归档、完整 Workspace 投影跟随，并拥有选目录 seam	api/workspace-controller	取形重写	feature/workspace	缺口已补：一次读回全部字段的自洽快照落在 feature/workspace 的 Snapshot（多带 TargetKey、不带 Status）。baseline＋增量那一半是有意不落——Go 侧同一语义由 sessionlog/projection 的整值投影承担，重连重取整值
 持久附件服务边界，规范化并持久提交图片	attachment/attachment	需要	attachment	
 dsh-attachment本地实现，对象存放在DSH_HOME/attachments	attachment/attachment-local	不需要	adapter/imagestore	服务端替代实现见 adapter/imagestore；缺前置：本机文件系统
 供多个bin共用的启动粘合层，提供配置路径解析、环境加载、Profile机制、Loader结算与启动失败处理	boot/app-boot	不需要	—	缺前置：交互式 TTY
 dsh启动器交给引导应用的命令行参数接口，提供参数快照读取与退出请求	boot/cmdline	不需要	—	缺前置：桌面启动器进程（入参走 argv）。服务端入参走 HTTP
-纯自动化 ACP stdio 应用 profile 组合包，在 base 之上设 coding persona 与默认模型路由，命令提供方接受调用后才启动 ACP bridge	bundle/acp-app	抄形状	harness protocol/acp	走 HTTP 不走 stdio，进程外壳那半不要。ACP 场景关掉 session-title-llm 这条取舍已记在裁决里
-共享dsh核心profile组合包，插入全部基础插件（适配器、持久化、策略、settings等），作为所有profile的第一层	bundle/base	抄形状	harness	抄的是 86 行有序挂载这份顺序，落在 harness/assemble.go
-一次性任务组合包，提供编码persona和工具模式，禁用HMR，仅创建一个新Agent执行任务后退出	bundle/headless	抄形状	harness	DSH 自陈的第二份最小可跑定义，并入 harness 的装配顺序
-SDK stdio 应用 profile 组合包，在 base 之上设 coding persona，命令提供方接受调用后才启动 JSON-RPC server	bundle/sdk-app	抄形状	harness protocol/sdk/sdkserver	走 HTTP 不走 stdio JSON-RPC，要的只是「协议服务端／进程生命周期」的分界
-不含共享 base 的独立双工具 SDK profile，只公布按平台选择的持久 shell 与 str_replace_editor，会话存为未压缩 JSONL，模型从 SDK 初始化请求选	bundle/sdk-minimal	抄形状	harness	快照里唯一一份作者亲口说「完整」的最小树，33 行，作为 harness 装配顺序的下界
-浏览器表层组合包，挂载Web宿主行、客户端插件、前端dist服务和web-runtime粘合，支持浏览器打开与URL打印	bundle/web-app	抄形状	（未落地）	不缺：里面挂的 webserver／web-runtime 全判了不需要
+纯自动化 ACP stdio 应用 profile 组合包，在 base 之上设 coding persona 与默认模型路由，命令提供方接受调用后才启动 ACP bridge	bundle/acp-app	取形重写	harness protocol/acp	走 HTTP 不走 stdio，进程外壳那半不要。ACP 场景关掉 session-title-llm 这条取舍已记在裁决里
+共享dsh核心profile组合包，插入全部基础插件（适配器、持久化、策略、settings等），作为所有profile的第一层	bundle/base	取形重写	harness	取的是 86 行有序挂载这份顺序，落在 harness/assemble.go
+一次性任务组合包，提供编码persona和工具模式，禁用HMR，仅创建一个新Agent执行任务后退出	bundle/headless	取形重写	harness	DSH 自陈的第二份最小可跑定义，并入 harness 的装配顺序
+SDK stdio 应用 profile 组合包，在 base 之上设 coding persona，命令提供方接受调用后才启动 JSON-RPC server	bundle/sdk-app	取形重写	harness protocol/sdk/sdkserver	走 HTTP 不走 stdio JSON-RPC，要的只是「协议服务端／进程生命周期」的分界
+不含共享 base 的独立双工具 SDK profile，只公布按平台选择的持久 shell 与 str_replace_editor，会话存为未压缩 JSONL，模型从 SDK 初始化请求选	bundle/sdk-minimal	取形重写	harness	快照里唯一一份作者亲口说「完整」的最小树，33 行，作为 harness 装配顺序的下界
+浏览器表层组合包，挂载Web宿主行、客户端插件、前端dist服务和web-runtime粘合，支持浏览器打开与URL打印	bundle/web-app	取形重写	（未落地）	不缺：里面挂的 webserver／web-runtime 全判了不需要
 协议消费层，挂载ctx.connection并管理客户端与主机间的HTTP/WebSocket通信	client/connection	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
 为通过脚本加载的客户端插件提供热重载	client/hmr	不需要	—	缺前置：浏览器运行时与前端构建链
 偏好设置以locale.preference存储，支持中英文切换及本地化文案注册	client/locale	不需要	—	缺前置：浏览器 navigator 与桌面 UI 设置文件
@@ -63,7 +63,7 @@ Web启动内核，分两阶段挂载客户端	client/web	不需要	—	缺前置
 代码运行时 Service Definition，定义异步绑定执行模型编写的程序	code-runtime/code-runtime	不需要	—	缺前置：无
 CPython 子进程代码运行时实现，通过 fd 3 JSON-lines 协议交互	code-runtime/code-runtime-python	不需要	—	缺前置：起本机子进程的能力
 Node worker 线程代码运行时实现，支持 TypeScript 并提供隔离与预算	code-runtime/code-runtime-worker-thread	不需要	—	缺前置：单进程独占（本仓库要多实例并发）
-通过/compact命令提供面向用户的手动压缩控制	compaction/command-compact	不需要	—	不缺前置：压缩由 feature/compaction 按阈值自动跑，手动 /compact 只是便利入口，推后。要补时是加一条命令注册，不动已有代码
+通过/compact命令提供面向用户的手动压缩控制	compaction/command-compact	需要	feature/compaction/compactcommand	
 Service Definition定义压缩做什么，判定历史过大并摘要为单个表层节点	compaction/compaction	需要	feature/compaction	
 基础压缩后端，使用token压力和摘要器实现压缩	compaction/compaction-basic	需要	feature/compaction/basic	
 不依赖模型的工具结果剪枝服务，改写超大结果为头部加尾部	compaction/compaction-tool-result-pruner	需要	feature/compaction/toolresultpruner	
@@ -81,21 +81,21 @@ agent唯一具体实现和循环驱动器，驱动会话、轮次和步骤的生
 事件溯源的会话日志和内存存储，为agent保留全部交互历史	core/session	需要	harness/session sessionlog	
 系统提示词组装注册表，按作用域收集段落、工具schema和变量	core/system-prompt	需要	harness/systemprompt	
 工具注册表与执行流水线，定义工具schema、执行和呈现方式	core/tools	需要	tools	
-授权Service Definition，拥有凭据对话及生命周期	credentials/authorization	抄形状	（未落地）	缺口：OAuth 与人工授权流程。DSH 自陈「flow 不可恢复」是浏览器进程的限制，与前提 3、4 相撞，服务端要自己的可恢复流程
+授权Service Definition，拥有凭据对话及生命周期	credentials/authorization	取形重写	feature/authorization	缺口已补：新包 feature/authorization。三个接缝（Flow / Interaction / Request）取 DSH 的形状，状态落 storage/domain——一次尝试是介质上一条记录，进程没了第二天能接着走。单飞由记录键（就是凭据键）的条件写保证，跨副本有效；接手是重跑 Flow.Run，由流程自己读回上一次留下的脚印
 凭据Service Definition，配置引用与授权记录分离存储	credentials/credentials	需要	credentials	
 文件型凭据提供方，四层来源优先级	credentials/credentials-local	不需要	—	缺前置：本机文件系统
 为 agent 提供远程 Linux 沙箱执行环境，托管文件系统与进程生命周期	e2b/e2b	不需要	—	缺前置：起本机子进程的能力、桌面 UI 宿主、浏览器运行时（DOM／ESM／React）
 实现在 E2B 沙箱上运行的文件系统操作适配器	e2b/fs-e2b	不需要	—	缺前置：起本机子进程的能力
 在 E2B 沙箱中执行子进程和 PTY 的提供方	e2b/subprocess-e2b	不需要	—	缺前置：起本机子进程的能力
-**上游已删。**通过 JSON-RPC stdio 提供 ACP 自动化服务器应用，支持会话管理和语义检查点	examples/acp-demo	抄形状	harness	上游已删，换成 bundle/acp-app 的 patch 清单。价值在装配顺序，不在代码
-**上游已删。**最小 agent 主干组合包，包含 LLM、会话、提示词、工具、skill、loop 等固定服务集	examples/agent-spine-demo	抄形状	harness	上游已删，换成 bundle/base 与 bundle/sdk-minimal。价值在装配顺序，不在代码
-**上游已删。**只包含 bin 的应用，通过 JSON-RPC stdio 为 SDK 客户端启动外部 cordis.yml 配置	examples/jsonrpc-demo	抄形状	harness	上游已删，换成 bundle/sdk-app 的 patch 清单。价值在装配顺序，不在代码
-隐式Root Agent Teams领域，维护Lead/teammate roster、持久peer mailbox与共享任务DAG	experimental/agent-team	抄形状	（未落地）	缺口：全仓库唯一的持久 peer mailbox＋版本化共享任务板（expectedRevision CAS、任务 DAG、Quiet／Wakeup 两档投递）
+**上游已删。**通过 JSON-RPC stdio 提供 ACP 自动化服务器应用，支持会话管理和语义检查点	examples/acp-demo	取形重写	harness	上游已删，换成 bundle/acp-app 的 patch 清单。价值在装配顺序，不在代码
+**上游已删。**最小 agent 主干组合包，包含 LLM、会话、提示词、工具、skill、loop 等固定服务集	examples/agent-spine-demo	取形重写	harness	上游已删，换成 bundle/base 与 bundle/sdk-minimal。价值在装配顺序，不在代码
+**上游已删。**只包含 bin 的应用，通过 JSON-RPC stdio 为 SDK 客户端启动外部 cordis.yml 配置	examples/jsonrpc-demo	取形重写	harness	上游已删，换成 bundle/sdk-app 的 patch 清单。价值在装配顺序，不在代码
+隐式Root Agent Teams领域，维护Lead/teammate roster、持久peer mailbox与共享任务DAG	experimental/agent-team	需要	feature/agentteam	DSH 的 activity.ts 是一张进程内等待者名单，多副本下等不到别的副本上那次改动，所以 agentteam.Service.Wait 落成介质上的条件轮询：只承诺看得见本次调用之后的改动，看不见就到点返回 timedOut。
 在 base 之上启用 Agent Teams 的私有 profile 层，插入 Team domain 与 Team 作用域工具，禁用名称重叠的全局 continuable-child 控制项，保留一次性 delegation	experimental/agent-team-profile	不需要	—	缺前置：单进程独占（本仓库要多实例并发）
 Agent Teams 的私有 Web 层，在浏览器显示 Team roster、任务板与 teammate 导航	experimental/agent-team-web-profile	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）、单进程独占（本仓库要多实例并发）
 Web 会话页头的 Agent Teams 面板，检查当前 roster、管理共享任务板并导航到 teammate 会话	experimental/client-ui-agent-team	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
 把运行中的 Host 与浏览器 Client 接进 Chrome DevTools，提供双侧 Console context、Host Sources 与调试、fetch 采集、共享 Cordis 树与独立于 CDP 的查询 API	experimental/inspector	不需要	—	缺前置：起本机子进程的能力、桌面 UI 宿主
-ctx.agentTeams的scoped模型适配器，在每个隐式Lead和持久teammate scope安装协作工具	experimental/tool-agent-team	抄形状	（未落地）	缺口：随 agent-team 一起缺。工具形状（发消息／领任务／改任务带 expectedRevision）待接缝重写后再挂
+ctx.agentTeams的scoped模型适配器，在每个隐式Lead和持久teammate scope安装协作工具	experimental/tool-agent-team	取形重写	feature/agentteam/agentteamtool	十件工具连同那段团队策略指引都已落地。团队身份不再现问成员表，改由装配方在 Config.Team 上写死，一个控制器服务一支团队。
 VFS 镜像打包器，把一份合成 profile 变成浏览器 worker 可挂载的 gzip 基础 tar，并把数据目录变成按序应用的 overlay tar	experimental/webworker-packer	不需要	—	缺前置：本机文件系统
 浏览器 worker 宿主，整棵 harness 插件树跑在一个 dedicated Web Worker 里，边下载边解压 VFS 镜像挂进内存，经 postMessage HTTP 隧道服务页面	experimental/webworker-runtime	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
 动态双半插件的浏览器半执行器，负责评估浏览器端闭包源码、装载为活插件、处理运行编排与RPC回调	extensions/cordis-client-runner	不需要	—	缺前置：浏览器运行时（DOM／ESM／React）
@@ -120,7 +120,7 @@ ctx.goals的面向模型控制API：get_goal、create_goal和update_goal	goal/to
 hook协议格式的共享核心库，提供方言无关原语（matcher、codec、hook执行、输出合并、会话事件）	hooks/hook-protocol	不需要	—	缺前置：本机 shell 执行器（shell/* 全族出局）。方言只有 claude-code／codex 两种取值，也没有消费方
 Claude Code hook配置的方言桥接，在规范拦截点上运行CC command hook子集	hooks/hooks-claude-code	不需要	—	缺前置：起本机子进程的能力
 Codex hook配置的方言桥接，在规范拦截点上运行Codex 5项hook点的支持子集	hooks/hooks-codex	不需要	—	缺前置：起本机子进程的能力
-**上游已删。**提供共用API网关协议与HTTP载体，使客户端与服务器间通过JSON-RPC模式通信，处理会话请求/响应、流式事件、文件导出等	host/apiproxy	抄形状	（未落地）	上游已删，裁决已并入 api/ 底下三个控制器，缺口同那三条
+**上游已删。**提供共用API网关协议与HTTP载体，使客户端与服务器间通过JSON-RPC模式通信，处理会话请求/响应、流式事件、文件导出等	host/apiproxy	取形重写	（未落地）	上游已删，裁决已并入 api/ 底下三个控制器，缺口同那三条
 定义目录选择能力接缝，为web宿主抽象原生OS选择器与应用内浏览两种交互方式	host/directory-picker	不需要	—	缺前置：本机目录（服务端无磁盘）
 启动时自适应判定宿主处境并挂载匹配的目录选择后端（原生或浏览）	host/directory-picker-auto	不需要	—	缺前置：桌面 UI 宿主、浏览器运行时（DOM／ESM／React）
 应用内浏览目录选择后端，提供跨平台的单层目录列举、创建与面包屑导航交互	host/directory-picker-browse	不需要	—	缺前置：本机目录（服务端无磁盘）
@@ -137,13 +137,13 @@ Web HTTP与upgrade route注册插件，启动node:http服务器并管理具名�
 后台任务注册表约定，为长时间运行的生产方提供共享id、owner隔离、读取、取消、等待、通知和清理	jobs/jobs	需要	feature/jobs	
 ctx.jobs注册表约定的进程本地实现，把每条记录保存在内存中并按kind签发id	jobs/jobs-local	需要	adapter/domainjobs adapter/localjobs	
 ctx.jobs的面向模型控制器，提供job_output、job_list和job_kill三个与kind无关的工具	jobs/tool-jobs	需要	feature/jobs/jobstool	
-DeepSeek 官方请求的顶层字段扩展注册表，贡献插件各认领一个经声明合并的字段，基础请求序列化后准备当前贡献	llm/deepseek-llm-api-extensions	抄形状	（未落地）	缺口：adapter/openaicompat 没有让宿主往模型请求顶层追加提供方私有字段的注册表，宿主要加字段就得改适配器
+DeepSeek 官方请求的顶层字段扩展注册表，贡献插件各认领一个经声明合并的字段，基础请求序列化后准备当前贡献	llm/deepseek-llm-api-extensions	取形重写	adapter/openaicompat	只取注册表形状：字段归属在登记那一刻定死（Go 没有声明合并），DeepSeek 那套具体字段一个都不带；accept() 那半个事务不做，它唯一的上游用户 session/session-log-deepseek 判了不需要
 提供方无关的 LLM 词汇与抽象，注册适配器、捕获重试策略、支持模型发现与流式调用	llm/llm	需要	adapter/openaicompat llm	
 DeepSeek chat-completions 适配器，直接fetch+SSE转换为StreamChunk，支持图片文件API与思考模式	llm/llm-deepseek	不需要	—	缺前置：本机文件系统
 基于@earendil-works/pi-ai的多提供方通用适配器，支持OpenAI兼容端点与私有网关	llm/llm-pi-ai	需要	adapter/openaicompat	
 通过agent/request-error事件应用提供方重试策略，支持normal与always两种模式	llm/llm-retry	需要	feature/llmretry	
 向 DeepSeek 官方请求注入存活 Loader 插件包清单（dsh_plugin_packages 字段），用于请求诊断	llm/plugin-package-inventory-deepseek	不需要	—	缺前置：cordis 插件容器 + DeepSeek 官方接口，两个都没有
-通过单例ctx.tokenMeter进行回放感知的token测量与上下文占用率投影	llm/token-meter	需要	feature/tokenmeter	缺两角：（一）单回合精确用量——feature/tokenmeter 是整份日志累计，同一 turn/step 重复采样 last-wins，切不出「这一个回合花了多少、走了哪几条路由」，补法是加一个吃 turn/start..turn/end 事件切片的纯函数；（二）路由感知的图片计价——图片按固定启发式估价，llm 包里没有计价接缝，补法是 llm 加图片计价接口、feature/tokenmeter 按路由重估图片节点
+通过单例ctx.tokenMeter进行回放感知的token测量与上下文占用率投影	llm/token-meter	需要	feature/tokenmeter	缺两角已补：（一）单回合精确用量落在 DeriveTurnUsage——吃一段 turn/start..turn/end 的事件切片，一个字都不估，只加提供方亲口报过的数；对残缺一点都不宽容，少一角就整份不给，一次重试算两次计费尝试，路由表要么每一次尝试都说得清要么整份不给。（二）路由感知的图片计价落在 llm 的图片计价接缝（适配器可选实现，认不得的路由降级成不报价而不是报错）加 feature/tokenmeter 的 priceSurface——按当次请求头那条路由重估图片那一份，SurfaceNode 因此带路由价和固定估价两个数
 LSP 能力 seam，抽象四种语义代码导航操作	lsp/lsp	不需要	—	缺前置：无
 通用 stdio 语言服务器后端，惰性启动和池化服务器进程	lsp/lsp-stdio	不需要	—	缺前置：本机文件系统、起本机子进程的能力
 面向模型的 LSP 工具，通过四种导航操作执行代码定位	lsp/tool-lsp	不需要	—	缺前置：本机文件系统、起本机子进程的能力
@@ -157,12 +157,12 @@ MCP客户端桥接插件，连接外部MCP服务器并把工具注册到ctx.tool
 沙箱策略解析的唯一归属位置，管理部署默认和会话覆盖	sandbox/sandbox-policy	不需要	—	缺前置：无
 Windows 写入限制沙箱后端，基于受限令牌和 ACL 实现隔离	sandbox/sandbox-windows-acl	不需要	—	缺前置：起本机子进程的能力、单进程独占（本仓库要多实例并发）
 为未来创建的live根agent提供三个会话范围内的工具管理持久提醒	schedule/schedule	需要	feature/schedule	
-TypeScript客户端SDK以子进程驱动harness，stdio JSON-RPC通讯	sdk/client	抄形状	（未落地）	不缺：子进程驱动运行时这件事本仓库不做。客户端形状留待有外部驱动需求时再抄
+TypeScript客户端SDK以子进程驱动harness，stdio JSON-RPC通讯	sdk/client	取形重写	（未落地）	不缺：子进程驱动运行时这件事本仓库不做。客户端形状留待有外部驱动需求时再取形
 DeepSeek Harness SDK运行时共享协议格式，换行分帧JSON-RPC	sdk/protocol	需要	protocol/sdk/sdkprotocol	
 stdio JSON-RPC服务器插件使进程外SDK客户端驱动harness agent	sdk/server	需要	protocol/sdk/sdkprotocol protocol/sdk/sdkserver	
 Web会话日志ZIP下载控制	session-query/session-log-export	不需要	—	缺前置：桌面 UI 宿主、浏览器运行时（DOM／ESM／React）
 会话查询Service Definition，提供精确读取、关系跟踪与过滤	session-query/session-query	需要	feature/sessionquery	
-SQLite全文搜索会话查询提供方实现	session-query/session-query-sqlite	抄形状	feature/sessionquery	缺口：feature/sessionquery 只定义了 Searcher 挂点，全仓库没有任何实现，两个检索方法一律返回 CodeSearchDisabled。要抄的查询表结构与索引形状还没落成 Postgres 版
+SQLite全文搜索会话查询提供方实现	session-query/session-query-sqlite	取形重写	adapter/datastore/searchstore	已落地：sessionquery.Searcher 的生产实现，索引落在 adapter/datastore 的文档集上，对账、活的盖住落地的、两侧并起来排、游标分页都在。全文匹配不用 FTS5 也不用 tsvector——分词器不切中文；改成折过空白后逐字数子串
 经工作区授权的会话查询模型工具	session-query/tool-session-query	需要	feature/sessionquery/querytool	
 在模型适配器前与工具正文前为事件溯源会话创建检查点，持久化前一响应与工具结果	session/session-checkpoint-policy	需要	feature/checkpointpolicy	
 把规范会话日志增量上传进 DeepSeek 官方请求（dsh_session_log 字段），以持久 delivery-accepted 事件派生接受水位	session/session-log-deepseek	不需要	—	缺前置：DeepSeek 官方接口及其私有请求字段。注意与 llm/deepseek-llm-api-extensions 区分：那个要的是注册表形状，这个是往注册表里塞的一条具体内容
@@ -201,7 +201,7 @@ spill能力Service Definition，定义后端存储过大工具文本并返回定
 非会话数据存储中心，具名后端注册表加数据形式设施	storage/storage	需要	storage storage/storagetest	
 存储中心领域数据形式，在后端上暴露可注入的storageDomain服务	storage/storage-domain	需要	storage/domain	
 存储中心JSON后端，每个单元一个JSON文件	storage/storage-json	不需要	—	缺前置：本机文件系统
-存储中心SQLite后端，单个数据库提供kv facet	storage/storage-sqlite	抄形状	adapter/datastore	抄键值怎么映射成表、迁移怎么走；后端已定 Postgres
+存储中心SQLite后端，单个数据库提供kv facet	storage/storage-sqlite	取形重写	adapter/datastore	取键值怎么映射成表、迁移怎么走；后端已定 Postgres
 提供子agent运行的接缝抽象，管理provider注册、启动、持久化子agent描述符及可继续子级编排	subagent/subagent	需要	feature/subagent feature/subagent/internal/childseed	
 通过Agent Client Protocol在全新子进程运行subagent，并作为ACP客户端驱动它	subagent/subagent-acp	不需要	—	缺前置：起本机子进程的能力、交互式 TTY
 在发起委托的会话工作区中调用官方Claude Agent SDK运行subagent任务	subagent/subagent-claude-code	不需要	—	缺前置：起本机子进程的能力、交互式 TTY
@@ -210,7 +210,7 @@ spill能力Service Definition，定义后端存储过大工具文本并返回定
 在当前进程创建子agent，以父agent已完成的对话轮次作为初始内容	subagent/subagent-fork-in-process	需要	feature/subagent/forkinprocess	
 两个进程内provider共用的运行驱动器，处理深度、创建、定制、结果读取、取消和dispose	subagent/subagent-in-process-driver	需要	feature/subagent/inprocessdriver	
 在当前进程创建全新子agent，有自己的会话但以空对话开始运行	subagent/subagent-spawn-in-process	需要	feature/subagent/spawninprocess	
-基于已配置provider的面向模型委派工具，前台或后台执行subagent任务	subagent/tool-subagent	需要	feature/subagent/subagenttool feature/workflow/toolralph	缺一角：子 agent 的模型选择授权表。descriptor.go 的 AgentProvider／AgentModel 是装配期定死的，模型自己挑不了，也没有「许挑哪几条路由」的授权表。补的入口：工具 schema 加 provider／model／reasoning_effort，授权表以 subagent/model-selection-policy 事件进日志（只进日志不进模型历史），配一个投影单元读回来
+基于已配置provider的面向模型委派工具，前台或后台执行subagent任务	subagent/tool-subagent	需要	feature/subagent/subagenttool feature/workflow/toolralph	模型选择那张授权表按 subagent/model-selection-policy 事件写一次就定；provider 那份路由默认值（agentRouteDefaults）没有产出方，本次移植不收进程外提供方，所以工具措辞只有继承父路由这一支
 全局具名send_message、interrupt_agent与list_agents工具，控制可继续subagent的生命周期	subagent/tool-subagent-control	需要	feature/subagent/controltool	
 可选的子级作用域report工具，为可继续进程内子级提供向父agent的返回通道	subagent/tool-subagent-report	需要	feature/subagent/reporttool	
 子进程 seam 定义，抽象可执行文件查找、spawn 和终端进程原语	subprocess/subprocess	不需要	—	缺前置：无
@@ -249,8 +249,8 @@ Web访问能力seam的Service Definition，定义WebRuntime接口与提供方注
 DeepSeek Anthropic兼容Messages API搜索提供方，触发原生web_search服务器工具	web/web-search-deepseek	不需要	—	缺前置：DeepSeek 官方 API key
 Exa搜索端点提供方，返回高亮摘要映射为规范结果	web/web-search-exa	不需要	—	缺前置：Exa API key
 Perplexity OpenAI兼容搜索提供方，生成答案与引用映射	web/web-search-perplexity	不需要	—	缺前置：Perplexity API key
-Host 侧 ctx.webhookRuntime：受信任程序化 webhook 规则的注册表，唯一内置动作是在 Web Workspace 中创建普通根 Session	webhook/webhook	需要	feature/webhook	缺一角：没有任何 provider 适配器。签名校验、HTTP 路由、回 202 归 webhook/webhook-github 那一层，它还没落地，所以现在只能由装配方自己造投递来叫它
-带签名验证的 GitHub webhook 适配器，在注入的 ctx.webServer 上注册一条精确 HTTP 路由，投影提供方无关的交付并立即返回 202	webhook/webhook-github	抄形状	（未落地）	缺口：随 webhook/webhook 一起缺。要抄的是 HMAC 验签→解事件→交给规则运行时这个形状，不绑 HTTP 框架；凭据取用挂到 credentials 的归属校验上
+Host 侧 ctx.webhookRuntime：受信任程序化 webhook 规则的注册表，唯一内置动作是在 Web Workspace 中创建普通根 Session	webhook/webhook	需要	feature/webhook	缺一角已补：provider 适配器落在 feature/webhook/github（HMAC-SHA256 验签、身份头守卫、事件体原样穿过）。HTTP 路由与回 202 仍在装配方，本包与适配器都不接 HTTP
+带签名验证的 GitHub webhook 适配器，在注入的 ctx.webServer 上注册一条精确 HTTP 路由，投影提供方无关的交付并立即返回 202	webhook/webhook-github	取形重写	feature/webhook/github	缺口已补：HMAC-SHA256 验签、身份头守卫、事件体原样穿过都落在 feature/webhook/github。绑 HTTP 那一半是有意不落——入口收请求头与原始字节，路由、状态码、回 202 归装配方；请求体上限跟着走，因为它要边读边数才有意义
 面向模型的ralph工具，运行固定的前台工作流把目标依次交给多个全新子agent	workflow/tool-ralph	需要	feature/workflow/toolralph	
 面向模型的workflow工具，运行扇出subagent的JavaScript编排脚本并返回脚本最终值	workflow/tool-workflow	不需要	—	缺前置：JavaScript 编排引擎（workflow-worker-thread 出局），Go 侧没有产出方
 工作流seam定义脚本、运行、结果、错误和事件契约，worker-thread是当前引擎实现	workflow/workflow	需要	feature/workflow	缺一角：只有接缝没有引擎。脚本正文、meta 校验、组合子那套 API 都留给实现方兑现，本仓库不带产出方；Ralph 不经过这条接缝，它的编排写死在循环里
@@ -259,7 +259,7 @@ Workspace实体注册表，持久化workspace记录、顺序、会话归属索�
 SQL 方言底座：把键值与日志映射成表，Postgres 与 SQLite 共用一套语句	—	本仓库自有	adapter/datastore	替代 storage/storage-sqlite。服务端无磁盘，后端定 Postgres
 挑测试跑在哪种库上的夹具	—	本仓库自有	adapter/datastore/internal/dbtest	只有 datastore 子树用，收进 internal
 键值存储后端	—	本仓库自有	adapter/datastore/kvstore	storage 契约的生产实现
-会话日志与查询的存储后端	—	本仓库自有	adapter/datastore/sessionstore	sessionlog 与 feature/sessionquery 的生产实现，抄 session-query-sqlite 的表与索引形状
+会话日志与查询的存储后端	—	本仓库自有	adapter/datastore/sessionstore、adapter/datastore/searchstore	sessionlog 的生产实现在 sessionstore，feature/sessionquery 的检索后端在 searchstore；两者的介质都是 adapter/datastore
 对象存储后端	—	本仓库自有	adapter/objectstore	服务端无磁盘，附件与溢出内容走对象存储
 子 agent 提供方的契约夹具	—	本仓库自有	feature/subagent/internal/providertest	只有 subagent 子树用，收进 internal
 宿主装配门面与生命周期	—	本仓库自有	harness	对应 DSH bundle/* 那份有序挂载清单。DSH 靠 cordis 容器装配，本仓库不移 cordis，改成显式装配函数

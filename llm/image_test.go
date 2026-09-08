@@ -394,7 +394,7 @@ func TestTheDocumentedOffloadExampleHolds(t *testing.T) {
 //
 // 同一份输入、同一个移除目标（4 字节），步长 1 拿掉 1 张、步长 2 拿掉 2 张：
 // 步长为 1 时移到「刚好够」就停，步长大于 1 时要移**过**目标才停。这个不对称是
-// 照抄的，不是笔误——步长大于 1 意味着调用方要的是整块整块地移除，停在正好等于
+// 照录的，不是笔误——步长大于 1 意味着调用方要的是整块整块地移除，停在正好等于
 // 目标的地方会留下一个不满一整块的尾巴。少了这条用例，后来的人会把它「顺手改齐」。
 func TestTheByteQuantumAsymmetryIsDeliberate(t *testing.T) {
 	t.Parallel()

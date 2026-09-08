@@ -381,7 +381,7 @@ func present(title string, kind tools.CallKind, rawInput any) tools.CallView {
 // 源: packages/goal/tool-goal/src/index.ts:145-154
 //
 // 拒收带首尾空白的 id 是刻意的：一个被 trim 之后才对得上的 id 说明模型是从别处
-// 抄过来的，而这道闸要的正是它**照抄** get_goal 交出来的那一份。
+// 照录过来的，而这道闸要的正是它**照录** get_goal 交出来的那一份。
 func goalRef(goalID string, revision float64) (goal.Ref, error) {
 	rounds, ok := safeInteger(revision)
 	if goalID == "" || goalID != strings.TrimSpace(goalID) || !ok || rounds < 1 {

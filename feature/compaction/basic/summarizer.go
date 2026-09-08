@@ -12,7 +12,7 @@ import "github.com/snight1983/ds-harness-go/llm"
 //
 // 源: packages/compaction/compaction-basic/src/summarizer.ts:21-22
 //
-// 英文原样照抄：这两个标签会进模型看的文本，也会被下一次总结认出来
+// 英文原样照录：这两个标签会进模型看的文本，也会被下一次总结认出来
 // （「上面那段是一份更早的检查点」），翻译它们等于换掉一个协议里的字面量。
 const (
 	summaryOpenTag  = "<compacted-summary>"
@@ -23,7 +23,7 @@ const (
 //
 // 源: packages/compaction/compaction-basic/src/summarizer.ts:69-70
 //
-// 同样英文原样照抄，理由同上：它是给模型读的。
+// 同样英文原样照录，理由同上：它是给模型读的。
 const checkpointPreamble = "This is an automatically generated checkpoint condensing an earlier span of the conversation to free up context. Treat the captured context as established background and build on it without restating it. Continue the task directly from the messages that follow, without acknowledging this checkpoint."
 
 // SummarizationInput 是要被压掉的那一段对话表面，按它原本被路由出去的样子重放。

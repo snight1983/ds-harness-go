@@ -33,7 +33,7 @@ var (
 	// 取消原因这个联合是**封闭**的，而它外面那层 [TurnEndReason] 是开放的
 	// （不认识的落进 [UnknownTurnEnd]）。这个不对称是 DSH 自己的：
 	// TurnEndReasonMap 是一个可被插件合并扩展的映射，AgentCancelCause 是一个
-	// 普通的联合类型，插件加不进去。照抄是对的——真要新增一个取消原因，
+	// 普通的联合类型，插件加不进去。照录是对的——真要新增一个取消原因，
 	// 按 [FormatVersion] 自己的规矩那是一次「核心事件语义」改动，得升版本号，
 	// 于是版本检查会先一步拦住，这里这条错误是第二道。
 	ErrUnknownCancelCause = errors.New("session: 回合取消原因的类型不认识")

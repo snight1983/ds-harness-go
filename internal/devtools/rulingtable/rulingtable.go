@@ -37,7 +37,7 @@ const (
 	// GoNative 表示 Go 标准库或成熟三方库已有等价能力，用它代替。
 	// Note 必须写清用什么代替——「Go 有」不是理由，「用 encoding/json 的 struct tag 代替」才是。
 	GoNative = "GO_NATIVE"
-	// Skip 表示不抄。Note 必须写理由，且这个理由要经得起人看。
+	// Skip 表示不取。Note 必须写理由，且这个理由要经得起人看。
 	Skip = "SKIP"
 	// OutOfScope 表示属于产品外壳（Web UI、宿主进程、打包、示例等），
 	// 不在「agent 框架」这个移植范围内。

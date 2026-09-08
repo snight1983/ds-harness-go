@@ -69,7 +69,7 @@ func TestAssemblerAcceptsDeltaOnlyProtocol(t *testing.T) {
 
 // TestAssemblerKeepsFirstToolCallName 钉住名字只认第一份非空的那一次。
 // 提供方常在第一条增量里给名字、后面几条只带参数片段（Name 为 nil），
-// 照抄进去会把名字擦成空串。
+// 照录进去会把名字擦成空串。
 func TestAssemblerKeepsFirstToolCallName(t *testing.T) {
 	assembler := NewBlockAssembler()
 	name := "read"

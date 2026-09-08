@@ -20,6 +20,7 @@ import (
 	"github.com/snight1983/ds-harness-go/harness/systemprompt"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/scope"
+	"github.com/snight1983/ds-harness-go/sessionlog"
 	"github.com/snight1983/ds-harness-go/tools"
 )
 
@@ -48,7 +49,11 @@ type Controller struct {
 	toolFilter        tools.Restriction
 	maxDepth          *int
 
-	// mutex 罩着下面那两样：提供方来去来自登记它的那条协程，而那段指引的正文
+	// modelSelectionAsked 是 [Config.ModelSelectionSettings] 那一位：装配**要**
+	// 这件事。真正开没开还要看装的那一刻这条会话有没有一张授权表，那是 policy。
+	modelSelectionAsked bool
+
+	// mutex 罩着下面那几样：提供方来去来自登记它的那条协程，而那段指引的正文
 	// 在每一次装配提示词时求值，那又是另一条。
 	mutex sync.Mutex
 	// deps 是装的那一刻交进来的协作者，摘干净之后归零。
@@ -59,6 +64,16 @@ type Controller struct {
 	disposeTool func(context.Context) error
 	// owner 是这次装配所在的作用域，提供方晚来时那件工具装在它上面。
 	owner *scope.Scope
+	// policy 是这条会话那张授权表，在 [Controller.Install] 里采样一次就不再变；
+	// nil 表示这次装配的路由是写死的，模型说什么都不算数。
+	//
+	// 源: packages/subagent/tool-subagent/src/index.ts:354-356
+	policy *ModelSelectionPolicy
+	// mountedProvider 是此刻装着的那件工具背后的那个提供方；预检之后要拿它再认
+	// 一次身份。nil 表示此刻没装。
+	//
+	// 源: packages/subagent/tool-subagent/src/index.ts:359, 503-505
+	mountedProvider subagent.Provider
 }
 
 // delegationArgs 是这件工具的参数。
@@ -71,6 +86,9 @@ type delegationArgs struct {
 	Description     string `json:"description"`
 	Prompt          string `json:"prompt"`
 	RunInBackground *bool  `json:"run_in_background"`
+	// modelRequest 内嵌进来：DSH 那边是把同一个 args 对象当
+	// DelegationModelRequest 再读一遍，Go 里内嵌就是同一件事，一次解开两份都有。
+	modelRequest
 }
 
 // 这三个是那份权威结果值的三种形状，各排各的。
@@ -151,17 +169,76 @@ func (c *Controller) resolveRunInBackground(requested *bool) (bool, error) {
 
 // startRequest 把这次调用摊成一份派发请求。
 //
-// 源: packages/subagent/tool-subagent/src/index.ts:385-394
-func (c *Controller) startRequest(parent agent.Agent, args delegationArgs) subagent.StartRequest {
+// 源: packages/subagent/tool-subagent/src/index.ts:385-394, 509-517
+func (c *Controller) startRequest(
+	parent agent.Agent,
+	args delegationArgs,
+	childOptions agent.Options,
+) subagent.StartRequest {
 	return subagent.StartRequest{
 		Label:        args.Description,
 		Prompt:       llm.Content{llm.TextBlock{Text: args.Prompt}},
 		Parent:       parent,
-		AgentOptions: c.agentOptions,
+		AgentOptions: childOptions,
 		Persona:      c.persona,
 		ToolFilter:   c.toolFilter,
 		MaxDepth:     c.maxDepth,
 	}
+}
+
+// resolveChildRoute 把模型说的那几个路由字段并进装配写死的那份、对着授权表验一遍，
+// 再拿活着的适配器把并出来的那条路由预解一次。
+//
+// 源: packages/subagent/tool-subagent/src/index.ts:472-506
+//
+// 预检只在**这次调用或者这次装配真的点了名**的时候跑：一次纯继承的派发走的是父
+// 已经在跑的那条路由，再解一遍既没有新信息，又会把一次本来能成的派发押在 llm
+// 运行时在不在场上。
+func (c *Controller) resolveChildRoute(
+	ctx context.Context,
+	parent agent.Agent,
+	request modelRequest,
+) (agent.Options, error) {
+	c.mutex.Lock()
+	policy, runtime, provider := c.policy, c.deps.LLM, c.mountedProvider
+	subagents := c.deps.Subagents
+	c.mutex.Unlock()
+
+	// 一次纯继承的派发在这里就走完了：模型一个字都没说，装配也没写死任何一个
+	// 路由值，剩下的每一步都是恒等变换。
+	//
+	// 新增: DSH 那边 parentAgentOptionsForDelegation 是无条件先算的（index.ts:473）。
+	// 这里往后挪到真用得着它的地方——它要读父那条会话日志的最后一条请求头，
+	// 而这条路根本不看那个值。
+	if !request.present() && !hasConfiguredLLMSelection(c.agentOptions) {
+		return c.agentOptions, nil
+	}
+
+	parentOptions := subagent.ParentAgentOptionsForDelegation(parent)
+	requested, err := requestedAgentOptions(parentOptions, c.agentOptions, request, policy != nil)
+	if err != nil {
+		return agent.Options{}, err
+	}
+	if err := assertAllowedModelSelection(policy, parentOptions, requested, request); err != nil {
+		return agent.Options{}, err
+	}
+	if runtime == nil {
+		return agent.Options{}, errors.New(
+			"cannot resolve the selected child LLM route because the `llm` service is unavailable")
+	}
+	// inheritParentReasoningEffort 恒为真：那个假的产出方是提供方自己那套路由
+	// 默认值，本次移植没有给得出它的提供方（见 [selectionSuffix] 上那条说明）。
+	if err := preflightChildRoute(ctx, runtime, parentOptions, requested, true); err != nil {
+		return agent.Options{}, err
+	}
+	// 预检是可中断的，这中间那个提供方可能被换掉了；换掉之后这次派发要落在的
+	// 就不是刚刚验过能力的那一个了。
+	if current, present := subagents.GetProvider(c.provider); !present || current != provider {
+		return agent.Options{}, fmt.Errorf(
+			"subagent provider %q changed while resolving the child LLM route; retry the delegation",
+			c.provider)
+	}
+	return requested, nil
 }
 
 // parentOf 把这次执行落在的那把钥匙换成那个活 agent。
@@ -196,11 +273,21 @@ func (c *Controller) delegate(
 	if err != nil {
 		return nil, err
 	}
+	childOptions, err := c.resolveChildRoute(ctx, parent, args.modelRequest)
+	if err != nil {
+		return nil, err
+	}
+	// 预检是可中断的：它成了、而这次调用同时被取消掉，那就在这里停，别再起孩子。
+	//
+	// 源: packages/subagent/tool-subagent/src/index.ts:507
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	background, err := c.resolveRunInBackground(args.RunInBackground)
 	if err != nil {
 		return nil, err
 	}
-	request := c.startRequest(parent, args)
+	request := c.startRequest(parent, args, childOptions)
 	switch {
 	case background && c.continuable:
 		return c.startContinuable(ctx, args.Description, request)
@@ -395,6 +482,19 @@ func (c *Controller) newTool(inheritsConversation bool) *tools.Definition {
 		{Name: "description", Schema: tools.Node{Type: tools.TypeString, Description: descriptionDescription}},
 		{Name: "prompt", Schema: tools.Node{Type: tools.TypeString, Description: words.promptDescription}},
 	}
+	c.mutex.Lock()
+	selectionEnabled := c.policy != nil
+	c.mutex.Unlock()
+	if selectionEnabled {
+		properties = append(properties,
+			tools.Property{Name: "provider", Schema: tools.Node{
+				Type: tools.TypeString, Description: selectionProviderDescription}},
+			tools.Property{Name: "model", Schema: tools.Node{
+				Type: tools.TypeString, Description: selectionModelDescription}},
+			tools.Property{Name: "reasoning_effort", Schema: tools.Node{
+				Type: tools.TypeString, Description: selectionEffortDescription}},
+		)
+	}
 	if c.backgroundEnabled {
 		properties = append(properties, tools.Property{
 			Name: "run_in_background",
@@ -405,8 +505,9 @@ func (c *Controller) newTool(inheritsConversation bool) *tools.Definition {
 		})
 	}
 	return &tools.Definition{
-		Name:        c.toolName,
-		Description: toolDescription(words.description, c.backgroundEnabled, c.continuable),
+		Name: c.toolName,
+		Description: toolDescription(words.description, c.backgroundEnabled, c.continuable) +
+			choiceDescription(selectionEnabled, inheritsConversation),
 		Parameters: tools.Node{
 			Type:       tools.TypeObject,
 			Properties: properties,
@@ -451,12 +552,24 @@ func (c *Controller) newTool(inheritsConversation bool) *tools.Definition {
 //
 // 两条能力检查都落在这里，而不是等第一次派发：装的这一刻是提供方的能力**第一次
 // 已知**的时刻，一份装不成的配置在这里报出来才找得到人。那两句话是给运维看的，
-// 但用词照抄 DSH，因为它们是照着配置字段名写的。
+// 但用词照录 DSH，因为它们是照着配置字段名写的。
 func (c *Controller) mount(ctx context.Context, provider subagent.Provider) error {
 	if c.maxDepth != nil && !provider.Capabilities().DepthLimit {
 		return fmt.Errorf(
 			"tool-subagent: provider %q cannot enforce maxDepth (no depthLimit capability) — "+
 				"set ProviderManagedDepth to leave the recursion budget to the provider", provider.Name())
+	}
+	// 一个管不住孩子 agent 选项的提供方会把这两样静默丢掉：装配写死的那份，
+	// 以及模型自己挑的那条路由。
+	//
+	// 源: packages/subagent/tool-subagent/src/index.ts:329-338
+	if c.agentOptions != (agent.Options{}) && !provider.Capabilities().AgentOptions {
+		return fmt.Errorf(
+			"tool-subagent: provider %q does not support child agentOptions", provider.Name())
+	}
+	if c.modelSelectionAsked && !provider.Capabilities().AgentOptions {
+		return fmt.Errorf(
+			"tool-subagent: provider %q does not support child model selection", provider.Name())
 	}
 	if _, ok := provider.(subagent.ContinuablePreparer); c.continuable && !ok {
 		return fmt.Errorf(
@@ -473,7 +586,7 @@ func (c *Controller) mount(ctx context.Context, provider subagent.Provider) erro
 		return err
 	}
 	c.mutex.Lock()
-	c.disposeTool = dispose
+	c.disposeTool, c.mountedProvider = dispose, provider
 	c.mutex.Unlock()
 	return nil
 }
@@ -484,7 +597,7 @@ func (c *Controller) mount(ctx context.Context, provider subagent.Provider) erro
 func (c *Controller) unmount(ctx context.Context) error {
 	c.mutex.Lock()
 	dispose := c.disposeTool
-	c.disposeTool = nil
+	c.disposeTool, c.mountedProvider = nil, nil
 	c.mutex.Unlock()
 	if dispose == nil {
 		return nil
@@ -551,6 +664,46 @@ func (c *Controller) sectionTextFor(_ context.Context, assemble systemprompt.Ass
 	return sectionText(c.toolName), nil
 }
 
+// selectForAgent 给这个 agent 挑出它那张授权表，并把挑出来的那一份记进它自己的
+// 会话日志。交回 nil 表示这条会话没有授权表：路由写死，模型说什么都不算数。
+//
+// 源: packages/subagent/tool-subagent/src/index.ts:619-639
+//
+// 三条来路各管一段：这条会话自己已经记过的那一份最权威（一条恢复回来的会话跑的
+// 就是它当初被授的那张表，而不是此刻的用户设置）；它没记过而它是个孩子，就跟它
+// 父那一份走；两样都不是、而且这条日志一条继承来的事件都没有——也就是它是个真正
+// 的顶层会话——才去读用户设置。
+func (c *Controller) selectForAgent(deps Deps) (*ModelSelectionPolicy, error) {
+	live := deps.Agent.Session()
+	var allowed []AllowedRoute
+	switch existing := ModelSelectionPolicyOf(deps.Projections, live); {
+	case existing != nil:
+		allowed = existing.Routes
+	default:
+		header := live.Header()
+		if header.Origin == sessionlog.OriginSubagent && header.ParentSession != "" {
+			if deps.Agents != nil {
+				if parent, found := deps.Agents.Get(header.ParentSession); found {
+					if inherited := ModelSelectionPolicyOf(deps.Projections, parent.Session()); inherited != nil {
+						allowed = inherited.Routes
+					}
+				}
+			}
+		} else if live.FirstLiveSeq() == 0 {
+			if current := deps.ModelSelection.Current(); current.Enabled {
+				allowed = current.AllowedModels
+			}
+		}
+	}
+	if len(allowed) == 0 {
+		return nil, nil
+	}
+	if err := recordModelSelection(deps.Projections, live, allowed); err != nil {
+		return nil, err
+	}
+	return &ModelSelectionPolicy{Routes: allowed}, nil
+}
+
 // Install 把提供方那两个观察者、那件工具（提供方已经在的话）和那段后台指引一起装上
 // 一个作用域，交回把它们一起摘下来的函数。
 //
@@ -573,6 +726,16 @@ func (c *Controller) Install(
 	case owner == nil:
 		return nil, fmt.Errorf("subagenttool: 需要一个作用域")
 	}
+	if c.modelSelectionAsked {
+		switch {
+		case deps.Projections == nil:
+			return nil, fmt.Errorf("subagenttool: 开了模型选择就需要一个投影注册表")
+		case deps.ModelSelection == nil:
+			return nil, fmt.Errorf("subagenttool: 开了模型选择就需要一台模型选择设置服务")
+		case deps.Agent == nil:
+			return nil, fmt.Errorf("subagenttool: 开了模型选择就需要点名这次装配属于哪个 agent")
+		}
+	}
 
 	c.mutex.Lock()
 	if c.deps.Tools != nil {
@@ -581,6 +744,21 @@ func (c *Controller) Install(
 	}
 	c.deps, c.owner = deps, owner
 	c.mutex.Unlock()
+
+	// 挑授权表落在装工具**之前**：那三个参数露不露出来、以及那件发现工具装不装，
+	// 全看挑出来的是不是 nil。
+	if c.modelSelectionAsked {
+		policy, err := c.selectForAgent(deps)
+		if err != nil {
+			c.mutex.Lock()
+			c.deps, c.owner = Deps{}, nil
+			c.mutex.Unlock()
+			return nil, fmt.Errorf("subagenttool: 挑这条会话的模型选择授权表失败：%w", err)
+		}
+		c.mutex.Lock()
+		c.policy = policy
+		c.mutex.Unlock()
+	}
 
 	// 摘工具排在最前面，于是它在反序里跑在**最后**：那时候两个观察者已经摘掉了，
 	// 不会再有新的工具被装上来。
@@ -592,7 +770,7 @@ func (c *Controller) Install(
 		}
 		installed = nil
 		c.mutex.Lock()
-		c.deps, c.owner = Deps{}, nil
+		c.deps, c.owner, c.policy = Deps{}, nil, nil
 		c.mutex.Unlock()
 		return errors.Join(failures...)
 	}
@@ -600,6 +778,18 @@ func (c *Controller) Install(
 		// 摘的时候不带调用方的取消：ctx 已经废了也得把装上去的收回来。
 		_ = undo(context.WithoutCancel(ctx))
 		return nil, fmt.Errorf("subagenttool: 装%s失败：%w", what, err)
+	}
+
+	// 那件发现工具不跟着提供方来去：它只读 llm 运行时，一条派发都不起，所以
+	// 提供方还没登记的时候模型照样问得出这条会话能挑哪几条路由。
+	//
+	// 源: packages/subagent/tool-subagent/src/index.ts:356
+	if c.policy != nil {
+		remove, err := registerListModels(ctx, deps.Tools, owner, deps.LLM, c.policy)
+		if err != nil {
+			return fail("那件模型发现工具", err)
+		}
+		installed = append(installed, remove)
 	}
 
 	remove, err := deps.Subagents.OnProviderAdded(ctx, owner, c.providerAdded)

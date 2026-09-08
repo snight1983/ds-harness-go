@@ -3,7 +3,7 @@
 //
 // 源: packages/preset/agent-presets/src/mount.ts
 //
-// 这一整个文件是**换掉的那一半**，不是照抄的。DSH 那边它是 cordis 的动态模块装载器
+// 这一整个文件是**换掉的那一半**，不是照录的。DSH 那边它是 cordis 的动态模块装载器
 // 加一套 Fiber 反射审计；Go 静态链接，运行期没有 import。理由和取代方案见包文档。
 
 package agentpresets

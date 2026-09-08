@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/snight1983/ds-harness-go/harness/agent"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/scope"
 	"github.com/snight1983/ds-harness-go/tools"
@@ -247,6 +248,7 @@ func TestStartChecksCapabilitiesInAFixedOrder(t *testing.T) {
 
 	depth := 1
 	request := StartRequest{
+		AgentOptions: agent.Options{Model: "m"},
 		OutputSchema: &tools.Node{Type: tools.TypeObject},
 		MaxDepth:     &depth,
 		ToolFilter:   tools.Restriction{Allow: []string{"read"}},
@@ -256,8 +258,8 @@ func TestStartChecksCapabilitiesInAFixedOrder(t *testing.T) {
 	if codeOf(err) != CodeUnsupportedCapability {
 		t.Fatalf("要了不支持的能力该报 %s，实际 %v", CodeUnsupportedCapability, err)
 	}
-	if !strings.Contains(err.Error(), "outputSchema") {
-		t.Fatalf("四样都要了时该先报 outputSchema，实际 %v", err)
+	if !strings.Contains(err.Error(), "agentOptions") {
+		t.Fatalf("五样都要了时该先报 agentOptions，实际 %v", err)
 	}
 }
 
@@ -268,18 +270,23 @@ func TestStartRejectsEachUnsupportedCapability(t *testing.T) {
 		request      StartRequest
 		wanted       string
 	}{
+		"agentOptions": {
+			capabilities: Capabilities{},
+			request:      StartRequest{AgentOptions: agent.Options{Provider: "别家"}},
+			wanted:       "agentOptions",
+		},
 		"depthLimit": {
-			capabilities: Capabilities{OutputSchema: true},
+			capabilities: Capabilities{AgentOptions: true, OutputSchema: true},
 			request:      StartRequest{MaxDepth: &depth},
 			wanted:       "depthLimit",
 		},
 		"toolFilter": {
-			capabilities: Capabilities{OutputSchema: true, DepthLimit: true},
+			capabilities: Capabilities{AgentOptions: true, OutputSchema: true, DepthLimit: true},
 			request:      StartRequest{ToolFilter: tools.Restriction{Deny: []string{"write"}}},
 			wanted:       "toolFilter",
 		},
 		"persona": {
-			capabilities: Capabilities{OutputSchema: true, DepthLimit: true, ToolFilter: true},
+			capabilities: Capabilities{AgentOptions: true, OutputSchema: true, DepthLimit: true, ToolFilter: true},
 			request:      StartRequest{Persona: "海盗"},
 			wanted:       "persona",
 		},

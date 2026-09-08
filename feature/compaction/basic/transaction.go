@@ -116,7 +116,7 @@ type TransactionOptions struct {
 // 源: packages/compaction/compaction-basic/src/region.ts:75
 //
 // 新增: DSH 是一个模块私有的 `class SurfaceChangedError`，靠 instanceof 认。
-// Go 这边是一个不可导出的哨兵，用 %w 裹进去、errors.Is 认回来。不导出是照抄：
+// Go 这边是一个不可导出的哨兵，用 %w 裹进去、errors.Is 认回来。不导出是照录：
 // 它只在 [manualFailure] 那一处被分开，对外表现成
 // [compaction.ManualErrorChanged]，而不是让调用方自己去判。
 var errSurfaceChanged = errors.New("compaction-basic：表面变了")

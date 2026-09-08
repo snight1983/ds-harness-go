@@ -43,7 +43,7 @@ func TestAdapterFallbacksWhenNothingOptionalIsImplemented(t *testing.T) {
 }
 
 // TestAdapterPrepareCallGoesThroughResolveOverride 钉住本文件存在的**全部理由**：
-// 兜底的 PrepareCall 必须走**被覆盖之后**的 ResolveModel。照抄成一个可内嵌的
+// 兜底的 PrepareCall 必须走**被覆盖之后**的 ResolveModel。照录成一个可内嵌的
 // 基类的话，这条测试会失败——Go 的方法集没有虚派发，基类里那句调用只会调到
 // 基类自己那一份。
 func TestAdapterPrepareCallGoesThroughResolveOverride(t *testing.T) {

@@ -116,7 +116,7 @@ func (f Failure) Valid() bool {
 // 上面那一整套都用不上了。
 //
 // 认不出来时交出一份 UNKNOWN 的事实，理由和 DSH 的 harnessErrorCode 一样：
-// 第三方 SDK 自己那套码不是本装置的分类学，照抄进来会让上层按一个它其实不认识的
+// 第三方 SDK 自己那套码不是本装置的分类学，照录进来会让上层按一个它其实不认识的
 // 码去路由。
 func NormalizeFailure(err error) Failure {
 	if err == nil {

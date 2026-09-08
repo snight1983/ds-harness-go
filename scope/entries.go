@@ -176,7 +176,7 @@ func (e *NamedEntries[V]) Values() iter.Seq[V] {
 //
 // 源: packages/core/scope/src/store.ts:82-88
 //
-// 新增: 名字叫 All 而不是照抄 Entries，是因为 Go 1.23 之后 iter.Seq2 的惯例名就是 All，
+// 新增: 名字叫 All 而不是照录 Entries，是因为 Go 1.23 之后 iter.Seq2 的惯例名就是 All，
 // range 一个 All() 是 Go 使用方一眼就懂的写法。
 func (e *NamedEntries[V]) All() iter.Seq2[string, V] {
 	return func(yield func(string, V) bool) {

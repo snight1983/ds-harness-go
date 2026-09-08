@@ -10,7 +10,7 @@ import (
 )
 
 // Code 是稳定的机器路由码。它是**线上可见**的：宿主机的 RPC 错误映射直接照它分派，
-// 所以取值一律照抄 DSH，不改拼写、不本地化。
+// 所以取值一律照录 DSH，不改拼写、不本地化。
 //
 // 源: packages/attachment/attachment/src/error.ts:18-26
 type Code string

@@ -31,7 +31,7 @@
 
 `consumercheck` 解决的是一类仓库内部验不出来的错。`go build ./...` 解析 import 时走的是主模块自己的 `module` 行加相对路径，所以 `go.mod` 写 `module ds-harness-go`、代码写 `github.com/snight1983/ds-harness-go/...` 时仓库内部全绿，而一个从 GitHub 路径引入的外部宿主会撞上 `package ds-harness-go/scope is not in std`。
 
-它在临时目录里摆出一个模块名不属于本仓库的消费方，`require` 公开 module path 并 `replace` 到本地检出，`go.mod` 的 require 段和 `go.sum` 直接抄本仓库那一份（这道门禁验的是 module path，不是依赖解析，重新联网解一遍只会把网络抖动算进失败里）。生成的程序空引全部可发布包——命令、`internal/` 和 Git 忽略目录除外，口径与 `doccheck` 一致——再跑一遍最小闭环：建作用域、建会话存储、建会话、追加一条用户消息、读回来。`build`、`vet`、`run` 三步各证一件事：引得进来、引进来是像话的、跑得起来。
+它在临时目录里摆出一个模块名不属于本仓库的消费方，`require` 公开 module path 并 `replace` 到本地检出，`go.mod` 的 require 段和 `go.sum` 直接照录本仓库那一份（这道门禁验的是 module path，不是依赖解析，重新联网解一遍只会把网络抖动算进失败里）。生成的程序空引全部可发布包——命令、`internal/` 和 Git 忽略目录除外，口径与 `doccheck` 一致——再跑一遍最小闭环：建作用域、建会话存储、建会话、追加一条用户消息、读回来。`build`、`vet`、`run` 三步各证一件事：引得进来、引进来是像话的、跑得起来。
 
 程序里还带一句 `var _ agentloop.SessionPersistence = (*persistence.Coordinator)(nil)`。这条接缝一度装不起来（编排器交回准备期，而工厂声明的是会话），两边各自的测试却都绿着——外部装配方是唯一撞得上它的人。
 

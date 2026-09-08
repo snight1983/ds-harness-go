@@ -85,6 +85,43 @@ stateDiagram-v2
 
 活 Agent 注册表只代表当前进程；冷会话查询会从持久化事件重新整理父子身份。列表优先使用同一会话的活记录，并对损坏或暂不可读的冷记录给出诊断状态。
 
+## Agent 团队
+
+一个会话可以带一群队友干活。队友就是可继续子 Agent，团队这一层只多给三样东西：一份**花名册**（谁在这支队里、叫什么、负责什么）、一块**共享任务板**（谁认领了哪条活、哪条活挡着哪条）、一条**队友之间的收件箱**（互相说话，不必经过队长转述）。
+
+```mermaid
+flowchart LR
+    L["队长会话<br/>团队身份 = 它的会话身份"]
+    L --> R["花名册<br/>名字、职责、在岗状态"]
+    L --> B["任务板<br/>任务、前置关系、认领人"]
+    L --> M["收件箱<br/>队友之间的消息"]
+    R --> T1["队友 A"]
+    R --> T2["队友 B"]
+    T1 -.认领.-> B
+    T2 -.认领.-> B
+    T1 -.发消息.-> M
+    M -.送到.-> T2
+```
+
+没有单独的「建团队」动作：一个会话起出第一个队友的那一刻就成了队长，团队的身份就是队长会话的身份。
+
+**这三样东西存在数据库里，不在内存里。** 上游 DSH 是把团队状态从队长的会话记录里折出来的一份内存投影，于是整支团队被钉在队长所在的那台机器上。本仓库要能多副本部署，所以改成落库：认领一条任务、给队友发一条消息，都是对一把键的一次条件写，谁在哪台机器上都做得了。
+
+换来的和付出的：
+
+| | 折日志（DSH） | 落库（本仓库） |
+|---|---|---|
+| 谁能改状态 | 只有队长所在那台机器 | 任何一个副本 |
+| 状态跟着会话分叉吗 | 跟着 | 不跟着，团队状态是独立的 |
+| 「这个队友活着吗」 | 一问就是全世界的答案 | 只对本副本成立，别处的队友看不见 |
+| 并发冲突怎么挡 | 队长那一个对象天然串行 | 任务版本号 + 整块板的条件写 |
+
+三条要记住的规矩：
+
+- **起一个队友分两步落盘，中间才去起会话。** 先把名字占下来记成「筹备中」，起成了转「在岗」，起不成转「失败」。反过来先起会话再落盘的话，一个半开的子会话不会在任何地方留下痕迹。
+- **消息承诺至少一次，不是恰好一次。** 一条消息在「排队 → 某个副本抓着 → 送到了」三档之间走。抓着它的副本可能整个消失，所以那一档带个时刻，过期了别人就能捡回来重送。真要恰好一次，得让「送到收件人」和「记下送到了」在同一个事务里，而收件人可能在另一台机器上。
+- **写入范围冲突只提醒，不拦。** 两条任务说要改同一处，板上会把这件事说给模型听，但不挡任何一次改动——这一层不知道那些范围指的是什么，也没有能力去锁它们。
+
 ## 面向模型的工具
 
 | 包 | 能力 |
@@ -143,10 +180,12 @@ flowchart TB
 | 在当前进程创建子agent，以父agent已完成的对话轮次作为初始内容 | `subagent/subagent-fork-in-process` | 需要 | `feature/subagent/forkinprocess` | — |
 | 两个进程内provider共用的运行驱动器，处理深度、创建、定制、结果读取、取消和dispose | `subagent/subagent-in-process-driver` | 需要 | `feature/subagent/inprocessdriver` | — |
 | 在当前进程创建全新子agent，有自己的会话但以空对话开始运行 | `subagent/subagent-spawn-in-process` | 需要 | `feature/subagent/spawninprocess` | — |
-| 基于已配置provider的面向模型委派工具，前台或后台执行subagent任务 | `subagent/tool-subagent` | 需要 | `feature/subagent/subagenttool` | 缺一角：子 agent 的模型选择授权表。descriptor.go 的 AgentProvider／AgentModel 是装配期定死的，模型自己挑不了，也没有「许挑哪几条路由」的授权表。补的入口：工具 schema 加 provider／model／reasoning_effort，授权表以 subagent/model-selection-policy 事件进日志（只进日志不进模型历史），配一个投影单元读回来 |
+| 基于已配置provider的面向模型委派工具，前台或后台执行subagent任务 | `subagent/tool-subagent` | 需要 | `feature/subagent/subagenttool` | 模型选择那张授权表按 subagent/model-selection-policy 事件写一次就定；provider 那份路由默认值（agentRouteDefaults）没有产出方，本次移植不收进程外提供方，所以工具措辞只有继承父路由这一支 |
 | 全局具名send_message、interrupt_agent与list_agents工具，控制可继续subagent的生命周期 | `subagent/tool-subagent-control` | 需要 | `feature/subagent/controltool` | — |
 | 可选的子级作用域report工具，为可继续进程内子级提供向父agent的返回通道 | `subagent/tool-subagent-report` | 需要 | `feature/subagent/reporttool` | — |
 | 子 agent 提供方的契约夹具 | （无上游出处） | 本仓库自有 | `feature/subagent/internal/providertest` | 只有 subagent 子树用，收进 internal |
+| 隐式Root Agent Teams领域，维护Lead/teammate roster、持久peer mailbox与共享任务DAG | `experimental/agent-team` | 需要 | `feature/agentteam` | `wait` 换了做法：DSH 的 `activity.ts` 是一张进程内等待者名单，多副本下等不到别的副本上那次改动，这边落成介质上的条件轮询，只承诺看得见本次调用之后的改动 |
+| ctx.agentTeams的scoped模型适配器，在每个隐式Lead和持久teammate scope安装协作工具 | `experimental/tool-agent-team` | 取形重写 | `feature/agentteam/agentteamtool` | 十件工具连同那段团队策略指引。团队身份不再现问成员表，由装配方在 `Config.Team` 上写死，一个控制器服务一支团队 |
 
 ## 相关源码
 
@@ -161,6 +200,8 @@ flowchart TB
 | `feature/subagent/reporttool/` | 子 Agent 报告工具 |
 | `feature/subagent/internal/childseed/` | 派发策略怎么落到孩子那条日志上，续行激活和进程内驱动共用 |
 | `feature/subagent/internal/providertest/` | Provider 契约夹具，只给本子树的测试用 |
+| `feature/agentteam/` | 花名册、共享任务板、队友收件箱，三样都落库 |
+| `feature/agentteam/agentteamtool/` | 那三样的模型侧工具面，外加一段团队策略指引 |
 
 ## 深入阅读
 

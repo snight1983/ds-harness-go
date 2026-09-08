@@ -326,7 +326,7 @@ func TestReturnsTheSeamsStructuredError(t *testing.T) {
 	if result.Error.Info == nil ||
 		result.Error.Info.Name != "UserQuestionError" ||
 		result.Error.Info.Code != userquestions.CodeNoProvider {
-		t.Fatalf("那条错误的身份该原样抄进 Info：%+v", result.Error.Info)
+		t.Fatalf("那条错误的身份该原样写进 Info：%+v", result.Error.Info)
 	}
 	if result.Error.Message != "no user-questions provider is registered" {
 		t.Fatalf("那句话该原样交出来：%q", result.Error.Message)

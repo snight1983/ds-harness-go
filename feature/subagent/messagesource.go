@@ -33,7 +33,7 @@ const (
 	// 源: packages/subagent/subagent/src/continuation.ts:83
 	//
 	// **有意**和 [ReportPlugin] 分成两个名字：汇报是孩子自己选的内容，而这一条是
-	// 管理器在陈述这个孩子的下场；把两者并成一个来源，会让一段抄本把孩子从没写过
+	// 管理器在陈述这个孩子的下场；把两者并成一个来源，会让一段誊本把孩子从没写过
 	// 的话记在它头上。
 	SettledPlugin = "subagent-settled"
 )

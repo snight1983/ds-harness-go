@@ -58,7 +58,7 @@ type attemptKey struct {
 // 只走一次。这不只是快慢的事：DSH 交给不变量的那段历史**不含**正在验的这条事件
 // （collectSessionCallbacks 在 this.log.push 之前跑），而 Go 的
 // [github.com/snight1983/ds-harness-go/harness/session.Session.Events] 在观察者里**已经含着**它
-// （commit 先 append、再叫观察者）。照抄那几句 findLast 会整整差一条——每一次
+// （commit 先 append、再叫观察者）。照录那几句 findLast 会整整差一条——每一次
 // 重试都会因为「翻到了自己」而把 retry 算成 prior+1 的下一个。验和改分成两步之后，
 // 这个不对称就不存在了：验的那一刻这条事件还没进 Trace。
 //

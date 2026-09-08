@@ -27,7 +27,7 @@ func (e *LogError) Error() string { return e.Reason }
 //
 // 源: packages/schedule/schedule/src/domain.ts:55-86
 //
-// 和 [LogError] 相反，它的 Message 是**给模型看的**，所以是英文，而且逐字照抄
+// 和 [LogError] 相反，它的 Message 是**给模型看的**，所以是英文，而且逐字照录
 // DSH：这句话会原样变成工具结果里的 `message` 字段，是模型据以改写下一次调用的
 // 唯一线索。Code 只可能是那六个和输入有关的码，不会是 [CodeCorruptLog] 这类。
 type InputError struct {

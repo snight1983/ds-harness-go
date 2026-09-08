@@ -48,14 +48,19 @@ type MeasurementBaseline struct {
 	Usage llm.TokenUsage
 }
 
-// SurfaceNode 是表面上一个节点和它在这把固定尺子下的估价。
+// SurfaceNode 是表面上一个节点和它的两份价。
 //
-// 源: packages/llm/token-meter/src/types.ts:37
+// 源: packages/llm/token-meter/src/types.ts:37-53（TokenSurfaceNode）
+//
+// 两份价在路由不报图片价时是同一个数，那也是绝大多数路由的情形。它们分开列，
+// 是为了让读的人能看出「这个节点贵是因为那条路由的图贵」还是「它本来就长」。
 type SurfaceNode struct {
 	// Seq 是这个节点对应事件的 seq。
 	Seq int
-	// Tokens 是它的估价。
+	// Tokens 是它在**当次测量那条路由**下的价：图片那一份换成了路由自己报的价。
 	Tokens int
+	// HeuristicTokens 是它在那把固定尺子下的价，和路由无关。
+	HeuristicTokens int
 }
 
 // Measurement 是一次计量的全部结果。
@@ -82,9 +87,9 @@ type Measurement struct {
 	//
 	// 钳的理由：负数会一路串进预算和压缩触发的算式里，那比丢掉一次记账严重得多。
 	TotalTokens int
-	// SurfaceTokens 是当前整个表面在这把尺子下的估价，和基准无关。
+	// SurfaceTokens 是当前整个表面按这次测量那条路由算出来的价，和基准无关。
 	SurfaceTokens int
-	// Nodes 是表面上每个节点的估价，按表面顺序。
+	// Nodes 是表面上每个节点的价，按表面顺序。
 	//
 	// 压缩那边靠它挑下刀点，所以它必须和当前表面**一一对上**，
 	// 见 compaction/basic.SelectCompactableRange。

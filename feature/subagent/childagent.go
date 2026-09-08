@@ -61,8 +61,35 @@ func ResolveChildDepth(parent agent.Agent, maxDepth *int) (int, error) {
 	return childDepth, nil
 }
 
-// ResolveChildAgentOptions 解算孩子那份 agent 选项：父的提供方／模型／token 上限
-// 那条路由，除非请求自己另有说法。
+// ParentAgentOptionsForDelegation 交回一个孩子从父那里继承的那份选项。
+//
+// 源: packages/subagent/subagent/src/child-agent.ts:60-85（parentAgentOptionsForDelegation）
+//
+// 请求期选过一次之后，提供方、模型和推理档位归**最后那条请求头**所有；创建时那份
+// 选项只是第一次请求之前的兜底，而那个输出上限一直从创建那份读——请求头上的
+// MaxTokens 是适配器按确切模型解出来的默认值，不是部署方声明的意图。
+//
+// 新增: DSH 那句 `parent.session.requestHeader()?.config` 不会失败。Go 这边
+// [github.com/snight1983/ds-harness-go/harness/session.Session.RequestHeader] 还多一个错误
+// （折那段日志时负载解不开），这里把它和「还没有过任何一条头」并成同一件事：
+// 读不出请求期那份路由就退回创建那份，正是 DSH 在没有头时的行为。派发不该因为
+// 父日志里一条坏掉的头就整个失败。
+func ParentAgentOptionsForDelegation(parent agent.Agent) agent.Options {
+	created := parent.Options()
+	header, ok, err := parent.Session().RequestHeader()
+	if err != nil || !ok {
+		return created
+	}
+	resolved := created
+	resolved.Provider = header.Config.Provider
+	resolved.Model = header.Config.Model
+	resolved.ReasoningEffort = header.Config.ReasoningEffort
+	return resolved
+}
+
+// ResolveChildAgentOptions 解算孩子那份 agent 选项：父的提供方／模型／推理档位／
+// token 上限那条路由，除非请求自己另有说法。换了路由又没点名档位时，父那份跟着
+// 路由走的档位被清掉，好让选中的模型解出它自己的默认档。
 //
 // 源: packages/subagent/subagent/src/child-agent.ts:87-119（resolveChildAgentOptions）
 //
@@ -76,15 +103,23 @@ func ResolveChildDepth(parent agent.Agent, maxDepth *int) (int, error) {
 // 新增: DSH 用对象展开表达「请求里有这个键就盖掉父的」。Go 的零值就是「没给」
 // （见 [github.com/snight1983/ds-harness-go/harness/agent.Options] 上那条注释），所以逐字段判零值。
 func ResolveChildAgentOptions(parent agent.Agent, requested agent.Options) agent.Options {
-	resolved := parent.Options()
+	inherited := ParentAgentOptionsForDelegation(parent)
+	resolved := inherited
 	if requested.Provider != "" {
 		resolved.Provider = requested.Provider
 	}
 	if requested.Model != "" {
 		resolved.Model = requested.Model
 	}
+	if requested.ReasoningEffort != "" {
+		resolved.ReasoningEffort = requested.ReasoningEffort
+	}
 	if requested.MaxTokens != 0 {
 		resolved.MaxTokens = requested.MaxTokens
+	}
+	routeChanged := resolved.Provider != inherited.Provider || resolved.Model != inherited.Model
+	if routeChanged && requested.ReasoningEffort == "" {
+		resolved.ReasoningEffort = ""
 	}
 	return resolved
 }
@@ -170,7 +205,7 @@ const (
 	// 源: packages/subagent/subagent/src/child-agent.ts:169
 	//
 	// 新增: DSH 那条注释说的是「排在 sandbox:policy（110）和 approval:policy（115）
-	// 后面」。沙箱那条线不在本次移植范围内，110 那句话根本不存在，但这个数照抄：
+	// 后面」。沙箱那条线不在本次移植范围内，110 那句话根本不存在，但这个数照录：
 	// 它要保住的是和 115 的相对次序，改小了只会让两句话的先后翻过来。
 	delegationContextOrder = 120
 )

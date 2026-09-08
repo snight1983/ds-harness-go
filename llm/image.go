@@ -299,7 +299,7 @@ func OffloadRequestImagesWithPolicy(messages []Message, policy RequestImageOfflo
 	removedBytes := 0
 	for _, imageBytes := range lengths {
 		// 步长为 1 时移到「刚好够」就停，步长大于 1 时要移**过**目标才停。
-		// 这个不对称是照抄的：步长大于 1 意味着调用方要的是整块整块地移除，
+		// 这个不对称是照录的：步长大于 1 意味着调用方要的是整块整块地移除，
 		// 停在正好等于目标的地方会留下一个不满一整块的尾巴。
 		byteTargetMet := removeBytes == 0
 		if !byteTargetMet {

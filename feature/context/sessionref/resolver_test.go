@@ -397,7 +397,7 @@ func TestPrepare把这次引用了谁记进持久来源(t *testing.T) {
 
 func TestPrepare拒绝自引用(t *testing.T) {
 	resolver := newTestResolver(t, newFakeSessions(), nil, Config{})
-	// 自引用会让一个会话把自己的历史又抄一遍塞回自己，每一轮翻一倍。
+	// 自引用会让一个会话把自己的历史又写一遍塞回自己，每一轮翻一倍。
 	_, err := resolver.Prepare(t.Context(), Target{SessionID: "自己"}, nil, []Input{{SessionID: "自己"}})
 	if !errors.Is(err, CodeSelfReference) {
 		t.Fatalf("应当被拒，得到 %v", err)

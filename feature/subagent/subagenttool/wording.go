@@ -66,6 +66,50 @@ const (
 // 源: packages/subagent/tool-subagent/src/index.ts:320
 const descriptionDescription = "A short (3-5 word) description of the delegated task, for display."
 
+// 这两句在开了模型选择时接在工具说明后面：先说这件事是可选的，孩子继承父那段
+// 对话时再多一句代价提醒。
+//
+// 源: packages/subagent/tool-subagent/src/index.ts:366, 371
+//
+// 新增: DSH 那里还有一支「这个提供方自己有一套路由默认值」的措辞（index.ts:365）。
+// 那支的产出方是 [github.com/snight1983/ds-harness-go/feature/subagent.Provider] 上的 agentRouteDefaults，
+// 而给出它的只有进程外那两个提供方，本次移植没有它们，所以那一支在这里没有产出方，
+// 只留下继承父路由这一支。
+const (
+	selectionSuffix = " Child LLM selection is optional. Omit `provider`, `model`, and `reasoning_effort` " +
+		"to use configured child defaults and inherit compatible missing values from the parent Agent. " +
+		"Supply `provider` and `model` together after using `list_subagent_models` to inspect advertised " +
+		"routes and efforts. Changing the effective route without naming an effort uses the selected " +
+		"model's default effort."
+	inheritedPrefixSuffix = " Changing the route can prevent provider-side reuse of the inherited " +
+		"conversation prefix."
+)
+
+// 这三句是那三个路由参数的说明。
+//
+// 源: packages/subagent/tool-subagent/src/index.ts:399, 405, 411
+const (
+	selectionProviderDescription = "LLM provider route for the child. Supply together with model; omit " +
+		"both to use configured child defaults or inherit the parent route."
+	selectionModelDescription = "Model id interpreted by provider. Supply together with provider; omit " +
+		"both to use configured child defaults or inherit the parent route."
+	selectionEffortDescription = "Adapter-owned reasoning effort for the effective child route. Omit to " +
+		"inherit a compatible configured/parent effort or use a newly selected model's default."
+)
+
+// choiceDescription 是工具说明尾巴上那一段模型选择的话；没开就是空串。
+//
+// 源: packages/subagent/tool-subagent/src/index.ts:367-372
+func choiceDescription(enabled, inheritsConversation bool) string {
+	if !enabled {
+		return ""
+	}
+	if inheritsConversation {
+		return selectionSuffix + inheritedPrefixSuffix
+	}
+	return selectionSuffix
+}
+
 // providerWording 按提供方那句「孩子看不看得到父的历史」挑一组措辞。
 //
 // 源: packages/subagent/tool-subagent/src/index.ts:220-245

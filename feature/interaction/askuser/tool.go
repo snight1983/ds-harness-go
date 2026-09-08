@@ -248,7 +248,7 @@ func render(_ json.RawMessage, value json.RawMessage) (llm.Content, error) {
 	if err := json.Unmarshal(value, &decoded); err != nil {
 		return nil, err
 	}
-	// 先读回来再写出去，而不是把那段原始 JSON 直接抄给模型：这一步顺带把空白和
+	// 先读回来再写出去，而不是把那段原始 JSON 直接交给模型：这一步顺带把空白和
 	// 键序规范掉，于是同一份答案不论从哪条路回来，进模型上下文的字节都一样。
 	// [askValue] 里全是字符串和切片，编码不会失败。
 	text, _ := json.Marshal(decoded)
@@ -322,7 +322,7 @@ func toValue(answer userquestions.Answer) askValue {
 // 源: packages/interaction/tool-ask-user/src/index.ts:80-99
 //
 // 接缝报的错原样返回：[userquestions.Error] 带着 ErrorName/ErrorCode，
-// [github.com/snight1983/ds-harness-go/tools] 那道结果收敛会把它抄进 Failure.Info，下游按代号分流，
+// [github.com/snight1983/ds-harness-go/tools] 那道结果收敛会把它写进 Failure.Info，下游按代号分流，
 // 不必解析错误文本。
 func (t *Tool) execute(ctx context.Context, args json.RawMessage, exec *tools.RunContext) (json.RawMessage, error) {
 	var decoded askArgs

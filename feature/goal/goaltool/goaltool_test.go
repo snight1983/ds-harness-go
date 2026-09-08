@@ -910,8 +910,8 @@ func TestCreateGoalReportsTheDecodeAndServiceFailures(t *testing.T) {
 
 // ---- update_goal：那份 CAS 身份 ----
 
-// TestUpdateRejectsAMalformedIdentity 钉住那道照抄闸：一个被 trim 之后才对得上的 id
-// 说明模型是从别处抄过来的，而这道闸要的正是它照抄 get_goal 交出来的那一份。
+// TestUpdateRejectsAMalformedIdentity 钉住那道照录闸：一个被 trim 之后才对得上的 id
+// 说明模型是从别处照录过来的，而这道闸要的正是它照录 get_goal 交出来的那一份。
 func TestUpdateRejectsAMalformedIdentity(t *testing.T) {
 	t.Parallel()
 

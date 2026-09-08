@@ -11,9 +11,12 @@ import (
 	"log/slog"
 
 	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/feature/sessionquery"
+	"github.com/snight1983/ds-harness-go/feature/sessiontitle"
 	"github.com/snight1983/ds-harness-go/feature/subagent"
 	"github.com/snight1983/ds-harness-go/harness/agent"
 	coresession "github.com/snight1983/ds-harness-go/harness/session"
+	"github.com/snight1983/ds-harness-go/harness/systemprompt"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/protocol/sdk/sdkprotocol"
 	"github.com/snight1983/ds-harness-go/sessionlog"
@@ -134,6 +137,39 @@ type Config struct {
 	// Workspaces 是那一小块工作区登记册，可以为 nil，见 [WorkspaceLookup]。
 	Workspaces WorkspaceLookup
 
+	// Queries 是会话查询引擎，可以为 nil：那时列出、找、分出来、翻历史这四条路
+	// 一律拒，别的方法不受影响。
+	//
+	// 源: packages/api/session-controller/src/index.ts:66（`ctx.sessionQuery`）
+	//
+	// 这四条路要的是**冷读**——不惊动任何 agent 就把一条会话的日志读回来。整个
+	// 仓库里只有这个引擎办得到（它同时看得见活着的和落地的那两侧），所以它不在
+	// 就不是「少一种排序」而是这四件事根本做不了。
+	Queries *sessionquery.Engine
+
+	// Rename 给一条会话按人给的标题改名，可以为 nil：那时改名这条路拒。
+	//
+	// 源: packages/api/session-controller/src/commands.ts:161-163（`ctx.get('sessionTitle')`）
+	//
+	// 新增: 收的是一个函数不是一个接口，理由和
+	// [github.com/snight1983/ds-harness-go/feature/webhook.Config.Rename] 逐字相同：
+	// [github.com/snight1983/ds-harness-go/feature/sessiontitle.Service.Rename] 收的是
+	// 它自己那个窄 Session 接口，而
+	// [github.com/snight1983/ds-harness-go/harness/session.Session] 的 Append 签名和
+	// 它对不上（一个收候选事件并交出落定的那条，一个收类型加负载），中间那层桥属于
+	// 装配。这里比 webhook 那条多交回一份 [sessiontitle.Snapshot]，因为线上那个结果
+	// 要报归一化之后的标题和记下这次改名的那条事件。
+	Rename func(ctx context.Context, target agent.Agent, title string) (sessiontitle.Snapshot, error)
+
+	// Prompts 是提示词注册表，可以为 nil：那时换模型这条路拒。
+	//
+	// 源: packages/core/agent/src/model-selection.ts:27-75
+	//
+	// 换模型要同时改提示词里那两个变量和请求路由，两个面缺一不可（理由见
+	// [github.com/snight1983/ds-harness-go/harness/agent.InstallModelSelection]）。
+	// 只改路由会让提示词说 A、请求发给 B，所以没有它就整条拒，不做半套。
+	Prompts *systemprompt.Registry
+
 	// MaxTokensAsSuccess 为真表示「撞上输出上限」算一个被接受的结果，而不是一次
 	// 基础设施错误。
 	//
@@ -177,7 +213,8 @@ func New(config Config) (*Server, error) {
 		return nil, fmt.Errorf("sdkserver: 建一台 SDK 服务器需要一台子 agent 运行时")
 	}
 	return &Server{
-		config:   config,
-		sessions: map[string]agent.Handle{},
+		config:     config,
+		sessions:   map[string]agent.Handle{},
+		selections: map[string]*agent.ModelSelectionRef{},
 	}, nil
 }

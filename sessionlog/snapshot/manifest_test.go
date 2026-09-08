@@ -78,7 +78,7 @@ func TestParseManifestRefusesTheFieldsThisRepoHasNoMeaningFor(t *testing.T) {
 	t.Parallel()
 
 	// DSH 那六个字段说的都是「起一个什么样的进程」，本仓库不起进程。沉默地忽略它们
-	// 等于让一份从 DSH 抄过来的清单看着像是生效了。
+	// 等于让一份从 DSH 照录过来的清单看着像是生效了。
 	for _, field := range []string{
 		"profile: headless", "composition: default", "platform: posix",
 		"permission: read-only", "environment: {DSH_X: '1'}", "workspace: {final: true}",

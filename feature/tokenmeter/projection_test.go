@@ -202,7 +202,7 @@ func TestContextPressureProjectsForwardAndReactsToCompaction(t *testing.T) {
 	}
 
 	// 一次带影子价的压缩：投影当场掉回去，压力还是不动。
-	var nodes []SurfaceNode
+	var nodes []meterNode
 	for _, event := range append(append([]sessionlog.Event{}, view.events...), next) {
 		if !sessionlog.IsSurfaceEvent(event) {
 			continue
@@ -213,7 +213,7 @@ func TestContextPressureProjectsForwardAndReactsToCompaction(t *testing.T) {
 		}
 		nodes = fold.nodes
 	}
-	shadowed := nodes[0].Tokens + nodes[1].Tokens
+	shadowed := nodes[0].heuristicTokens + nodes[1].heuristicTokens
 
 	summary := summaryEvent(t, 0, 1, shadowed)
 	summary.Seq = 3

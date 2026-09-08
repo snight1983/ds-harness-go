@@ -86,7 +86,7 @@ type PreStep struct {
 // 源: packages/core/agent/src/runtime-types.ts:19-20（`agent/pre-step`，瀑布）
 //
 // **先登记的在外层**，一层层往里套，最里面那个 next 交出机器本来的提议。这条
-// 次序照抄 cordis 的 waterfall（vendor/cordis/src/events.ts:234-243，它从名单头上
+// 次序照录 cordis 的 waterfall（vendor/cordis/src/events.ts:234-243，它从名单头上
 // shift，而登记是 push），本仓库另外几条瀑布（tools、harness/systemprompt）
 // 也是这一条。
 //

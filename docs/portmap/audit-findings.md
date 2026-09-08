@@ -42,7 +42,7 @@
 | subagent/subagent-spawn-in-process | `Config` | `spawninprocess.New` | 上游是 interface，Go 侧是 func（该是 type）（裁决表已有理由：只有 providerName 一个字段，Go 里它就是 New 的第一个形参。为一个字符串包一个结构体是 schemastery 逼出来的形状，不是 Go 的：那个默认值改由 spawninprocess.DefaultProviderName 给。） |
 | test-support/llm-mock-server | `ConcreteMockLlmBehavior` | `mockserver.IsConcreteBehavior` | 上游是 type，Go 侧是 func（该是 type）（裁决表已有理由：TS 靠 Exclude 把 random 从类型里剔掉，Go 只有一种 Behavior，这条区分落成一个谓词，用在随机权重的校验上。） |
 | workflow/workflow | `WorkflowError` | `workflow.NewError` | 上游是 class，Go 侧是 func（该是 type）（裁决表已有理由：上游是 HarnessError 的子类，派生出来只为把 name 改成 WorkflowError——那个字段在 JS 里是用来认错误来源的。Go 认错误靠 errors.Is / errors.As 加那个码，多派生一个类型反而会让上游那句 errors.As(err, &target)（target 是 *llm.Error）失配。所以这里不新造类型，构造函数直接交 llm.Error，身份由码承担；成例见 subagent.NewError。） |
-| workflow/workflow | `WorkflowErrorCode` | `workflow.fatalCodes` | 上游是 type，Go 侧是 var（该是 type）（裁决表已有理由：十一个致命码的联合类型，只在 TS 编译期成立。Go 里码本身是 workflow.CodeScriptParse 那一组导出常量（取值逐条照抄，线上可见），而这个联合真正的用途是 workflow.IsFatal 在运行期判「该不该打断脚本」，所以落成一张集合。成例见 attachment.imageAdmissionCodes。集合不导出：判据的唯一入口是 IsFatal，把表也放出去等于让调用方能绕过它。） |
+| workflow/workflow | `WorkflowErrorCode` | `workflow.fatalCodes` | 上游是 type，Go 侧是 var（该是 type）（裁决表已有理由：十一个致命码的联合类型，只在 TS 编译期成立。Go 里码本身是 workflow.CodeScriptParse 那一组导出常量（取值逐条照录，线上可见），而这个联合真正的用途是 workflow.IsFatal 在运行期判「该不该打断脚本」，所以落成一张集合。成例见 attachment.imageAdmissionCodes。集合不导出：判据的唯一入口是 IsFatal，把表也放出去等于让调用方能绕过它。） |
 | workspace/workspace | `WorkspaceMoveInvalidError` | `workspace.CodeMoveInvalid` | 上游是 class，Go 侧是 const（该是 type）（裁决表已有理由：DSH 的三个具名错误类在 Go 里塌成 [workspace.Error] 上的一个分类码，用 errors.Is 分辨；见 workspace/error.go。） |
 | workspace/workspace | `WorkspaceOrderInvalidError` | `workspace.CodeOrderInvalid` | 上游是 class，Go 侧是 const（该是 type）（裁决表已有理由：同 src/entity.ts:19：具名错误类塌成分类码。） |
 | workspace/workspace | `WorkspaceUnknownSessionError` | `workspace.CodeUnknownSession` | 上游是 class，Go 侧是 const（该是 type）（裁决表已有理由：同 src/entity.ts:19：具名错误类塌成分类码。） |
@@ -127,7 +127,7 @@
 | test-support/session-snapshot | `scrubToolSchemas` | `snapshot.tokenizeRequestHeader` | 非导出的一段：tokenizeRequestHeader（裁决表已有理由：同 scrubSystemPrompts：三种开关组合在 Go 里由 Options 表达，函数不导出。） |
 | test-support/session-snapshot | `scrubToolSchemas` | `snapshot.tokenizeRequestHeader` | 非导出的一段：tokenizeRequestHeader（裁决表已有理由：同 scrubSystemPrompts：三种开关组合在 Go 里由 Options 表达，函数不导出。） |
 | webhook/webhook | `createWebhookSession` | `webhook.Runtime.createSession` | 非导出的一段：createSession（裁决表已有理由：上游的 export 是跨文件可见性（index.ts 要调它）。Go 里它是 Runtime 的方法，进得去的唯一一条路是规则交回一份 SessionRequest，包外没有调用方，所以不导出。） |
-| workflow/workflow | `WorkflowErrorCode` | `workflow.fatalCodes` | 非导出的一段：fatalCodes（裁决表已有理由：十一个致命码的联合类型，只在 TS 编译期成立。Go 里码本身是 workflow.CodeScriptParse 那一组导出常量（取值逐条照抄，线上可见），而这个联合真正的用途是 workflow.IsFatal 在运行期判「该不该打断脚本」，所以落成一张集合。成例见 attachment.imageAdmissionCodes。集合不导出：判据的唯一入口是 IsFatal，把表也放出去等于让调用方能绕过它。） |
+| workflow/workflow | `WorkflowErrorCode` | `workflow.fatalCodes` | 非导出的一段：fatalCodes（裁决表已有理由：十一个致命码的联合类型，只在 TS 编译期成立。Go 里码本身是 workflow.CodeScriptParse 那一组导出常量（取值逐条照录，线上可见），而这个联合真正的用途是 workflow.IsFatal 在运行期判「该不该打断脚本」，所以落成一张集合。成例见 attachment.imageAdmissionCodes。集合不导出：判据的唯一入口是 IsFatal，把表也放出去等于让调用方能绕过它。） |
 | workspace/workspace | `WorkspaceEntity` | `workspace.entity` | 非导出的一段：entity（裁决表已有理由：[workspace.Workspace] 唯一的实现，只由登记册构造。） |
 | workspace/workspace | `WorkspaceEntityHost` | `workspace.entityHost` | 非导出的一段：entityHost（裁决表已有理由：DSH 那边导出了但入口没再转发，消费方其实看不见它；Go 里一个包就是一层，不导出即可。） |
 

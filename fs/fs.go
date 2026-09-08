@@ -42,7 +42,7 @@
 // 挪进可选的 [OSPathFileSystem]。理由写在那个接口上。
 //
 // 新增: [FileSystem] 后来又多了四个 DSH 没有的方法——WriteBytes、MakeDir、
-// Remove、RemoveTree。它们不是从 DSH 抄来的，是本仓库把**第二条**内容读写接缝
+// Remove、RemoveTree。它们不是从 DSH 照录来的，是本仓库把**第二条**内容读写接缝
 // （原 preset/agentpresets.Store，七个方法，和这里一一对应地重复）并回来时补上的
 // 缺口：那条缝有命名空间的写和字节的写，这条没有。合并的理由是「来一个新介质就得
 // 重写一大堆」——业务代码只该认一个接口，挂对象存储还是挂外接硬盘是装配时的配置。

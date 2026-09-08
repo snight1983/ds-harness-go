@@ -30,7 +30,7 @@ import (
 // 新增: DSH 那边这些全从 cordis 容器上取（`this.ctx.storageDomain`、
 // `this.ctx.sessionPersistence`、`this.ctx.get('sessions')`、`this.ctx.logger`）。
 // Go 里没有那个容器，装配方把它们显式填进来。哪些必需、哪些可空，
-// 照抄 DSH 的 inject 与 ctx.get 之分：inject 的必需，ctx.get 的可空。
+// 照录 DSH 的 inject 与 ctx.get 之分：inject 的必需，ctx.get 的可空。
 type Config struct {
 	// Domain 是域设施，登记册从它那里打开自己那个域。必填。
 	Domain *domain.Facility
@@ -53,7 +53,7 @@ type Config struct {
 	//
 	// 源: packages/workspace/workspace/src/index.ts:264,593,616（`this.ctx.get('sessions')`）
 	//
-	// 可空是照抄 DSH 的 `ctx.get`：没有它的时候本包只看已落地的那些会话。
+	// 可空是照录 DSH 的 `ctx.get`：没有它的时候本包只看已落地的那些会话。
 	Live LiveSessions
 
 	// NewID 生成新工作区的 id；留空回落到 uuid。

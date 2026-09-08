@@ -66,7 +66,7 @@
 //     [Store.ForkByID]。拆开之后 [ForkNotLive] 只可能从前者产生，
 //     这一点在 TS 那边要靠读实现才看得出来。
 //
-// # 这里没有照抄的部分
+// # 这里没有照录的部分
 //
 // 新增: deepFreeze / freezeRestoredObject / structuredClone / snapshotJsonValue
 // 全部不移。Go 的结构体是值，切片那一层由 [github.com/snight1983/ds-harness-go/sessionlog.Event.Clone]

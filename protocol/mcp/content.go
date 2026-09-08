@@ -46,7 +46,7 @@ type Result struct {
 // 新增: 因此有一处**分不开**的地方：DSH 区分得了「text 是空串」和「根本没有 text」
 // （前者贡献一个空行，后者什么都不贡献），Go 这边两者都是零值，一律按「没有」走。
 // audio 的 mimeType、resource_link 的 name/uri 同理。要分开它得绕开 SDK 自己解
-// JSON-RPC，那正是包文档里说的「不要照抄别人造的轮子」要避免的事。
+// JSON-RPC，那正是包文档里说的「不要照录别人造的轮子」要避免的事。
 type contentBlock struct {
 	// Type 是这一块的判别标签，取 MCP 线上的那个名字。
 	Type string

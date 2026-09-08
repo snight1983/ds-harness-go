@@ -34,7 +34,7 @@ const (
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:51-57
 //
-// 字段名照抄 DSH，因为它们直接进那份发给孩子的 schema，也直接进给下一轮看的
+// 字段名照录 DSH，因为它们直接进那份发给孩子的 schema，也直接进给下一轮看的
 // 那段 JSON。
 type RoundReport struct {
 	// Status 是这一轮的定性。

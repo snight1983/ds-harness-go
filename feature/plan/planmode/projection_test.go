@@ -11,7 +11,7 @@
 //   - **一条坏事件被折成了一次真的翻转**。那看起来和一次合法的关闭一模一样，
 //     界面上就是「计划模式自己关了」。
 //   - **裸的 `/plan` 折不出挂起**。commands.RunData.Args 带 omitempty，一次空输入
-//     排出去就没有 args 键；照抄 DSH 那道 `args === undefined` 检查会让最常见的
+//     排出去就没有 args 键；照录 DSH 那道 `args === undefined` 检查会让最常见的
 //     那一次调用整个失效。
 //   - **不变量开始查形状之外的东西**。[planmode.ValidateEvent] 只该管负载长得对不对；
 //     它一旦开始管次序或者配对，一份合法的老日志就会在装载这一刻突然装不进来。
@@ -187,7 +187,7 @@ func TestTheProjectionFoldsPendingOutOfTheLogAlone(t *testing.T) {
 func TestABareSlashPlanStillFoldsToPending(t *testing.T) {
 	t.Parallel()
 	// commands.RunData.Args 带 omitempty，所以一次空输入排出去**没有** args 键。
-	// 照抄 DSH 那道 `args === undefined` 检查会让这条日志折不出任何挂起。
+	// 照录 DSH 那道 `args === undefined` 检查会让这条日志折不出任何挂起。
 	raw := runEvent(t, 0, "c1", "")
 	if strings.Contains(string(raw.Data), `"args"`) {
 		t.Fatalf("这条用例的前提是空输入不排 args 键，实际排出了 %s", raw.Data)

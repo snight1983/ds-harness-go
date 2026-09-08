@@ -13,19 +13,95 @@ package tokenmeter
 import (
 	"fmt"
 
+	"github.com/snight1983/ds-harness-go/attachment"
+	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/sessionlog"
 )
+
+// meterNode 是这份折叠自己留着的一个表面节点。
+//
+// 源: packages/llm/token-meter/src/surface-fold.ts:25-35（MeterSurfaceNode）
+//
+// 它比对外那份 [SurfaceNode] 多两样，都是为了让一张图能按路由重新定价：那次出现
+// 的持久引用，以及「把每一次图片出现的结构价都刨掉之后」这个节点还剩多少。
+// 有了这两样，[priceSurface] 就能在不重新派生消息的前提下，把图片那一份换成
+// 路由自己报的价。
+type meterNode struct {
+	// seq 是这个节点对应事件的 seq。
+	seq int
+	// heuristicTokens 是这个节点在那把固定尺子下的估价。
+	heuristicTokens int
+	// imageFreeTokens 是刨掉每一次图片出现的结构价之后剩下的部分。
+	imageFreeTokens int
+	// images 是这个节点里每一次图片出现的持久引用，按消息顺序；没有图时为空。
+	images []attachment.ImageRef
+}
 
 // surfaceTokenFold 是折进一条表面事件之后的结果。
 //
 // 源: packages/llm/token-meter/src/surface-fold.ts:37-47（SurfaceTokenPlan）
+//
+// 新增: DSH 的 SurfaceTokenPlan 还带一个 deltaTokens（这一步的带符号净变化）。
+// 那个字段在这里没有产出方：表面总价是**跟着路由变**的，所以它由
+// [priceSurface] 在每一次测量时按当下那条路由现算，重放状态里不再留一个
+// 路由无关的累计数给它加。
 type surfaceTokenFold struct {
-	// tokens 是这条事件自己派生出的那条消息的估价。
+	// tokens 是这条事件自己派生出的那条消息在那把固定尺子下的估价。
 	tokens int
 	// nodes 是折叠之后的整张表面节点表，**一份新的**，见函数注释。
-	nodes []SurfaceNode
-	// deltaTokens 是这一步带来的净变化，带符号：一次替换换掉的可能比换上的贵。
-	deltaTokens int
+	nodes []meterNode
+}
+
+// collectImages 递归收集每一次图片出现，并把它们的结构价加起来。
+//
+// 源: packages/llm/token-meter/src/surface-fold.ts:49-61（collectImages）
+func collectImages(blocks llm.Content, images []attachment.ImageRef) ([]attachment.ImageRef, int, error) {
+	structuralTokens := 0
+	for _, block := range blocks {
+		switch typed := block.(type) {
+		case llm.ImageBlock:
+			images = append(images, typed.Attachment)
+			structural, err := estimateStructuralBlock(block)
+			if err != nil {
+				return nil, 0, err
+			}
+			structuralTokens += structural
+		case llm.ToolResultBlock:
+			nested, nestedTokens, err := collectImages(typed.Content, images)
+			if err != nil {
+				return nil, 0, err
+			}
+			images = nested
+			structuralTokens += nestedTokens
+		}
+	}
+	return images, structuralTokens, nil
+}
+
+// analyzeNode 从一条表面事件派生出的消息造一个带价的节点。
+//
+// 源: packages/llm/token-meter/src/surface-fold.ts:63-75（analyzeNode）
+//
+// derived 为假表示这条事件派生不出消息（内容为空、只为携带用量而存在的那条
+// assistant/message）：那是一个价钱全为 0、也没有图的节点，但它**照样占一格**。
+func analyzeNode(seq int, message llm.Message, derived bool) (meterNode, error) {
+	if !derived {
+		return meterNode{seq: seq}, nil
+	}
+	heuristicTokens, err := EstimateMessage(message)
+	if err != nil {
+		return meterNode{}, err
+	}
+	images, imageStructuralTokens, err := collectImages(message.Content, nil)
+	if err != nil {
+		return meterNode{}, err
+	}
+	return meterNode{
+		seq:             seq,
+		heuristicTokens: heuristicTokens,
+		imageFreeTokens: heuristicTokens - imageStructuralTokens,
+		images:          images,
+	}, nil
 }
 
 // foldSurfaceTokens 把一条表面事件折进当前的节点表。
@@ -42,7 +118,7 @@ type surfaceTokenFold struct {
 //
 // baseSeq 是这一段日志的起点，只在一次替换的端点定位不到时用得上，理由见下面
 // 那段注释。
-func foldSurfaceTokens(nodes []SurfaceNode, event sessionlog.Event, baseSeq int) (surfaceTokenFold, error) {
+func foldSurfaceTokens(nodes []meterNode, event sessionlog.Event, baseSeq int) (surfaceTokenFold, error) {
 	operation, eligible, err := sessionlog.SurfaceOpOf(event)
 	if err != nil {
 		return surfaceTokenFold{}, err
@@ -52,24 +128,23 @@ func foldSurfaceTokens(nodes []SurfaceNode, event sessionlog.Event, baseSeq int)
 			"token 表面：seq %d 的事件 %q 不上表面，折不进来", event.Seq, event.Type)
 	}
 
-	tokens := 0
 	// 第二个返回值为假表示这条事件派生不出消息，那就是 0 个 token——
 	// DSH 那边是 `message === null ? 0 : estimateMessage(message)`。
 	message, derived, err := sessionlog.DeriveEventMessage(event)
 	if err != nil {
 		return surfaceTokenFold{}, err
 	}
-	if derived {
-		if tokens, err = EstimateMessage(message); err != nil {
-			return surfaceTokenFold{}, err
-		}
+	node, err := analyzeNode(event.Seq, message, derived)
+	if err != nil {
+		return surfaceTokenFold{}, err
 	}
+	tokens := node.heuristicTokens
 
 	if operation.SurfaceOpKind() == sessionlog.OpAppend {
-		next := make([]SurfaceNode, len(nodes), len(nodes)+1)
+		next := make([]meterNode, len(nodes), len(nodes)+1)
 		copy(next, nodes)
-		next = append(next, SurfaceNode{Seq: event.Seq, Tokens: tokens})
-		return surfaceTokenFold{tokens: tokens, nodes: next, deltaTokens: tokens}, nil
+		next = append(next, node)
+		return surfaceTokenFold{tokens: tokens, nodes: next}, nil
 	}
 
 	replace, isReplace := operation.(sessionlog.ReplaceOp)
@@ -108,11 +183,11 @@ func foldSurfaceTokens(nodes []SurfaceNode, event sessionlog.Event, baseSeq int)
 				event.Seq, replace.End)
 		}
 		// 终点也被弹掉了（这时起点必然也被弹掉了），整个区间在表面上一点不剩，
-		// 这次替换降级成一次追加：没有节点被换走，所以净变化就是它自己的估价。
-		next := make([]SurfaceNode, len(nodes), len(nodes)+1)
+		// 这次替换降级成一次追加：没有节点被换走。
+		next := make([]meterNode, len(nodes), len(nodes)+1)
 		copy(next, nodes)
-		next = append(next, SurfaceNode{Seq: event.Seq, Tokens: tokens})
-		return surfaceTokenFold{tokens: tokens, nodes: next, deltaTokens: tokens}, nil
+		next = append(next, node)
+		return surfaceTokenFold{tokens: tokens, nodes: next}, nil
 	}
 	if startIndex > endIndex {
 		return surfaceTokenFold{}, fmt.Errorf(
@@ -120,21 +195,17 @@ func foldSurfaceTokens(nodes []SurfaceNode, event sessionlog.Event, baseSeq int)
 			event.Seq, replace.Start, replace.End)
 	}
 
-	removed := 0
-	for _, node := range nodes[startIndex : endIndex+1] {
-		removed += node.Tokens
-	}
-	next := make([]SurfaceNode, 0, len(nodes)-(endIndex-startIndex))
+	next := make([]meterNode, 0, len(nodes)-(endIndex-startIndex))
 	next = append(next, nodes[:startIndex]...)
-	next = append(next, SurfaceNode{Seq: event.Seq, Tokens: tokens})
+	next = append(next, node)
 	next = append(next, nodes[endIndex+1:]...)
-	return surfaceTokenFold{tokens: tokens, nodes: next, deltaTokens: tokens - removed}, nil
+	return surfaceTokenFold{tokens: tokens, nodes: next}, nil
 }
 
 // indexOfSeq 找出某个 seq 在节点表里的下标，找不到给 -1。
-func indexOfSeq(nodes []SurfaceNode, seq int) int {
+func indexOfSeq(nodes []meterNode, seq int) int {
 	for index, node := range nodes {
-		if node.Seq == seq {
+		if node.seq == seq {
 			return index
 		}
 	}

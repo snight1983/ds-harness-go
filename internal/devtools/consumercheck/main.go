@@ -19,7 +19,7 @@
 //
 //   - **不重复 `go build ./...` 已经答过的那一条。**仓库内部编得过恰恰说不出
 //     module path 对不对，这道门禁只为仓库外面那一侧存在。
-//   - **不重新解析依赖。**require 段和 go.sum 直接抄本仓库那一份，让它联网重解一遍
+//   - **不重新解析依赖。**require 段和 go.sum 直接照录本仓库那一份，让它联网重解一遍
 //     只会把网络抖动算成失败。
 //   - **不证明这个版本在模块代理上取得到。**replace 指的是本地检出，那件事要等打了
 //     tag 之后才验得了。
@@ -226,7 +226,7 @@ func check(root, module string, packages []string) error {
 
 // materialize 把那个外部模块的 go.mod、go.sum 和源码写出来。
 //
-// go.mod 里的 require / go.sum 直接抄本仓库那一份：这个门禁要验的是 module path,
+// go.mod 里的 require / go.sum 直接照录本仓库那一份：这个门禁要验的是 module path,
 // 不是依赖解析，让它去联网重新解一遍只会把网络抖动算进失败里。replace 指到本地
 // 仓库，因为这个 module path 此刻还没发布——一个外部调用方拿 GitHub 路径引、
 // replace 到本地检出，正是本仓库还没打 tag 时唯一的消费方式。

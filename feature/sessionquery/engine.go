@@ -57,7 +57,7 @@ type Options struct {
 	// Go 这边零值就是「没填」，所以 0 走默认值 [DefaultReadWindowMax]，
 	// 负数是配置错误。代价是「禁掉上下文窗口」这个配置在这里表达不出来——
 	// 那是一个 DSH 也只是顺带允许、没人会用的配置，换来的是装配方不必为了
-	// 拿默认值而把 50 抄一遍。
+	// 拿默认值而把 50 写一遍。
 	ReadWindowMax int
 	// PersistedInspectConcurrency 是一次批量读里同时读几份落地日志；
 	// 0 走默认值 [DefaultPersistedInspectConcurrency]，负数是配置错误。

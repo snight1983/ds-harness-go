@@ -102,7 +102,7 @@ func applyProjection(state unitState, event sessionlog.Event) (unitState, bool) 
 		// 新增: DSH 先查 `event.data.args === undefined` 再决定要不要理这一条——
 		// 那是给「定义里关掉了输入记录」的命令留的口子。Go 这边 RunData.Args 带
 		// omitempty，一次 `/plan`（空输入）排出去就**没有** args 键，和「没记输入」
-		// 在介质上分不开。照抄那道检查会让裸的 `/plan` 永远折不出 pending。
+		// 在介质上分不开。照录那道检查会让裸的 `/plan` 永远折不出 pending。
 		// 这一条不需要那道检查：`/plan` 这条定义由本包自己登记，输入一直是记的
 		// （见 [Controller.commandDefinition]），所以键不在就等于空串。
 		wanted := strings.TrimSpace(data.Args) != "off"

@@ -86,13 +86,71 @@ func TestResolveChildAgentOptionsRoutesThroughTheParent(t *testing.T) {
 		t.Fatalf("没说的那一项该留着父的，实际 %q", overridden.Model)
 	}
 
-	// 换模型这一项也一样：三个字段各判各的零值。
+	// 换模型这一项也一样：四个字段各判各的零值。
 	remodelled := ResolveChildAgentOptions(parent, agent.Options{Model: "另一个"})
 	if remodelled.Model != "另一个" {
 		t.Fatalf("说了的模型该盖掉父的，实际 %q", remodelled.Model)
 	}
 	if remodelled.Provider != "p" || remodelled.MaxTokens != 100 {
 		t.Fatalf("其余两项该留着父的，实际 %#v", remodelled)
+	}
+}
+
+// appendHeader 往这个 agent 的会话里写一条请求头快照。
+func appendHeader(t *testing.T, holder *fakeAgent, config llm.CallConfig) {
+	t.Helper()
+	payload, err := json.Marshal(sessionlog.RequestHeaderData{
+		Header: sessionlog.EpochHeader{Config: config},
+		Reason: sessionlog.HeaderInitial,
+	})
+	if err != nil {
+		t.Fatalf("排请求头失败：%v", err)
+	}
+	if _, err := holder.Session().Append(sessionlog.Event{
+		Type: sessionlog.EventRequestHeader,
+		Data: payload,
+	}); err != nil {
+		t.Fatalf("追加请求头失败：%v", err)
+	}
+}
+
+// 请求期选过一次之后，路由归最后那条请求头所有；创建那份只是第一次请求之前的兜底，
+// 而输出上限一直从创建那份读——头上那个数是适配器解出来的，不是部署方声明的意图。
+func TestParentAgentOptionsForDelegationPrefersTheRequestHeader(t *testing.T) {
+	parent := agentAtDepth(t, "parent", 0)
+	parent.options = agent.Options{Provider: "创建的", Model: "创建的模型", ReasoningEffort: "high", MaxTokens: 100}
+
+	if before := ParentAgentOptionsForDelegation(parent); before != parent.options {
+		t.Fatalf("一条头都没有时该整份用创建那份，实际 %#v", before)
+	}
+
+	appendHeader(t, parent, llm.CallConfig{Provider: "请求的", Model: "请求的模型", MaxTokens: 4096})
+	after := ParentAgentOptionsForDelegation(parent)
+	want := agent.Options{Provider: "请求的", Model: "请求的模型", MaxTokens: 100}
+	if after != want {
+		t.Fatalf("路由该归请求头、上限该留创建那份，实际 %#v", after)
+	}
+}
+
+// 换了路由又没点名档位时，父那份跟着路由走的档位被清掉，好让选中的模型解出它自己
+// 的默认档——把 high 原样带到一个根本没有 high 的模型上，那次请求会被适配器拒掉。
+func TestResolveChildAgentOptionsClearsTheEffortWhenTheRouteChanges(t *testing.T) {
+	parent := agentAtDepth(t, "parent", 0)
+	parent.options = agent.Options{Provider: "p", Model: "m", ReasoningEffort: "high"}
+
+	kept := ResolveChildAgentOptions(parent, agent.Options{})
+	if kept.ReasoningEffort != "high" {
+		t.Fatalf("没换路由该留着父那份档位，实际 %q", kept.ReasoningEffort)
+	}
+
+	cleared := ResolveChildAgentOptions(parent, agent.Options{Model: "另一个"})
+	if cleared.ReasoningEffort != "" {
+		t.Fatalf("换了路由又没点名档位该清掉，实际 %q", cleared.ReasoningEffort)
+	}
+
+	named := ResolveChildAgentOptions(parent, agent.Options{Model: "另一个", ReasoningEffort: "low"})
+	if named.ReasoningEffort != "low" {
+		t.Fatalf("点名了的档位该盖掉父的，实际 %q", named.ReasoningEffort)
 	}
 }
 

@@ -121,6 +121,7 @@ func (p *Provider) Name() string { return p.name }
 // 源: packages/subagent/subagent-fork-in-process/src/index.ts:62
 func (p *Provider) Capabilities() subagent.Capabilities {
 	return subagent.Capabilities{
+		AgentOptions: true,
 		OutputSchema: true,
 		DepthLimit:   true,
 		ToolFilter:   true,
@@ -151,7 +152,7 @@ func (p *Provider) Start(ctx context.Context, request subagent.ResolvedStartRequ
 //
 // 源: packages/subagent/subagent-fork-in-process/src/index.ts:83-89
 //
-// 这段 fork 前缀**只在创建的那一刻**取一次：它成为孩子自己那份持久抄本的一部分，
+// 这段 fork 前缀**只在创建的那一刻**取一次：它成为孩子自己那份持久誊本的一部分，
 // 于是日后一次冷恢复重放的是那段前缀，而不是拿父更新的历史重新 fork 一遍。
 //
 // DSH 在这里留了一条 TODO(fork-continuable-prefix-reuse)：出厂的那些组装都没有

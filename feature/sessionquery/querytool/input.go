@@ -478,7 +478,7 @@ func assertNonEmpty(name string, length int) error {
 // engineError 造一条带引擎分类码的错误。
 //
 // 新增: 这些参数错误在 DSH 那边是 SessionQueryError，报的是引擎的码而不是本包的。
-// 照抄那个选择：这几句话说的全是模型自己写下的参数，本来就该原样给它看，而
+// 照录那个选择：这几句话说的全是模型自己写下的参数，本来就该原样给它看，而
 // 引擎的码正好已经把「过滤器不对」和「检索词不对」分开了。
 func engineError(code sessionquery.Code, format string, args ...any) error {
 	return &sessionquery.Error{Code: code, Message: fmt.Sprintf(format, args...)}

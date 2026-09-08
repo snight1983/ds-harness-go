@@ -9,12 +9,23 @@ import (
 	"github.com/snight1983/ds-harness-go/sessionlog"
 )
 
+// sumHeuristic 把一张节点表在固定尺子下的估价加起来。
+//
+// 服务那份折叠不再自己攒一个总价（表面总价是跟着路由变的，见 routepricing.go），
+// 所以测试要对总价说话就得自己加一遍。
+func sumHeuristic(nodes []meterNode) int {
+	total := 0
+	for _, node := range nodes {
+		total += node.heuristicTokens
+	}
+	return total
+}
+
 // foldAll 把一串事件依次折进服务那份逐节点折叠，交出最后的节点表和总价。
-func foldAll(t *testing.T, events []sessionlog.Event) ([]SurfaceNode, int) {
+func foldAll(t *testing.T, events []sessionlog.Event) ([]meterNode, int) {
 	t.Helper()
 
-	var nodes []SurfaceNode
-	total := 0
+	var nodes []meterNode
 	for _, event := range events {
 		if !sessionlog.IsSurfaceEvent(event) {
 			continue
@@ -23,9 +34,9 @@ func foldAll(t *testing.T, events []sessionlog.Event) ([]SurfaceNode, int) {
 		if err != nil {
 			t.Fatalf("seq %d 折不进来：%v", event.Seq, err)
 		}
-		nodes, total = fold.nodes, total+fold.deltaTokens
+		nodes = fold.nodes
 	}
-	return nodes, total
+	return nodes, sumHeuristic(nodes)
 }
 
 func TestFoldSurfaceTokensAppendsOneNodePerEvent(t *testing.T) {
@@ -37,10 +48,10 @@ func TestFoldSurfaceTokensAppendsOneNodePerEvent(t *testing.T) {
 	if len(nodes) != 2 {
 		t.Fatalf("两条上表面的事件该留下两个节点，实际 %d 个", len(nodes))
 	}
-	if nodes[0].Seq != 0 || nodes[1].Seq != 1 {
+	if nodes[0].seq != 0 || nodes[1].seq != 1 {
 		t.Fatalf("节点该按 seq 排：%v", nodes)
 	}
-	if sum := nodes[0].Tokens + nodes[1].Tokens; sum != total {
+	if sum := nodes[0].heuristicTokens + nodes[1].heuristicTokens; sum != total {
 		t.Fatalf("总价该等于逐节点之和：想要 %d，实际 %d", sum, total)
 	}
 }
@@ -71,15 +82,16 @@ func TestFoldSurfaceTokensSplicesAReplacement(t *testing.T) {
 	if len(fold.nodes) != 2 {
 		t.Fatalf("两个节点换成一个之后该剩两个，实际 %d 个", len(fold.nodes))
 	}
-	if fold.nodes[0].Seq != 3 || fold.nodes[1].Seq != 2 {
+	if fold.nodes[0].seq != 3 || fold.nodes[1].seq != 2 {
 		t.Fatalf("替换该原地占住被换那一段的位置：%v", fold.nodes)
 	}
-	removed := nodes[0].Tokens + nodes[1].Tokens
-	if want := fold.tokens - removed; fold.deltaTokens != want {
-		t.Fatalf("净变化该是新价减旧价：想要 %d，实际 %d", want, fold.deltaTokens)
+	removed := nodes[0].heuristicTokens + nodes[1].heuristicTokens
+	after := sumHeuristic(fold.nodes)
+	if want := before - removed + fold.tokens; after != want {
+		t.Fatalf("折后总价该是旧价减去被换走的、再加上新的：想要 %d，实际 %d", want, after)
 	}
-	if before+fold.deltaTokens >= before {
-		t.Fatalf("把两段长的换成一段短的该让总价掉下来：折前 %d，净变化 %d", before, fold.deltaTokens)
+	if after >= before {
+		t.Fatalf("把两段长的换成一段短的该让总价掉下来：折前 %d，折后 %d", before, after)
 	}
 }
 
@@ -95,7 +107,7 @@ func TestFoldSurfaceTokensLeavesTheCallerTableUntouchedOnFailure(t *testing.T) {
 	if _, err := foldSurfaceTokens(nodes, broken, 0); err == nil {
 		t.Fatal("表面上不存在的区间不该折得进来")
 	}
-	if len(nodes) != 1 || nodes[0].Seq != 0 {
+	if len(nodes) != 1 || nodes[0].seq != 0 {
 		t.Fatalf("失败的折叠动了调用方的节点表：%v", nodes)
 	}
 }
@@ -110,7 +122,7 @@ func TestFoldSurfaceTokensDegradesWhenTheReplacedNodesWereTrimmedAway(t *testing
 	t.Parallel()
 
 	// 这一段日志从 seq 40 起，表面上只有 40 和 41 两个节点。
-	nodes := []SurfaceNode{{Seq: 40, Tokens: 11}, {Seq: 41, Tokens: 22}}
+	nodes := []meterNode{{seq: 40, heuristicTokens: 11}, {seq: 41, heuristicTokens: 22}}
 
 	t.Run("两端都被弹掉时降级成一次追加", func(t *testing.T) {
 		t.Parallel()
@@ -121,12 +133,12 @@ func TestFoldSurfaceTokensDegradesWhenTheReplacedNodesWereTrimmedAway(t *testing
 		if err != nil {
 			t.Fatalf("两端都被弹掉了，该降级而不是报错：%v", err)
 		}
-		if len(fold.nodes) != 3 || fold.nodes[2].Seq != 42 {
+		if len(fold.nodes) != 3 || fold.nodes[2].seq != 42 {
 			t.Fatalf("该在末尾追加一个节点、一个都不换走：%v", fold.nodes)
 		}
-		if fold.deltaTokens != fold.tokens {
-			t.Fatalf("没有节点被换走，净变化该等于它自己的估价：想要 %d，实际 %d",
-				fold.tokens, fold.deltaTokens)
+		if want := 33 + fold.tokens; sumHeuristic(fold.nodes) != want {
+			t.Fatalf("没有节点被换走，总价该是原样加上它自己的估价：想要 %d，实际 %d",
+				want, sumHeuristic(fold.nodes))
 		}
 	})
 
@@ -141,11 +153,11 @@ func TestFoldSurfaceTokensDegradesWhenTheReplacedNodesWereTrimmedAway(t *testing
 		if err != nil {
 			t.Fatalf("起点被弹掉了，该降级而不是报错：%v", err)
 		}
-		if len(fold.nodes) != 2 || fold.nodes[0].Seq != 42 || fold.nodes[1].Seq != 41 {
+		if len(fold.nodes) != 2 || fold.nodes[0].seq != 42 || fold.nodes[1].seq != 41 {
 			t.Fatalf("该换走 40 那一个、原地占住它的位置：%v", fold.nodes)
 		}
-		if want := fold.tokens - 11; fold.deltaTokens != want {
-			t.Fatalf("换走的只有 40 那一格：想要 %d，实际 %d", want, fold.deltaTokens)
+		if want := 22 + fold.tokens; sumHeuristic(fold.nodes) != want {
+			t.Fatalf("换走的只有 40 那一格：想要 %d，实际 %d", want, sumHeuristic(fold.nodes))
 		}
 	})
 
@@ -175,10 +187,10 @@ func TestBothFoldsAgreeAtEveryEventBoundary(t *testing.T) {
 	)
 	nodes, _ := foldAll(t, view.events)
 	// 影子价按服务那份折叠算出来的真实价钱写下去——压缩那边就是这么记的。
-	shadowed := nodes[0].Tokens + nodes[1].Tokens
+	shadowed := nodes[0].heuristicTokens + nodes[1].heuristicTokens
 	view.append(summaryEvent(t, 0, 1, shadowed), replacementEvent(t, 0, 1, "s"))
 
-	var serviceNodes []SurfaceNode
+	var serviceNodes []meterNode
 	serviceTotal := 0
 	projectionTotal := 0
 	var claim *ShadowPriceClaim
@@ -196,7 +208,8 @@ func TestBothFoldsAgreeAtEveryEventBoundary(t *testing.T) {
 			if err != nil {
 				t.Fatalf("seq %d 服务侧折不进来：%v", event.Seq, err)
 			}
-			serviceNodes, serviceTotal = serviceFold.nodes, serviceTotal+serviceFold.deltaTokens
+			serviceNodes = serviceFold.nodes
+			serviceTotal = sumHeuristic(serviceNodes)
 		}
 
 		if serviceTotal != projectionTotal {

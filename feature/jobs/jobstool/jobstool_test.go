@@ -463,7 +463,7 @@ func TestAnUnsettledJobHasNoFinishedAt(t *testing.T) {
 }
 
 // TestTheSchemaEnumeratesEveryStatusTheRegistryKnows 钉住那张白名单：它和注册表
-// 认得的那套状态是同一套，抄一遍就意味着以后加一种会悄悄落下。
+// 认得的那套状态是同一套，写一遍就意味着以后加一种会悄悄落下。
 func TestTheSchemaEnumeratesEveryStatusTheRegistryKnows(t *testing.T) {
 	t.Parallel()
 

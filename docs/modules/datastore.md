@@ -4,7 +4,7 @@
 
 `adapter/datastore` 是本仓库唯一操作数据库的地方：唯一 import `database/sql`、唯一挂驱动、唯一写 SQL。
 
-在它之前，会话日志和键值中枢各自开连接池、各自建表、各自拼 SQL，两处形状抄来抄去（限定 schema、建表包在咨询锁里、值列用 TEXT、标识符长度上限 63）。抄出来的东西会分叉，而分叉只在换后端、换数据库、换部署时才露头。更要紧的是调用方：一个要存数据的模块凭什么知道后面挂的是 Postgres 还是 SQLite。
+在它之前，会话日志和键值中枢各自开连接池、各自建表、各自拼 SQL，两处形状互相照录（限定 schema、建表包在咨询锁里、值列用 TEXT、标识符长度上限 63）。照着做出来的东西会分叉，而分叉只在换后端、换数据库、换部署时才露头。更要紧的是调用方：一个要存数据的模块凭什么知道后面挂的是 Postgres 还是 SQLite。
 
 所以依赖方向是反的——适配层认识业务接口，业务接口不认识适配层：
 
@@ -23,20 +23,24 @@ storage.KVProvider            <- adapter/datastore/kvstore
 flowchart TB
     Session["feature/persistence.Backend"] --> SS["adapter/datastore/sessionstore"]
     Storage["storage.KVProvider"] --> KV["adapter/datastore/kvstore"]
+    Query["feature/sessionquery.Searcher"] --> Search["adapter/datastore/searchstore"]
     SS --> Log["datastore.LogUnit"]
     KV --> Rec["datastore.RecordUnit"]
+    Search --> Docs["datastore.DocUnit"]
     Log --> Medium["datastore.Medium"]
     Rec --> Medium
+    Docs --> Medium
     Medium --> Dialect["datastore.Dialect"]
     Dialect --> DB[("连接池 + 命名空间")]
 ```
 
-对外只有两种通用形状，都不带领域含义：
+对外只有三种通用形状，都不带领域含义：
 
 | 形状 | 内容 | 谁落在上面 |
 |---|---|---|
 | 记录集 `RecordUnit` | 若干张「键 → 一段不透明 JSON + 一个修订号」的表，外加一个可选单例槽 | 键值中枢 |
 | 日志集 `LogUnit` | 若干条流，每条流是一份头加一串按 seq 升序、可从头弹出的条目 | 会话存档 |
+| 文档集 `DocUnit` | 若干组文档，每组盖一个印记；能按一段文字找出命中的那些，按命中强弱排好、切出一页 | 会话检索 |
 
 本模块不提供「随便写一句 SQL」。一种新需求如果两种形状都装不下，那是往本模块加一种形状，而不是在使用方那边写 SQL——加形状要过一次设计，写 SQL 不用，这正是分岔的起点。
 
@@ -60,6 +64,32 @@ flowchart TB
 三条都是**一句话完成**：条件判定和写在同一条语句里，中间没有「先查一下再写」的缝，所以两条并发的写不可能都认为自己赢了。号由数据库在同一条语句里回给调用方，不额外多一次往返。
 
 这套东西上线时把版面号从 1 提到了 2，**没有写迁移**：v1 没有发布过，遇到旧版面直接拒绝打开、一个字都不改，这是对的行为而不是偷懒。
+
+## 文档集怎么找
+
+文档集是三种形状里唯一按**内容**找的那种：记录集只按键取值，日志集只按 seq 取一段，两者都答不出「哪些条里有这段话」。
+
+一组文档整组换，换的时候盖一个印记；使用方拿印记判断这一组要不要重建：
+
+```text
+      整组换掉                        按一段文字找
+   ┌──────────────┐              ┌────────────────────┐
+   │ 一组文档     │              │ 分组名单 / 排除名单 │
+   │ + 一个印记   │              │ 两个标签 / 两个区间 │
+   └──────┬───────┘              │ 每组只要最好的一条  │
+          │                      └─────────┬──────────┘
+          ▼                                ▼
+   ┌───────────────────────────────────────────────────┐
+   │   文档集：组 → 若干条（序号 · 时刻 · 两个标签 · 正文）│
+   └───────────────────────┬───────────────────────────┘
+                           ▼
+              命中的那些条 + 各自命中了几次
+              已按「命中多的在前、正文短的在前」排好、切好一页
+```
+
+比对是**字面的**：不分词、不做词干、不认通配符，大小写和连续空白都不算数。这不是省事——Postgres 的 `to_tsvector` 不切中文，一整句中文会被当成一个词元，于是「找一个词」永远不命中，而且那种失败是静默的：查询跑绿了，只是一条都没有。子串扫描慢，但它答得对，而且两种方言上答的是同一件事。
+
+排序和「每组只要最好的一条」都在库里做，不能取回来再在内存里挑：一页是在库里切的，先切页再挑每组最好的那条，会让一页里挤满同一组的好几条，而那一组在下一页里一条都不剩。
 
 ## 两种方言
 
@@ -126,11 +156,12 @@ SQLite 那一支有两件事本模块管不了，得由装配方在 DSN 上设�
 
 | 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
 |---|---|---|---|---|
-| 存储中心SQLite后端，单个数据库提供kv facet | `storage/storage-sqlite` | 抄形状 | `adapter/datastore` | 抄键值怎么映射成表、迁移怎么走；后端已定 Postgres |
+| 存储中心SQLite后端，单个数据库提供kv facet | `storage/storage-sqlite` | 取形重写 | `adapter/datastore` | 取键值怎么映射成表、迁移怎么走；后端已定 Postgres |
 | SQL 方言底座：把键值与日志映射成表，Postgres 与 SQLite 共用一套语句 | （无上游出处） | 本仓库自有 | `adapter/datastore` | 替代 storage/storage-sqlite。服务端无磁盘，后端定 Postgres |
 | 挑测试跑在哪种库上的夹具 | （无上游出处） | 本仓库自有 | `adapter/datastore/internal/dbtest` | 只有 datastore 子树用，收进 internal |
 | 键值存储后端 | （无上游出处） | 本仓库自有 | `adapter/datastore/kvstore` | storage 契约的生产实现 |
-| 会话日志与查询的存储后端 | （无上游出处） | 本仓库自有 | `adapter/datastore/sessionstore` | sessionlog 与 feature/sessionquery 的生产实现，抄 session-query-sqlite 的表与索引形状 |
+| 会话日志的存储后端 | （无 DSH 出处） | 本仓库自有 | `adapter/datastore/sessionstore` | sessionlog 契约的生产实现 |
+| 会话检索后端 | `session-query/session-query-sqlite` | 取形重写 | `adapter/datastore/searchstore` | feature/sessionquery 的检索实现，索引落在文档集上 |
 
 ## 相关源码
 
@@ -139,11 +170,13 @@ SQLite 那一支有两件事本模块管不了，得由装配方在 DSN 上设�
 | `adapter/datastore/medium.go` | 介质、命名空间、版面、实例标识、单元注册 |
 | `adapter/datastore/records.go` | 记录集：表、键值、单例槽、修订号与条件写 |
 | `adapter/datastore/logs.go` | 日志集：流、条目、追加、弹出 |
+| `adapter/datastore/documents.go` | 文档集：整组换、按一段文字找、命中计数与排序 |
 | `adapter/datastore/dialect.go` | 各家数据库分歧处的收口，Postgres 与 SQLite 两支 |
 | `adapter/datastore/error.go` | 本层哨兵 |
 | `adapter/datastore/internal/dbtest/` | 「这一轮跑在哪种库上」，两个适配层的测试共用 |
 | `adapter/datastore/kvstore/` | 记录集 → `storage.KVProvider` |
 | `adapter/datastore/sessionstore/` | 日志集 → `feature/persistence.Backend` |
+| `adapter/datastore/searchstore/` | 文档集 → `feature/sessionquery.Searcher` |
 | `internal/devtools/dbcheck/` | 把着这条界线的门禁 |
 
 ## 深入阅读

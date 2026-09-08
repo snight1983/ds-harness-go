@@ -87,8 +87,8 @@ spill/spill  spill/spill-policy  fs/fs  workspace/workspace
 `spill-local`——都是往本机写文件的实现，服务端换成数据库。
 
 `storage-sqlite` 和 `session-persistence-sqlite` 上一版列在范围里，现在**不列**：
-后端是 Postgres（第七节），这两个包本身不移。要抄的是它们的**结构**——键值怎么映射成表、
-迁移怎么走——那是抄形状，不是移包。
+后端是 Postgres（第七节），这两个包本身不移。要取的是它们的**结构**——键值怎么映射成表、
+迁移怎么走——那是取形重写，不是移包。
 
 `spill`（过大工具结果外置）和 `session-query`（会话检索）是上一版整个漏掉的两块。
 工具结果撑爆上下文这件事和前提 2、4 直接相关。
@@ -286,7 +286,7 @@ webhook/webhook
 开一个会话跑什么提示词」，fire-and-forget。零本机前置，它要的
 `workspace` / `agent-presets` / `agent-default-model` / `session-title` 我们全有。
 **这是一块实打实的缺口**：现在的运行时只能被人从协议层叫醒。
-提供方那一侧（`webhook/webhook-github` 的签名校验与 HTTP 路由）是抄形状，不移包。
+提供方那一侧（`webhook/webhook-github` 的签名校验与 HTTP 路由）是取形重写，不移包。
 
 ### 底座（4）
 ```
@@ -337,7 +337,7 @@ test-support/session-snapshot  test-support/loader-smoke
 **没有 `llm-replay`，前提 3、4 那些「进程中途死掉」的路径根本没法写测试**——
 崩溃恢复的用例要求在精确的位置断开，真模型给不了这个精确度。
 
-### 不移包，但要抄形状（23）
+### 不移包，但要取形重写（23）
 ```
 bundle/base  bundle/headless  bundle/web-app
 bundle/acp-app  bundle/sdk-app  bundle/sdk-minimal
@@ -351,18 +351,20 @@ webhook/webhook-github
 ```
 `bundle/*`、`examples/*`、`host/apiproxy`、`api/*`、`sdk/client` 这一批绑在
 cordis / 浏览器 / 子进程驱动上，不移；但里面记着**装配顺序、对外 API 方法清单、
-协议形状**。抄什么、怎么抄，见 `rulings.md` 第二节。
+协议形状**。取什么、怎么落地，见 `rulings.md` 第二节。
 
 `storage-sqlite` 和 `session-query-sqlite`：后端已定 Postgres（第七节），包不移，
-抄的是**键值怎么映射成表、迁移怎么走、查询表结构与索引**。
+取的是**键值怎么映射成表、迁移怎么走、查询表结构与索引**。
 `credentials/authorization`（OAuth 与人工授权流程）形状要、实现要重写——
 它自陈「flow 不可恢复」是浏览器进程的限制，和前提 3、4 直接相撞。
 
 新快照带来的五个：`api/` 三个控制器（session / settings / workspace）是
-「浏览器要什么、Host 就得答什么」的方法表，承载从 cordis Remote 换成 HTTP，方法表照抄；
-`bundle/acp-app` `bundle/sdk-app` `bundle/sdk-minimal` 是三份 profile 组合包，抄的还是装配顺序；
+「浏览器要什么、Host 就得答什么」的方法表，承载从 cordis Remote 换成 HTTP，方法表照录；
+`bundle/acp-app` `bundle/sdk-app` `bundle/sdk-minimal` 是三份 profile 组合包，取的还是装配顺序；
 `llm/deepseek-llm-api-extensions` 是「插件各认领一个模型请求顶层字段、声明式合并」的注册表形状，
-我们的 `llm` 契约要留这个扩展位；`webhook/webhook-github` 是签名校验 + 单条 HTTP 路由 + 立刻
+**已落在 `adapter/openaicompat`**——扩展位留在适配器而不是 `llm` 契约，因为顶层字段是某一条线上协议
+自己的事，换条协议就换套字段名，写进契约等于让每个适配器都得认一个只有一家看得懂的形状；
+`webhook/webhook-github` 是签名校验 + 单条 HTTP 路由 + 立刻
 202 的适配器形状，配合上面 `webhook/webhook` 那个接缝。
 
 `experimental/agent-team` 是消费方裁定要的能力：**多个 agent 之间的持久信箱 +
@@ -371,11 +373,18 @@ cordis / 浏览器 / 子进程驱动上，不移；但里面记着**装配顺序
 
 **包不移，因为它自陈「单进程、共享 checkout」「mailbox 不保证跨进程 exactly-once」**，
 和前提 1、4 直接相撞（`required.md` 第三节把它列成缺口）。照搬进来等于把单进程假设焊死。
-但这三样的形状与进程模型无关：换成 Postgres 存储照样成立，CAS 本来就是为并发写设计的。
+但这三样的形状与进程模型无关：换成数据库存储照样成立，CAS 本来就是为并发写设计的。
+
+**这一条已经落地，在 `feature/agentteam`。** 三样形状照原样取，进程模型整个换掉：团队状态
+不折队长的会话日志，落在花名册、任务板、收件箱三张表上，谁在哪个副本上都能改；信箱明确
+只承诺至少一次，抓着消息的副本掉线之后别人过了认领期就能捡回来重送。`wait` 也补上了：
+DSH 那张进程内的等待者名单在多副本下等不到别处那次改动，换成介质上的条件轮询，只承诺
+看得见本次调用之后的改动。`experimental/tool-agent-team` 那层模型侧工具封装落在
+`feature/agentteam/agentteamtool`，十件工具连同那段团队策略指引都在里面。
 
 ## 四、不要的（143 个）
 
-257 = 需要 83 + 抄形状 23 + Go 已有等价物 8 + **不要 143** + 说不清 **0**。
+257 = 需要 83 + 取形重写 23 + Go 已有等价物 8 + **不要 143** + 说不清 **0**。
 **说不清已经清零**，257 行每一行都有终判。
 
 257 而不是 250，是因为清单里留着 **7 行上游已删的包**：删掉它们，「我们当初判过它」
@@ -390,7 +399,7 @@ cordis / 浏览器 / 子进程驱动上，不移；但里面记着**装配顺序
 | `client/` | 45 | 浏览器 DOM / React。有自己的前端（`C:\code\aiboy`） |
 | `shell/` | 10 | 本机命令执行（`bash-local` `pwsh-sandbox` `tool-bash` …）；接缝 `shell` `shell-env` 无沙箱可挂 |
 | `host/` | 7 | 桌面对话框 / 本机磁盘 / 内建 HTTP，第六节已删对应目录；`plugin-inventory` 是 cordis 插件清单，Go 里没有这个装载器 |
-| `experimental/` | 6 | 三个是 cordis profile 装配清单（接缝 `agent-team` 已判抄形状，清单本身不是能力）；`inspector` 要 Chrome DevTools Protocol，`webworker-*` 两个是纯浏览器运行时 |
+| `experimental/` | 6 | 三个是 cordis profile 装配清单（接缝 `agent-team` 已落进 `feature/agentteam`，清单本身不是能力）；`inspector` 要 Chrome DevTools Protocol，`webworker-*` 两个是纯浏览器运行时 |
 | `fs/` | 6 | 本机磁盘读写；`fs-observation-policy` 也不要——后端是对象存储，模型不逐个读文件，没有观察对象 |
 | `web/` | 6 | 三个搜索提供方都要第三方 API key，现在没有数据源；抓取单独存在没用。**推后，不是永久出局**——接缝零依赖，补回来不动已有代码 |
 | `subagent/` | 4 | 本机子进程（四个进程外 provider） |
@@ -427,7 +436,7 @@ cordis / 浏览器 / 子进程驱动上，不移；但里面记着**装配顺序
 | 走向 | 包 | 判据 |
 |---|---|---|
 | **需要 7** | `context/time-context` `guard/repeat-tool-reminder` `session/session-stats` `session/session-telemetry` `session-title-llm` `-first-prompt-llm` `-all-prompts-llm` | 零本机前置，且各自补上一个真缺陷：不知道今天几号 / 死循环白烧钱 / 没有预算数据源 / 线上出事没法查 / 接缝没实现方 |
-| **抄形状 3** | `storage/storage-sqlite` `session-query/session-query-sqlite` `credentials/authorization` | 结构值得抄，实现要按 Postgres 与可恢复流程重写 |
+| **取形重写 3** | `storage/storage-sqlite` `session-query/session-query-sqlite` `credentials/authorization` | 结构值得取形，实现要按 Postgres 与可恢复流程重写 |
 | **Go 已有等价物 1** | `typert/registry` | `reflect` + struct tag 白送 |
 | **不要 9** | `core/agent-tool-presentation` `fs/fs-observation-policy` `extensions/*`(3) `hooks/hooks-claude-code` `hooks/hooks-codex` `host/plugin-inventory` `test-support/client-runtime` | 各自的前置：唯一可选值 / 没有观察对象 / 浏览器加 vm 沙箱 / 别家产品的钩子点 / cordis 装载器 / 前端脚手架 |
 

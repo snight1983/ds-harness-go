@@ -39,7 +39,7 @@ const (
 // Coded 是一个带机器可读身份的错误。
 //
 // 新增: DSH 那边是 `HarnessError` 这个基类，靠 `instanceof` 认。Go 里没有基类，
-// 分派靠接口——本包遇到的错误只要实现了这个接口，它的名字和代号就会被抄进
+// 分派靠接口——本包遇到的错误只要实现了这个接口，它的名字和代号就会被写进
 // [Failure.Info]，让下游不必解析错误文本就能分类。
 type Coded interface {
 	error

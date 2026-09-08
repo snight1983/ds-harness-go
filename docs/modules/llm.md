@@ -119,6 +119,25 @@ Agent 的 `request-error` Observer 可以认领失败并要求重试；默认是
 - 文本、工具调用和受支持的图片输入。
 - 模型上下文窗口、最大输出和推理档位映射。
 - 动态读取配置，使密钥、端点和模型设置可以在后续请求生效。
+- 宿主自带的私有请求字段：装配时登记一个「贡献方」，它就能给每次请求补一个自己的顶层字段。
+
+私有字段的规矩只有三条，都在装配时就查：
+
+```
+装配                     每次请求
+┌──────────────┐        ┌────────────────────────────┐
+│ 贡献方 A      │        │ 适配器先把请求拼好           │
+│  认领 字段甲   │──┐     │        ↓                   │
+├──────────────┤  ├───▶ │ 挨个问贡献方：这次要补什么？  │
+│ 贡献方 B      │  │     │        ↓                   │
+│  认领 字段乙   │──┘     │ 补上去，发出                │
+└──────────────┘        └────────────────────────────┘
+   ①同一个字段被两方认领 → 装配就报错
+   ②认领适配器自己的字段（如对话历史）→ 装配就报错
+   ③某个贡献方这次备不出来 → 整次请求不发
+```
+
+第三条是有意的：贡献方备不出自己的字段，说明这次请求本来要带的东西没带上，照旧发出去换来的是一次「看起来成了、其实少了半份内容」的调用。
 
 不承诺支持：
 
@@ -128,6 +147,7 @@ Agent 的 `request-error` Observer 可以认领失败并要求重试；默认是
 - WebSocket 模型传输。
 - 第三方 SDK 的全部兼容开关。
 - 自动拥有所有厂商模型目录。
+- 告诉贡献方「你补的字段这次真的发出去了」。补字段是单向的，要「发成了才落账」得自己盯会话日志里那条已提交的记录。
 
 “OpenAI 兼容”只说明线上协议形状，不保证每个兼容服务的扩展字段完全一致。
 
@@ -139,6 +159,7 @@ Agent 的 `request-error` Observer 可以认领失败并要求重试；默认是
 - 在缺少实际值时使用确定的启发式估算。
 - 统计输入、输出、缓存和推理等可用维度。
 - 从会话事件计算步骤、回合和会话级用量。
+- 图片按当次请求那条路由计价：适配器报价就用它报的，不报价就退回启发式。
 - 为压缩和预算策略提供输入。
 
 估算不是提供方账单，不能直接作为精确计费依据。生产计费应以提供方实际 Usage 或独立计量为准。
@@ -198,8 +219,9 @@ LLM 模块不负责：
 | 浏览器 Chat target，渲染 transcript 节点与详情、历史图片、操作、本地化与滚动位置恢复，并直接折叠打包的 assistant 历史 run | `client/ui-chat` | 不需要 | `llm` | 服务端替代实现见 llm；缺前置：浏览器运行时（DOM／ESM／React） |
 | 提供方无关的 LLM 词汇与抽象，注册适配器、捕获重试策略、支持模型发现与流式调用 | `llm/llm` | 需要 | `adapter/openaicompat` `llm` | — |
 | 基于@earendil-works/pi-ai的多提供方通用适配器，支持OpenAI兼容端点与私有网关 | `llm/llm-pi-ai` | 需要 | `adapter/openaicompat` | — |
+| DeepSeek 官方请求的顶层字段扩展注册表，贡献插件各认领一个经声明合并的字段，基础请求序列化后准备当前贡献 | `llm/deepseek-llm-api-extensions` | 取形重写 | `adapter/openaicompat` | 只取注册表形状：字段归属在登记那一刻定死（Go 没有声明合并），DeepSeek 那套具体字段一个都不带；accept() 那半个事务不做，它唯一的上游用户 session/session-log-deepseek 判了不需要 |
 | 通过agent/request-error事件应用提供方重试策略，支持normal与always两种模式 | `llm/llm-retry` | 需要 | `feature/llmretry` | — |
-| 通过单例ctx.tokenMeter进行回放感知的token测量与上下文占用率投影 | `llm/token-meter` | 需要 | `feature/tokenmeter` | 缺两角：（一）单回合精确用量——feature/tokenmeter 是整份日志累计，同一 turn/step 重复采样 last-wins，切不出「这一个回合花了多少、走了哪几条路由」，补法是加一个吃 turn/start..turn/end 事件切片的纯函数；（二）路由感知的图片计价——图片按固定启发式估价，llm 包里没有计价接缝，补法是 llm 加图片计价接口、feature/tokenmeter 按路由重估图片节点 |
+| 通过单例ctx.tokenMeter进行回放感知的token测量与上下文占用率投影 | `llm/token-meter` | 需要 | `feature/tokenmeter` | 缺两角已补：（一）单回合精确用量落在 `DeriveTurnUsage`——吃一段 turn/start..turn/end 的事件切片，一个字都不估，只加提供方亲口报过的数；对残缺一点都不宽容，少一角就整份不给。（二）路由感知的图片计价落在 `llm` 的图片计价接缝加 `feature/tokenmeter` 的表面重估——按当次请求头那条路由重估图片那一份 |
 
 ## 相关源码
 
@@ -210,7 +232,7 @@ LLM 模块不负责：
 | `llm/runtime.go`、`llm/adapter.go` | 路由运行时和 Adapter 接口 |
 | `llm/config.go`、`llm/modelinfo.go` | 调用配置和模型目录 |
 | `feature/llmretry/` | 重试策略和耐久事件 |
-| `adapter/openaicompat/` | OpenAI Chat Completions 兼容适配器 |
+| `adapter/openaicompat/` | OpenAI Chat Completions 兼容适配器，含私有请求字段的归属表 |
 | `feature/tokenmeter/` | 用量统计和估算 |
 | `feature/replay/`、`llm/mockserver/` | 测试录制、回放和假服务 |
 

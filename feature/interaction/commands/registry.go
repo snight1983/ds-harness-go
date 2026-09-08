@@ -111,12 +111,12 @@ type Definition struct {
 	Input *InputDescriptor
 	// SkipInputRecord 为真时，command/run 不记 RawInput。
 	//
-	// 新增: DSH 是 `recordInput?: boolean`，缺省为真。Go 的零值是 false，直接照抄
+	// 新增: DSH 是 `recordInput?: boolean`，缺省为真。Go 的零值是 false，直接照录
 	// 会让一个漏填的定义把输入悄悄从日志里抹掉；所以这里取反成 SkipInputRecord——
 	// 零值就等于「记」，和 DSH 的默认行为对齐。
 	//
 	// 有一条自己的权威领域事件拥有这份负载的命令才把它设成真，免得在会话日志里
-	// 把同一份负载抄两遍。
+	// 把同一份负载记两遍。
 	SkipInputRecord bool
 	// Handler 是那个直接干活的处理器。
 	Handler Handler

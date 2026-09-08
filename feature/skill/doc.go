@@ -32,7 +32,7 @@
 // （某个提供方报错了、或者它自己说 Incomplete）永远不进缓存：消费方拿到
 // [CatalogSnapshot].Complete 为假时应当留着上一份好的，下一个请求边界再试。
 //
-// # 这里没有照抄的部分
+// # 这里没有照录的部分
 //
 // 新增: cordis 的 Service / ctx.skills / 插件名 / inject 声明全部不移。本包就是一个
 // 普通类型，装配方自己造一个 [Registry] 拿着。事件 `skills/change` 换成

@@ -82,7 +82,7 @@ func wantCode(t *testing.T, err error, code string) *userquestions.Error {
 	}
 	if typed.ErrorName() != "UserQuestionError" || typed.ErrorCode() != code {
 		// 这两个方法是给 tools 那道结果收敛认的：它靠它们把这条错误的身份
-		// 抄进 Failure.Info，下游才不必解析错误文本。
+		// 写进 Failure.Info，下游才不必解析错误文本。
 		t.Fatalf("身份不对：%q / %q", typed.ErrorName(), typed.ErrorCode())
 	}
 	if typed.Error() != typed.Message {

@@ -55,7 +55,7 @@ Backend -> settings.Provider -> Namespace Registration -> Scope[T]
 
 | 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
 |---|---|---|---|---|
-| 浏览器配置界面的 Host Remote 属主，提供脱敏 settings 与凭据元数据读取、不回传密钥的写入，并在 Host 桌面打开 settings 或 preset 位置 | `api/settings-controller` | 抄形状 | `settings` | 缺口：credentials 有归属校验，没有「凭据可列出、可引用、读回来打码」这条脱敏读路径 |
+| 浏览器配置界面的 Host Remote 属主，提供脱敏 settings 与凭据元数据读取、不回传密钥的写入，并在 Host 桌面打开 settings 或 preset 位置 | `api/settings-controller` | 取形重写 | `settings` | 缺口：credentials 有归属校验，没有「凭据可列出、可引用、读回来打码」这条脱敏读路径 |
 | 用户设置Service Definition，管理按namespace分节的schema默认值、组合base与用户层解析 | `settings/settings` | 需要 | `settings` | — |
 
 ## 相关源码

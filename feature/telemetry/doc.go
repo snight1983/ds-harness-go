@@ -37,7 +37,7 @@
 // 早就以另一个身份离开过进程（同一个 id 在上一个进程里恢复，或者父会话的流），
 // 重新交一遍等于重复上报。
 //
-// # 这里没有照抄的部分
+// # 这里没有照录的部分
 //
 // index.ts 那个 cordis Service（SessionTelemetryBackend 抽象类、
 // `Context.sessionTelemetry` 声明合并、以及 `session-telemetry/record` 那个

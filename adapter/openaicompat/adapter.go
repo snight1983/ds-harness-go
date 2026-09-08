@@ -67,6 +67,13 @@ type AdapterOptions struct {
 	// OnReplayDegrade 看着一条助手历史消息因为它那份重放状态本构建用不了而退回
 	// 到中立转换。nil 表示不关心。
 	OnReplayDegrade func(provider, model, reason string)
+	// Extensions 是宿主装配进来的那张顶层字段归属表，nil 表示一个字段都不追加。
+	//
+	// 源: packages/llm/deepseek-llm-api-extensions/src/index.ts:18-22（cordis 服务声明）
+	//
+	// 新增: 上游那张表是挂在 cordis 容器上的一个服务，适配器按名字问容器要。本仓库
+	// 没有那个容器，装配点就是这个字段。
+	Extensions *ExtensionRegistry
 	// Identity 是每次请求都要带上的产品身份；零值表示 [llm.DefaultAppIdentity]。
 	Identity llm.AppIdentity
 }
@@ -196,7 +203,7 @@ func newChatService(profile ResolvedProviderProfile, identity llm.AppIdentity) o
 // 它管不着（[timeout.Watchdog] 的定时器只在 [timeout.Receive] 里开着）。
 //
 // http.DefaultTransport 被别人包过（比如 otelhttp）时克隆不了，那就原样用它、
-// 跳过这条超时：把追踪链路拆掉的代价比这条超时更大。这一支照抄 openai-go 自己
+// 跳过这条超时：把追踪链路拆掉的代价比这条超时更大。这一支照录 openai-go 自己
 // 的取舍（default_http_client.go:24-31）。
 func newHTTPClient(responseHeaderTimeout time.Duration) *http.Client {
 	transport, cloneable := http.DefaultTransport.(*http.Transport)
@@ -519,6 +526,20 @@ func (a *Adapter) streamWithSnapshot(
 	if apiKey != "" {
 		callOptions = append(callOptions, option.WithAPIKey(apiKey))
 	}
+
+	// 扩展字段最后落：它们是**追加**在一份已经拼完的请求上的，交给贡献方看的那份
+	// 事实也就该是这一份。
+	//
+	// 源: packages/llm/deepseek-llm-api-extensions/src/index.ts:102-106
+	fields, err := a.prepareExtensions(streamCtx, options, params)
+	if err != nil {
+		// 这条错误自带代号（[ExtensionFailedCode]），不走 [Adapter.failureOf]——
+		// 那条路会把它重新归类成一次提供方失败，而这次请求根本还没发出去。
+		watchdog.Stop()
+		releaseDeadline()
+		return nil, err
+	}
+	callOptions = append(callOptions, extensionOptions(fields)...)
 
 	service := snap.services[options.Provider]
 	stream := service.NewStreaming(streamCtx, params, callOptions...)

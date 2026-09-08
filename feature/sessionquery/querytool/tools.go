@@ -120,7 +120,7 @@ func seqParameter() tools.Property {
 // 源: packages/session-query/tool-session-query/src/input.ts:54
 //
 // 从 [sessionquery] 的常量取，不写字面量：这张白名单和引擎认得的那套值必须
-// 是同一套，抄一遍就意味着以后引擎加一种来源时这里会悄悄落下。
+// 是同一套，写一遍就意味着以后引擎加一种来源时这里会悄悄落下。
 var availabilityNames = []string{
 	string(sessionquery.AvailabilityLive),
 	string(sessionquery.AvailabilityPersisted),
@@ -166,7 +166,7 @@ func enumArray(description string, values ...string) tools.Node {
 //
 // 源: packages/session-query/tool-session-query/src/input.ts:296-307（toolInput）
 //
-// 属性顺序照抄 DSH：[tools.Property] 是有序切片，因为这个顺序会进提示词缓存的
+// 属性顺序照录 DSH：[tools.Property] 是有序切片，因为这个顺序会进提示词缓存的
 // 键（见 [tools.Node] 的注释）。换个顺序不改语义，但会把整份缓存作废。
 func sessionSearchParameters() tools.Node {
 	return tools.Node{
@@ -334,7 +334,7 @@ func (c *Controller) definitions() []*tools.Definition {
 //
 // 新增: DSH 那边 schemastery 已经把 args 解成了类型化的对象，execute 直接收。
 // Go 侧 [tools.Definition.Execute] 收的是 json.RawMessage，所以解码这一步要自己
-// 做；五件工具的解码和编码完全一样，抽成一个泛型包装比抄五遍好。
+// 做；五件工具的解码和编码完全一样，抽成一个泛型包装比写五遍好。
 func execute[A any](
 	operation func(ctx context.Context, args A, exec *tools.RunContext) (string, error),
 ) func(context.Context, json.RawMessage, *tools.RunContext) (json.RawMessage, error) {

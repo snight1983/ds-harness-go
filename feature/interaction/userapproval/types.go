@@ -93,7 +93,7 @@ func KnownOutcome(outcome tools.ApprovalOutcome) bool {
 //
 // 源: packages/interaction/user-approval/src/index.ts:34-73
 //
-// 它们**都不上表面**：三条都只进日志，模型的抄本里一条都看不见。模型是从系统提示
+// 它们**都不上表面**：三条都只进日志，模型的誊本里一条都看不见。模型是从系统提示
 // 那份运行期快照（[PolicyStatement]）和一次切换时注入的那条通知里知道当前策略的。
 const (
 	// EventAsked 记下一个审批问题被摆到了答复者链面前。

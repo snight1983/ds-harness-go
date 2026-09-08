@@ -31,7 +31,7 @@ var serverNamePattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,32}$`)
 // 源: packages/mcp/mcp-client/src/connection.ts:27-37（ReconnectConfig）
 //
 // 新增: DSH 那四个字段全是可选的，`enabled` 缺省为**真**。Go 的零值是 false，
-// 照抄会让一份没填的配置把重连悄悄关掉，所以这里取反成 Disabled——零值就等于
+// 照录会让一份没填的配置把重连悄悄关掉，所以这里取反成 Disabled——零值就等于
 // 「开着」，和 DSH 的默认行为对齐。做法和
 // [github.com/snight1983/ds-harness-go/feature/interaction/commands.Definition.SkipInputRecord] 逐字相同。
 // 三个数值字段的零值同样表示「没填」，由 [resolveReconnectPolicy] 补默认值。

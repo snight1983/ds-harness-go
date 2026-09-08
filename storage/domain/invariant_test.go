@@ -224,7 +224,7 @@ func TestADeleteEventCarryingAValueIsAViolation(t *testing.T) {
 // TestADeleteEventCarryingAReceiptIsAViolation 钉住第 4 条的后半：删除不产生新的一版。
 //
 // 一条删除事件带着修订标识，说明发它的那条路把删当成了一次写——而删掉的记录
-// 没有「这一版」可言，那个号只能是从别处抄来的。
+// 没有「这一版」可言，那个号只能是从别处照录来的。
 func TestADeleteEventCarryingAReceiptIsAViolation(t *testing.T) {
 	t.Parallel()
 

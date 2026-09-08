@@ -50,7 +50,7 @@ func (AppendOp) sealedSurfaceOp() {}
 
 // MarshalJSON 把追加操作排成一个**裸字符串** "append"，不是对象。
 //
-// 这个不对称的介质形状是 DSH 定的，照抄：常规路径占了绝大多数事件，
+// 这个不对称的介质形状是 DSH 定的，照录：常规路径占了绝大多数事件，
 // 每条省下一层对象。
 func (AppendOp) MarshalJSON() ([]byte, error) { return []byte(`"append"`), nil }
 
@@ -90,7 +90,7 @@ func (o ReplaceOp) MarshalJSON() ([]byte, error) {
 // 源: packages/core/session/src/surface.ts:172-208
 //
 // 分派看的是 JSON 值本身的形状：字符串只能是 "append"，对象必须**恰好**带
-// op／start／end 三个键。「恰好」这件事照抄 DSH 的 isReplaceOp：多一个键说明
+// op／start／end 三个键。「恰好」这件事照录 DSH 的 isReplaceOp：多一个键说明
 // 写的一方在表达一个本构建读不懂的东西，收下它等于把那部分意思悄悄丢掉。
 func UnmarshalSurfaceOp(data []byte) (SurfaceOp, error) {
 	var text string

@@ -503,7 +503,7 @@ src 总行数                                300,429
 
 | 包 | 能力 | 性质 | 服务端障碍 | 自陈限制 |
 |---|---|---|---|---|
-| `cordis-client-runner` | 动态双半插件的浏览器半执行器，负责评估浏览器端闭包源码、装载为活插件、处理运行编排与RPC回调 | 实现 | 浏览器端 | 被拒绝的回答不会重试，槽位准入没有载体，guard白名单是手抄孪生 |
+| `cordis-client-runner` | 动态双半插件的浏览器半执行器，负责评估浏览器端闭包源码、装载为活插件、处理运行编排与RPC回调 | 实现 | 浏览器端 | 被拒绝的回答不会重试，槽位准入没有载体，guard白名单是手写孪生 |
 | `cordis-host-runner` | 动态包在host侧的注册表与沙箱执行器，管理定义生命周期、vm求值、浏览器调度与invoke路由 | 实现 | 本机进程 | run成功不等于UI渲染成功，带浏览器半的包在无页面时挂起，run无超时 |
 | `tool-cordis` | 五个面向模型的自引用工具（cordis_inspect/define/run/stop/undefine），操作当前DSH进程中的实时Cordis运行时 | 工具 | 本机进程 | 沙箱只约束诚实代码非安全边界，ctx façade不公开effect() |
 | `ui-cordis` | Cordis动态插件浏览器界面，全局浮窗面板显示所有定义及其运行控件，记录model调用的define卡片 | UI | 浏览器端 | 展开期间看不到无下发的注册表变化，只有请求时该行会消失，渲染失败是本页读数 |
@@ -746,36 +746,39 @@ DSH 已经做完了，不需要我们设计。
 
 | 列 | 取值 | 说明 |
 |---|---|---|
-| 能力 | 一句话 | 抄本文档第二节的「能力」列 |
+| 能力 | 一句话 | 照录本文档第二节的「能力」列 |
 | DSH出处包 | `<域>/<包>` 或 `—` | `—` 表示这一行没有 DSH 出处，是本仓库自有 |
-| 要不要 | 需要／抄形状／Go 已有等价物／不需要／本仓库自有 | 前四种抄 `rulings.md` 的裁决 |
+| 要不要 | 需要／取形重写／Go 已有等价物／不需要／本仓库自有 | 前四种取 `rulings.md` 的裁决 |
 | 落在哪个Go包 | 模块内相对路径，多个用空格隔开 | `（未落地）` 表示要但还没有；`（Go 标准库）`／`（Go 语言设施）` 表示换了手段；`—` 表示不要 |
 | 缺口说明 | 一句话 | 「不要」写**缺哪个前置条件**，不写「用不上」；「要但没落地」写缺什么；「落地了但缺一角」也写在这里 |
 
 **273 行 = 257 个 DSH 包各一行 + 16 个无 DSH 出处的本仓库自有 Go 包各一行。**
 后 16 个是 `adapter/` 底下的 Postgres 与对象存储后端、两个 `internal` 测试夹具、
 `harness` 装配门面，以及 9 个门禁工具——它们在 DSH 里没有对应物，但它们是这个仓库的一部分，
-不列进来这张表就只覆盖了「抄来的」而不是「有的」。
+不列进来这张表就只覆盖了「照录来的」而不是「有的」。
 
 **落点这一列不是手填的**，是扫全仓库 Go 源里的 `// 源: packages/<域>/<包>/` 反查出来的，
 所以它和 `internal/devtools/portcheck` 校验的那套溯源注释同源。
 `internal/devtools/` 底下的文件不参与反查——门禁自己的夹具里也有 `packages/` 字样，
 算进去会把 `acp/acp` 的落点算成 `internal/devtools/portcheck`。
 
-**抄形状那 23 行的落点是手写的**，因为「抄形状」按定义不产出对应符号，也就没有溯源注释可反查。
+**取形重写那 20 行的落点是手写的**，因为「取形重写」按定义不产出对应符号，也就没有溯源注释可反查。
 
 ### 这张表当场问出来的三件事
 
-1. **需要 83 个里，1 个没有任何 Go 落点，就是上游自己已经删掉的 `acp-snapshot`。**
+1. **需要 84 个里，1 个没有任何 Go 落点，就是上游自己已经删掉的 `acp-snapshot`。**
    它的继任者 `session-snapshot` 落在 `sessionlog/snapshot` 上，缺口合并进那一条。
    **正经能力一条不剩**：原先同在这一栏的 `session/session-turn-outline`、`workflow/workflow`、
    `interaction/permission-presets`、`webhook/webhook` 都已落地，`agent-loop-testkit` 落在
    `harness/harnesstest` 上，`loader-smoke` 的那条断言链落在 `harness/smoketest` 上——
    它起子进程的那一半没有移，Go 里没有 Loader、没有那份配置文件，也没有源码态与构建态两条启动路径。
-2. **抄形状 23 个里，10 个完全未落地。**`experimental/agent-team` 那套 peer mailbox＋CAS 任务板、
-   `credentials/authorization` 的可恢复授权流程、`llm/deepseek-llm-api-extensions` 的附加请求字段注册表，
-   都在里面。另有三个 `api/` 控制器是**落了一半**：`api/session-controller` 只有 `session/prompt`，
-   create／resume／fork／rename／list／search／cancel／select-model／update-queue 一个没有。
+2. **取形重写 20 个里，3 个还没有落点，而三个都不是真缺。**原先那条真缺
+   `experimental/tool-agent-team` 已经落在 `feature/agentteam/agentteamtool`。剩下三个
+   不缺——`bundle/web-app` 挂的
+   webserver／web-runtime 全判了不需要，`host/apiproxy` 上游已删且缺口并进了 `api/` 那三个
+   控制器，`sdk/client` 那个子进程驱动运行时本仓库不做。另有三个 `api/` 控制器是**落了一半**：
+   `api/session-controller` 只有 `session/prompt`，create／resume／fork／rename／list／search／
+   cancel／select-model／update-queue 一个没有。
 3. **`feature/sessionquery` 只有挂点没有实现。**`Searcher` 这个接口全仓库没有任何实现方，
    两个检索方法一律返回 `CodeSearchDisabled`。
 

@@ -14,7 +14,7 @@
 //
 // 拒绝的话术因此也只有一份：接缝报的错原样成为这次工具调用的失败，而
 // [userquestions.Error] 带着的 ErrorName/ErrorCode 会被 [github.com/snight1983/ds-harness-go/tools]
-// 那道结果收敛抄进 Failure.Info，模型和上层都不必解析错误文本。
+// 那道结果收敛写进 Failure.Info，模型和上层都不必解析错误文本。
 //
 // # 和 DSH 不一样的地方
 //
@@ -37,7 +37,7 @@
 //     一个无界面的装配根本不接它，这件工具也就问不出问题来。
 //   - **不造错误话术。**接缝报的错原样成为这次工具调用的失败，
 //     ErrorName / ErrorCode 由 [github.com/snight1983/ds-harness-go/tools]
-//     那道结果收敛抄进 Failure.Info，模型和上层都不必解析错误文本。
+//     那道结果收敛写进 Failure.Info，模型和上层都不必解析错误文本。
 //   - **不自己找那道接缝。**[Config.Questions] 是显式依赖，没有它就造不出这件工具——
 //     没有 cordis 那种从上下文上摸一个服务出来的路。
 package askuser

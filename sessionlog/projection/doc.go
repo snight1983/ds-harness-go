@@ -19,7 +19,7 @@
 // 绝不能只带一个增量。这条规则让每个单元的转移都便宜到可以无脑跑，
 // 也让每一个被服务出去的值自己就说明了自己。
 //
-// # 这里没有照抄的部分
+// # 这里没有照录的部分
 //
 //   - cordis 的 Service 与 `ctx.sessionProjections`。本仓库没有 cordis，
 //     [Registry] 就是一个普通对象，谁装配谁拿着。DSH 靠 `ctx.on('session/event')`

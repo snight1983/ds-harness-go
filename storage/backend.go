@@ -174,7 +174,7 @@ type Revision string
 
 // WriteIntent 是一次写的**前置条件**，封闭的两种。
 //
-// 新增: 形状照 [github.com/snight1983/ds-harness-go/fs.WriteIntent] 抄，不发明第二套——
+// 新增: 形状取自 [github.com/snight1983/ds-harness-go/fs.WriteIntent]，不发明第二套——
 // 同一个仓库里两处「条件写」长得不一样的话，装配方要记两遍。
 //
 // 传 nil 表示无条件覆盖，**它不是第三个成员**：没有前置条件这件事的表达方式是

@@ -55,7 +55,7 @@ flowchart TB
 
 `cmd` 这一档是唯一**允许**碰磁盘和连数据库的：`oscheck` 和 `dbcheck` 都明写放行 `cmd/` 与 `internal/devtools/`。理由是它们跑在本机上，是装配点和门禁工具，不是这个服务的业务代码——一个装配点从磁盘读一份配置、决定连哪个库、池子开多大，正是它的活儿。
 
-这张表上的门禁列不是照抄各自的文档写的，是**逐条把它弄红过**：往契约包 `spill` 里加一条引 `protocol/mcp` 的 import，`layercheck` 报 `spill/spill.go:49：spill（contract）引了 protocol/mcp（protocol）`；加一句 `os.ReadFile`，`oscheck` 报出行号；加一个 `database/sql` 和一句 `SELECT ... FROM`，`dbcheck` 报出两处。三次都退出码非零，改回去之后 `git diff` 为空。跑绿证明不了门禁在干活，能变红才证明。
+这张表上的门禁列不是照录各自的文档写的，是**逐条把它弄红过**：往契约包 `spill` 里加一条引 `protocol/mcp` 的 import，`layercheck` 报 `spill/spill.go:49：spill（contract）引了 protocol/mcp（protocol）`；加一句 `os.ReadFile`，`oscheck` 报出行号；加一个 `database/sql` 和一句 `SELECT ... FROM`，`dbcheck` 报出两处。三次都退出码非零，改回去之后 `git diff` 为空。跑绿证明不了门禁在干活，能变红才证明。
 
 `oscheck` 另有两项豁免，且明写「不许再加」：`adapter/datastore/internal/dbtest`（数据库测试夹具，起一个临时 SQLite 文件再删掉，因为要供别的包的测试 import 所以不能写成 `_test.go`）和 `feature/replay`（快照测试用的假模型，读回放脚本）。
 

@@ -127,7 +127,7 @@ type installer struct {
 	//
 	// 新增: DSH 那边是五张 WeakMap（版本表、基线准备、投影队尾、步骤开着没有、
 	// 攒着的触碰），键是 Session 或者 Agent 对象。Go 没有弱引用表，所以它们合成
-	// 一张按标识取的普通 map，清理走 [Agents.OnDisposed]。合成一张而不是照抄五张，
+	// 一张按标识取的普通 map，清理走 [Agents.OnDisposed]。合成一张而不是照录五张，
 	// 是因为它们的生命周期本来就完全一致，分开只会多出「有的删了有的没删」这种状态。
 	sessions map[sessionlog.SessionID]*sessionState
 	// touches 是一次工具调用攒下的那些触碰，键是执行 token。

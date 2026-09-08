@@ -297,7 +297,7 @@ const ContextSummaryMaxChars = 120
 // 源: packages/llm/llm/src/message.ts:116-125（boundContextSummary）
 //
 // 新增: DSH 按 summary.length 算，那是 UTF-16 码元数。这里按**字符**（rune）算。
-// 不是照抄字节数：一行中文陈述在 Go 里一个字三个字节，按字节收会在第四十个字
+// 不是照录字节数：一行中文陈述在 Go 里一个字三个字节，按字节收会在第四十个字
 // 上砍断，而这个上限守的是「一行折叠的对话行放得下」，那件事按字算才成立。
 func BoundContextSummary(summary string) string {
 	runes := []rune(summary)

@@ -5,6 +5,7 @@
 adapter/datastore	adapter
 adapter/datastore/internal/dbtest	adapter
 adapter/datastore/kvstore	adapter
+adapter/datastore/searchstore	adapter
 adapter/datastore/sessionstore	adapter
 adapter/domainjobs	adapter
 adapter/imagestore	adapter
@@ -15,9 +16,13 @@ adapter/textstore	adapter
 attachment	contract
 cmd/llmmockserver	cmd
 credentials	contract
+feature/agentteam	feature
+feature/agentteam/agentteamtool	feature
+feature/authorization	feature
 feature/checkpointpolicy	feature
 feature/compaction	feature
 feature/compaction/basic	feature
+feature/compaction/compactcommand	feature
 feature/compaction/toolresultpruner	feature
 feature/context/instructions	feature
 feature/context/sessionref	feature
@@ -67,6 +72,7 @@ feature/todo	feature
 feature/tokenmeter	feature
 feature/turnoutline	feature
 feature/webhook	feature
+feature/webhook/github	feature
 feature/workflow	feature
 feature/workflow/toolralph	feature
 feature/workspace	feature

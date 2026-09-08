@@ -1,5 +1,6 @@
-// 本文件的作用：这台服务器本身——它攥着什么、三个请求各自怎么办、以及收摊时按
-// 什么次序把自己建出来的东西拆掉。
+// 本文件的作用：这台服务器本身——它攥着什么、握手那三个请求各自怎么办、以及收摊时
+// 按什么次序把自己建出来的东西拆掉。会话控制面那十个方法在 sessions.go，由本文件
+// 分发过去。
 //
 // 源: packages/sdk/server/src/server.ts
 
@@ -63,6 +64,12 @@ type Server struct {
 	maxTokens       int
 	// sessions 是这台服务器自己建出来的那些 agent，按 SDK 那侧的会话标识。
 	sessions map[string]agent.Handle
+	// selections 是每条会话各自那份「下一步用哪个模型」，和 sessions 同生共死。
+	//
+	// 一条会话一份而不是整条线一份：换模型这件事在协议上带会话标识（见
+	// [sdkprotocol.SessionSelectModelParams]），所以两条会话可以各用各的模型。
+	// 没挂 [Config.Prompts] 时这张表是空的——那时换模型整条路都拒。
+	selections map[string]*agent.ModelSelectionRef
 	// unmounts 撤销 [MountAdapter] 那些兜底挂载，按挂上的次序排。
 	//
 	// 新增: DSH 是单独一个 `llmFiber`，因为它那条路只走得到一次。这里是一串：
@@ -467,21 +474,71 @@ func (s *Server) getOrCreateSession(ctx context.Context, sessionID string) (agen
 // 全局层读它们。要配名册的部署得先在这里接上一份（DSH agent-presets 的 README
 // "Composing a child agent" 那一节）。
 func (s *Server) createSession(ctx context.Context, sessionID string) (agent.Handle, error) {
-	s.mutex.Lock()
-	owner, options := s.owner, agent.Options{
-		Provider:        s.provider,
-		Model:           s.model,
-		ReasoningEffort: s.reasoningEffort,
-		MaxTokens:       s.maxTokens,
-	}
-	workspaceID := s.workspaceID
-	s.mutex.Unlock()
-
-	handle, err := s.config.Agents.Create(ctx, owner, agent.CreateOptions{
-		SessionID:    sessionlog.SessionID(sessionID),
-		WorkspaceID:  workspaceID,
-		AgentOptions: options,
+	return s.adopt(ctx, sessionID, func(
+		ctx context.Context, owner *scope.Scope, route route, setup agent.Setup,
+	) (agent.Handle, error) {
+		return s.config.Agents.Create(ctx, owner, agent.CreateOptions{
+			SessionID:    sessionlog.SessionID(sessionID),
+			WorkspaceID:  route.workspaceID,
+			AgentOptions: route.options,
+			Setup:        setup,
+		})
 	})
+}
+
+// route 是握手记下来的那份路由的一次抓拍。
+type route struct {
+	workspaceID sessionlog.WorkspaceID
+	options     agent.Options
+}
+
+// currentRoute 抓一份当下的路由。
+func (s *Server) currentRoute() (*scope.Scope, route) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	return s.owner, route{
+		workspaceID: s.workspaceID,
+		options: agent.Options{
+			Provider:        s.provider,
+			Model:           s.model,
+			ReasoningEffort: s.reasoningEffort,
+			MaxTokens:       s.maxTokens,
+		},
+	}
+}
+
+// adopt 是「按这条线的路由造一个 agent，再把它记进这台服务器的会话表」这条共用路。
+//
+// 源: packages/sdk/server/src/server.ts:218-235
+//
+// 新增: 三条路（开一条、接着跑一条、分出一条）造 agent 的那一步各不相同，之后
+// 那几步一模一样：装模型选择、记进表、以及「记进去的时候收摊已经开始了」那一支。
+// 把相同的部分收在这里，是因为最后那一支只要漏掉一处，就会留下一个谁都拆不掉的
+// agent——而它只在收摊和创建真的撞上时才现形。
+func (s *Server) adopt(
+	ctx context.Context,
+	sessionID string,
+	make func(context.Context, *scope.Scope, route, agent.Setup) (agent.Handle, error),
+) (agent.Handle, error) {
+	owner, current := s.currentRoute()
+
+	// 这份选择在 setup 里挂到 agent 自己的作用域上，所以它随那个 agent 一起散掉，
+	// 这里不必攥着摘它的那个函数。
+	var selection *agent.ModelSelectionRef
+	var setup agent.Setup
+	if s.config.Prompts != nil {
+		selection = agent.NewModelSelectionRef()
+		setup = func(ctx context.Context, agentScope *scope.Scope) (func() error, error) {
+			if _, err := agent.InstallModelSelection(
+				ctx, agentScope, s.config.Agents, s.config.Prompts, selection,
+			); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}
+	}
+
+	handle, err := make(ctx, owner, current, setup)
 	if err != nil {
 		return agent.Handle{}, fmt.Errorf("sdkserver: 建会话 %s 失败：%w", sessionID, err)
 	}
@@ -489,6 +546,9 @@ func (s *Server) createSession(ctx context.Context, sessionID string) (agent.Han
 	shuttingDown := s.shuttingDown
 	if !shuttingDown {
 		s.sessions[sessionID] = handle
+		if selection != nil {
+			s.selections[sessionID] = selection
+		}
 	}
 	s.mutex.Unlock()
 	if !shuttingDown {
@@ -538,6 +598,7 @@ func (s *Server) performShutdown(ctx context.Context) error {
 		handles = append(handles, handle)
 	}
 	clear(s.sessions)
+	clear(s.selections)
 	unmounts := s.unmounts
 	s.unmounts = nil
 	s.mutex.Unlock()
@@ -614,6 +675,10 @@ func (s *Server) HandleRequest(ctx context.Context, method string, params json.R
 		// 这条路的结果在协议上写死是空对象。
 		return struct{}{}, nil
 	default:
+		// 会话那一套十个方法在另一张表上，见 [Server.handleSessionRequest]。
+		if result, handled, err := s.handleSessionRequest(ctx, method, params); handled {
+			return result, err
+		}
 		return nil, fmt.Errorf("%w: %s", sdkprotocol.ErrMethodNotFound, method)
 	}
 }

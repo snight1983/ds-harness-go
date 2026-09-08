@@ -56,7 +56,7 @@ type DisposedObserver func(session *Session)
 //
 // 这里**不**替观察者复制一份。这是流式的热路径——一次响应每个 token 增量就是
 // 一条 assistant/chunk，而挂在这条广播上的观察者有七八个，逐个复制等于把每一份
-// 负载抄七八遍。留着它们共享一份，是拿一条写在文档里的约束换掉这份开销。
+// 负载复制七八遍。留着它们共享一份，是拿一条写在文档里的约束换掉这份开销。
 type EventObserver func(session *Session, event sessionlog.Event)
 
 // FlushObserver 是要等的耐久检查点。

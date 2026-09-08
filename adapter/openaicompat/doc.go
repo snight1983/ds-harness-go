@@ -21,7 +21,10 @@
 //     实现 [github.com/snight1983/ds-harness-go/llm.Adapter]；
 //   - 手工声明的路由（baseURL + apiKey + headers）——正是 docs/DESIGN.md 说的
 //     「本地模型走这条」；
-//   - 配置校验、模型目录解算、重试策略、重放状态、图片卸载这几层照旧逐行对着 DSH 走。
+//   - 配置校验、模型目录解算、重试策略、重放状态、图片卸载这几层照旧逐行对着 DSH 走；
+//   - 一张顶层字段的归属表（[ExtensionRegistry]），让宿主装配进来的贡献方各自认领
+//     一个提供方私有字段，不必为了加一个字段改本包。形状取自
+//     packages/llm/deepseek-llm-api-extensions，字段本身一个都不带。
 //
 // 不做的（连同它们那些配置字段一起）：
 //   - pi-ai 那份 893 行的内置提供方目录，以及基于目录的模型发现短路；
@@ -64,8 +67,11 @@
 //     目录的模型发现短路。
 //   - **不做 OAuth 登录流程。**凭据由
 //     [github.com/snight1983/ds-harness-go/credentials] 解，本包只按引用去读。
-//   - **不让宿主往请求顶层追加提供方私有字段。**上游那张扩展注册表在这里没有对应物，
-//     要加字段只能改本包。
+//   - **不认扩展字段的「接受」回执。**[ExtensionRegistry] 只备字段、不回报这次请求
+//     到底发没发出去。上游那半个事务（`accept()`）唯一的用户是
+//     `session/session-log-deepseek`，那个包判了不要；而一个在请求已经离开之后才失败
+//     的提交回调，失败了也没地方去。要「发成了才落账」的贡献方应当自己盯
+//     [github.com/snight1983/ds-harness-go/sessionlog] 上那条已提交的记录。
 //   - **不管 Agent 回合与工具循环。**那在
 //     [github.com/snight1983/ds-harness-go/harness/agentloop]；本包只把一次请求发出去、
 //     把流按 [github.com/snight1983/ds-harness-go/llm] 的词汇交回来。

@@ -311,7 +311,7 @@ func splitLines(log []byte) []string {
 // sortedKeys 按字典序交出一张表的键。
 //
 // 新增: DSH 靠 JS 对象的插入顺序（也就是 JSON 里键出现的顺序）决定编号先后。
-// Go 的 map 迭代顺序是随机的，照抄会让同一份日志压两次得到两套编号——那正好
+// Go 的 map 迭代顺序是随机的，照录会让同一份日志压两次得到两套编号——那正好
 // 毁掉本包存在的理由。所以改成字典序：编号和 DSH 那边对不上，但它是确定的。
 func sortedKeys(record map[string]any) []string {
 	keys := make([]string, 0, len(record))

@@ -162,7 +162,7 @@ func newSession(id sessionlog.SessionID, options Options, restore bool) (*Sessio
 
 	// 恢复路径先验头：这条路上头是和事件一起从存储里读出来的，头不对就说明
 	// 这份归档整个不该打开，没必要再去验后面几千条事件。新建路径的头是调用方
-	// 现场给的，DSH 把它留到 seed 之后再验，这里照抄那个次序。
+	// 现场给的，DSH 把它留到 seed 之后再验，这里照录那个次序。
 	if restore {
 		if options.Header == nil {
 			return nil, fmt.Errorf("%w: 恢复一个会话必须给出它存下来的头", ErrInvalidHeader)
@@ -630,7 +630,7 @@ func (s *Session) discardDerivedLocked() {
 // 新增: DSH 那边这个方法的存在理由是「让拿着 session 的人不必再 import 一次
 // surface.ts」。Go 里同一个理由成立得弱一些，但删掉它会让一个从
 // [Store] 拿到会话的调用方多一次 import，而这个方法自己没有任何状态——
-// 保留它是照抄，不是新增。
+// 保留它是照录，不是新增。
 func (s *Session) DeriveEventMessage(event sessionlog.Event) (llm.Message, bool, error) {
 	return sessionlog.DeriveEventMessage(event)
 }

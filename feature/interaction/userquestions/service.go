@@ -47,7 +47,7 @@ const (
 //
 // 新增: DSH 那边它继承 HarnessError，靠 instanceof 认。Go 里靠 errors.As 认这个
 // 具体类型；ErrorName 和 ErrorCode 两个方法让 [github.com/snight1983/ds-harness-go/tools] 那道
-// 结果收敛能把它的身份原样抄进 Failure.Info。
+// 结果收敛能把它的身份原样写进 Failure.Info。
 type Error struct {
 	// Code 是机器可读代号，取上面那几个常量之一。
 	Code string

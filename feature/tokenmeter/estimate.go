@@ -64,6 +64,29 @@ func textChars(text string) int {
 	return utf8.RuneCountInString(text)
 }
 
+// estimateStructuralBlock 给「不走那几支具名定价」的块估价：把它排成 JSON，
+// 按长度加上一份结构开销。
+//
+// 源: packages/llm/token-meter/src/estimate.ts:21-30（estimateStructuralBlock）
+//
+// 两类块落在这里。一类是 [llm.UnknownBlock]，也就是 DSH 说的那种合并扩展出来的块。
+// 另一类是 [llm.ImageBlock]：一张图在请求里值多少是**路由说了算**的，这把固定尺子
+// 量不出来，所以这里给的是一个和路由无关的保守结构价，真正的价由
+// [priceSurface] 拿着那条路由的计价去换。
+//
+// 排出来的字节和 JSON.stringify 不会逐字节相同（键的顺序、空白），但这是一套
+// 固定密度的启发式，差几个字符不改变它的性质。
+//
+// 新增: DSH 这个函数不会抛，理由同 [EstimateContent]：[llm.UnknownBlock] 的
+// MarshalJSON 在原始字节不是合法 JSON 时会失败。
+func estimateStructuralBlock(block llm.ContentBlock) (int, error) {
+	raw, err := json.Marshal(block)
+	if err != nil {
+		return 0, fmt.Errorf("token 估价：这一块排不成 JSON：%w", err)
+	}
+	return blockOverhead + ceilTokens(textChars(string(raw))), nil
+}
+
 // EstimateContent 给一串内容块估价。
 //
 // 源: packages/llm/token-meter/src/estimate.ts:32-61（estimateContent）
@@ -93,20 +116,11 @@ func EstimateContent(content llm.Content) (int, error) {
 			}
 			tokens += nested + blockOverhead
 		default:
-			// 源: packages/llm/token-meter/src/estimate.ts:44-47
-			//
-			// DSH 那边这一支的理由是 ContentBlockMap 可以被插件合并扩展，认不得的块
-			// 按它排成 JSON 之后的结构长度保守计价。Go 这边落进来的是
-			// [llm.ImageBlock] 和 [llm.UnknownBlock]：前者本包不认识（DSH 的联合里
-			// 也没有它的分支），后者就是 DSH 说的那种扩展块。
-			//
-			// 排出来的字节和 JSON.stringify 不会逐字节相同（键的顺序、空白），
-			// 但这是一套固定密度的启发式，差几个字符不改变它的性质。
-			raw, err := json.Marshal(block)
+			structural, err := estimateStructuralBlock(block)
 			if err != nil {
-				return 0, fmt.Errorf("token 估价：这一块排不成 JSON：%w", err)
+				return 0, err
 			}
-			tokens += blockOverhead + ceilTokens(textChars(string(raw)))
+			tokens += structural
 		}
 	}
 	return tokens, nil

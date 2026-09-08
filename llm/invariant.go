@@ -39,9 +39,9 @@ const PackageName = "@deepseek-ai/dsh-llm"
 //
 // 新增: DSH 查的是「listProviders() 列出来的每一条，providerRetryPolicy() 都取得到」
 // （invariant.ts:94-102），它防的是「服务已经从容器里摘掉了，但通知还在发」。
-// Go 这边照抄不了也不该照抄：[Runtime.ListProviders] 和 [Runtime.ProviderRetryPolicy]
+// Go 这边照录不了也不该照录：[Runtime.ListProviders] 和 [Runtime.ProviderRetryPolicy]
 // 各取一次锁，两次之间另一个 goroutine 合法地释放掉一条路由是**正常并发**，不是违例，
-// 照抄会得到一条随机误报的检查。
+// 照录会得到一条随机误报的检查。
 //
 // 换上的判据是 Go 侧才有的那条：路由次序表和路由表必须一一对应。它是同一件事的
 // Go 版本——DSH 的 Map 自己保插入顺序，Go 这边顺序是我另开的一个数组

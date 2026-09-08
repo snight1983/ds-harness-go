@@ -24,7 +24,7 @@ const CustomPreset = "custom"
 //
 // 源: packages/interaction/permission-presets/src/index.ts:45-55
 //
-// 旋钮事件跟在同一次切换里，真正控制执行的是它们；这一条**不进模型抄本**，
+// 旋钮事件跟在同一次切换里，真正控制执行的是它们；这一条**不进模型誊本**，
 // 它的用处是在两个预设捆着同一份旋钮值时保住用户选的那个名字。
 const EventPreset sessionlog.EventType = "permission/preset"
 

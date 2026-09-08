@@ -34,7 +34,7 @@ func TestProviderAnnouncesEveryStartTimeCapability(t *testing.T) {
 	t.Parallel()
 
 	provider := New("", providertest.New(t).Services())
-	want := subagent.Capabilities{OutputSchema: true, DepthLimit: true, ToolFilter: true, Persona: true}
+	want := subagent.Capabilities{AgentOptions: true, OutputSchema: true, DepthLimit: true, ToolFilter: true, Persona: true}
 	if got := provider.Capabilities(); got != want {
 		t.Fatalf("能力该是 %+v，实际 %+v", want, got)
 	}

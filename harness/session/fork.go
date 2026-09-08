@@ -168,7 +168,7 @@ func forkSeed(session *Session, requested *int) ([]sessionlog.Event, error) {
 
 	if boundary < 0 {
 		// 新增: DSH 这里验的是 Number.isSafeInteger 加非负。Go 的 int 逐位精确，
-		// 只剩下非负这一半；诊断照抄那句话，因为它说的仍然是同一件事。
+		// 只剩下非负这一半；诊断照录那句话，因为它说的仍然是同一件事。
 		return nil, forkError(
 			ForkInvalidBoundary,
 			"fork boundary for session %q must be a non-negative safe integer, got %d",

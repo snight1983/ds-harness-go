@@ -20,7 +20,7 @@ import (
 	"github.com/snight1983/ds-harness-go/attachment"
 )
 
-// testLimits 是所有用例共用的限额，取值照抄 DSH 的测试夹具。
+// testLimits 是所有用例共用的限额，取值照录 DSH 的测试夹具。
 //
 // 源: packages/attachment/attachment/tests/index.spec.ts:16-23
 //

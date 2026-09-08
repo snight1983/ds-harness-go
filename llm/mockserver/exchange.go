@@ -88,7 +88,7 @@ func (e *exchange) writeDone() {
 // 源: packages/test-support/llm-mock-server/src/index.ts:374-388
 //
 // 新增: 发现客户端走掉时**就地**把结局记成 [OutcomeClientClosed]，DSH 那边这件事
-// 是分开的——一部分由调用方显式记，一部分由 response 的 close 钩子记。Go 照抄会
+// 是分开的——一部分由调用方显式记，一部分由 response 的 close 钩子记。Go 照录会
 // 留下一个真实的竞争：守望者协程 select 的两个分支（客户端断开、处理器干完）在
 // 客户端确实断开时会同时就绪，Go 的 select 此时是随机挑一个，于是同一次跑有时
 // 记成 client_closed 有时什么都不记。就地记账把这件事变成确定的，而 finishRecord

@@ -52,7 +52,7 @@ func TestInstall少了必填的那两样就拒(t *testing.T) {
 	if _, err := Install(t.Context(), scope.NewRoot(), nil, &stubSessions{}); err == nil {
 		t.Fatal("没有计量器也装上去了")
 	}
-	if _, err := Install(t.Context(), scope.NewRoot(), New(), nil); err == nil {
+	if _, err := Install(t.Context(), scope.NewRoot(), New(nil), nil); err == nil {
 		t.Fatal("没有会话退场广播也装上去了")
 	}
 }
@@ -61,7 +61,7 @@ func TestInstall把摘除函数原样交回去(t *testing.T) {
 	t.Parallel()
 
 	sessions := &stubSessions{}
-	undo, err := Install(t.Context(), scope.NewRoot(), New(), sessions)
+	undo, err := Install(t.Context(), scope.NewRoot(), New(nil), sessions)
 	if err != nil {
 		t.Fatalf("装不上：%v", err)
 	}
@@ -80,7 +80,7 @@ func TestInstall会话退场之后那份重放状态被丢掉(t *testing.T) {
 	// 无论重不重折都一样——唯一能从包外看见差别的地方，是把一份**折得动**的日志
 	// 换成一份同样长、却折不动的日志：缓着状态时那一段根本不会被读（
 	// [TokenMeter.sync] 的循环一步都不走），丢掉之后才会被重折、才会报错。
-	meter := New()
+	meter := New(nil)
 	sessions := &stubSessions{}
 	if _, err := Install(t.Context(), scope.NewRoot(), meter, sessions); err != nil {
 		t.Fatalf("装不上：%v", err)
@@ -110,7 +110,7 @@ func TestInstall会话退场之后那份重放状态被丢掉(t *testing.T) {
 func TestInstall别的会话退场不动这一份(t *testing.T) {
 	t.Parallel()
 
-	meter := New()
+	meter := New(nil)
 	sessions := &stubSessions{}
 	if _, err := Install(t.Context(), scope.NewRoot(), meter, sessions); err != nil {
 		t.Fatalf("装不上：%v", err)

@@ -62,7 +62,7 @@ func anchoredSession(t *testing.T, usage *llm.TokenUsage) *fakeSession {
 func TestMeasureOfAnEmptyLogHasNoBaseline(t *testing.T) {
 	t.Parallel()
 
-	got := measure(t, New(), newSession(), nil)
+	got := measure(t, New(nil), newSession(), nil)
 
 	if got.Baseline.Kind != BaselineNone {
 		t.Fatalf("什么都没发生过时该没有基准可言：%q", got.Baseline.Kind)
@@ -81,7 +81,7 @@ func TestMeasureWithoutAnAnchorEstimatesTheWholeThing(t *testing.T) {
 
 	header := simpleHeader("you are helpful")
 	view := newSession(headerEvent(t, header), userEvent(t, "hello world"))
-	got := measure(t, New(), view, nil)
+	got := measure(t, New(nil), view, nil)
 
 	headerTokens, err := EstimateHeader(header)
 	if err != nil {
@@ -110,7 +110,7 @@ func TestMeasureAnchorsOnProviderUsageAndPricesOnlyTheDelta(t *testing.T) {
 
 	usage := llm.TokenUsage{InputTokens: 100, OutputTokens: 20, CacheReadTokens: 4, CacheWriteTokens: 1}
 	view := anchoredSession(t, &usage)
-	meter := New()
+	meter := New(nil)
 
 	anchored := measure(t, meter, view, nil)
 	if anchored.Baseline.Kind != BaselineUsage {
@@ -152,7 +152,7 @@ func TestMeasureFallsBackToEstimateWhenProviderUsageIsSmallerThanTheHeuristic(t 
 
 	usage := llm.TokenUsage{InputTokens: 1, OutputTokens: 1}
 	view := anchoredSession(t, &usage)
-	got := measure(t, New(), view, nil)
+	got := measure(t, New(nil), view, nil)
 
 	if got.Baseline.Kind != BaselineEstimated {
 		t.Fatalf("提供方那个数太小的时候该退回估价：%q", got.Baseline.Kind)
@@ -168,7 +168,7 @@ func TestMeasureStillAnchorsWhenTheProviderReportedNoUsage(t *testing.T) {
 	t.Parallel()
 
 	view := anchoredSession(t, nil)
-	meter := New()
+	meter := New(nil)
 	anchored := measure(t, meter, view, nil)
 
 	if anchored.Baseline.Kind != BaselineEstimated {
@@ -192,7 +192,7 @@ func TestMeasureDropsTheAnchorWhenTheHeaderChanges(t *testing.T) {
 
 	usage := llm.TokenUsage{InputTokens: 100, OutputTokens: 20}
 	view := anchoredSession(t, &usage)
-	meter := New()
+	meter := New(nil)
 
 	if got := measure(t, meter, view, nil); got.Baseline.Kind != BaselineUsage {
 		t.Fatalf("先该锚在用量上：%q", got.Baseline.Kind)
@@ -239,7 +239,7 @@ func TestMeasureGoesDownAfterCompactionAndClampsAtZero(t *testing.T) {
 
 	usage := llm.TokenUsage{InputTokens: 100, OutputTokens: 20}
 	view := anchoredSession(t, &usage)
-	meter := New()
+	meter := New(nil)
 
 	before := measure(t, meter, view, nil)
 	view.append(replacementEvent(t, 1, 6, "s"))
@@ -270,7 +270,7 @@ func TestMeasureNodesMatchTheCurrentSurface(t *testing.T) {
 
 	view := anchoredSession(t, nil)
 	view.append(userEvent(t, "again"))
-	got := measure(t, New(), view, nil)
+	got := measure(t, New(nil), view, nil)
 
 	var wantSeqs []int
 	total := 0
@@ -298,7 +298,7 @@ func TestMeasureReturnsACopyOfTheNodes(t *testing.T) {
 	t.Parallel()
 
 	view := anchoredSession(t, nil)
-	meter := New()
+	meter := New(nil)
 
 	first := measure(t, meter, view, nil)
 	if len(first.Nodes) == 0 {
@@ -320,7 +320,7 @@ func TestMeasureIsIncrementalAcrossCalls(t *testing.T) {
 	t.Parallel()
 
 	view := anchoredSession(t, nil)
-	meter := New()
+	meter := New(nil)
 
 	first := measure(t, meter, view, nil)
 	if first.LogRevision != len(view.events) {
@@ -345,7 +345,7 @@ func TestForgetMakesTheNextMeasureReplayFromScratch(t *testing.T) {
 
 	usage := llm.TokenUsage{InputTokens: 100, OutputTokens: 20}
 	view := anchoredSession(t, &usage)
-	meter := New()
+	meter := New(nil)
 
 	before := measure(t, meter, view, nil)
 	meter.Forget(view.ID())
@@ -362,7 +362,7 @@ func TestForgetMakesTheNextMeasureReplayFromScratch(t *testing.T) {
 func TestMeasureReplaysFromScratchWhenTheLogGotShorter(t *testing.T) {
 	t.Parallel()
 
-	meter := New()
+	meter := New(nil)
 	long := anchoredSession(t, nil)
 	if got := measure(t, meter, long, nil); got.LogRevision != len(long.events) {
 		t.Fatalf("先量一份长的：%+v", got)
@@ -383,7 +383,7 @@ func TestMeasureReplaysFromScratchWhenTheLogGotShorter(t *testing.T) {
 func TestMeasureReplaysFromScratchWhenTheLogStartMoved(t *testing.T) {
 	t.Parallel()
 
-	meter := New()
+	meter := New(nil)
 	before := newSession(userEvent(t, "一"), userEvent(t, "二"), userEvent(t, "三"))
 	if got := measure(t, meter, before, nil); got.LogRevision != 3 {
 		t.Fatalf("先量一份从 0 起的：%+v", got)
@@ -415,7 +415,7 @@ func TestProviderAssistantResolvesItsSourcesAgainstTheLogStart(t *testing.T) {
 		&llm.TokenUsage{InputTokens: 1}, []int{base + 2, base + 3, base + 4}))
 	view := trimmedSession(base, events...)
 
-	got := measure(t, New(), view, nil)
+	got := measure(t, New(nil), view, nil)
 
 	streamed := mustEstimateMessage(t, textMessage("a", llm.RoleAssistant, llm.ModelSource{}, "a very long streamed answer indeed"))
 	headerTokens, err := EstimateHeader(simpleHeader("you are helpful"))
@@ -443,7 +443,7 @@ func TestProviderAssistantIsPricedFromTheSourceChunks(t *testing.T) {
 	events = append(events, assistantEventFrom(t, 0, 0, "cut", &llm.TokenUsage{InputTokens: 1}, []int{2, 3, 4}))
 	view := newSession(events...)
 
-	got := measure(t, New(), view, nil)
+	got := measure(t, New(nil), view, nil)
 
 	streamed := mustEstimateMessage(t, textMessage("a", llm.RoleAssistant, llm.ModelSource{}, "a very long streamed answer indeed"))
 	headerTokens, err := EstimateHeader(simpleHeader("you are helpful"))
@@ -468,7 +468,7 @@ func TestProviderAssistantFallsBackToTheDurableMessageWithoutSources(t *testing.
 		stepStartEvent(t, 0, 0),
 		assistantEvent(t, 0, 0, "repaired", &llm.TokenUsage{InputTokens: 1}),
 	)
-	got := measure(t, New(), view, nil)
+	got := measure(t, New(nil), view, nil)
 
 	durable := mustEstimateMessage(t, textMessage("a", llm.RoleAssistant, llm.ModelSource{}, "repaired"))
 	headerTokens, err := EstimateHeader(simpleHeader("you are helpful"))
@@ -490,7 +490,7 @@ func TestProviderAssistantWithAnEmptySourceListPricesZero(t *testing.T) {
 		stepStartEvent(t, 0, 0),
 		assistantEventFrom(t, 0, 0, "", &llm.TokenUsage{InputTokens: 1}, []int{}),
 	)
-	got := measure(t, New(), view, nil)
+	got := measure(t, New(nil), view, nil)
 
 	headerTokens, err := EstimateHeader(simpleHeader("you are helpful"))
 	if err != nil {
@@ -559,7 +559,7 @@ func TestReplayRejectsMalformedLogs(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := New().Measure(view, nil); err == nil {
+			if _, err := New(nil).Measure(view, nil); err == nil {
 				t.Fatal("这份日志该让重放失败")
 			}
 		})
@@ -575,7 +575,7 @@ func TestReplayLeavesTheBadEventUnconsumed(t *testing.T) {
 		userEvent(t, "hello"),
 		stepEndEvent(t, 0, 0), // 没开过步骤，这条会让重放失败。
 	)
-	meter := New()
+	meter := New(nil)
 
 	if _, err := meter.Measure(view, nil); err == nil {
 		t.Fatal("这份日志该让重放失败")
@@ -590,7 +590,7 @@ func TestEstimateMessageMethodMatchesThePackageFunction(t *testing.T) {
 	t.Parallel()
 
 	message := textMessage("m", llm.RoleUser, llm.UserSource{}, "hello world")
-	fromMethod, err := New().EstimateMessage(message)
+	fromMethod, err := New(nil).EstimateMessage(message)
 	if err != nil {
 		t.Fatalf("估价不该失败：%v", err)
 	}

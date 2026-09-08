@@ -168,7 +168,7 @@ type Registry struct {
 	// cacheOrder 是缓存键的插入顺序，超上限时从最老的那头淘汰。
 	//
 	// 新增: DSH 靠 JS Map 的插入顺序取 `keys().next()`，那是 FIFO 不是 LRU。
-	// Go 的 map 无序，所以顺序自己存一份，淘汰策略照抄 FIFO。
+	// Go 的 map 无序，所以顺序自己存一份，淘汰策略照录 FIFO。
 	cacheOrder []string
 	// revision 每发生一次注册变动就加一，缓存键带着它，于是旧键再也命不中。
 	revision int

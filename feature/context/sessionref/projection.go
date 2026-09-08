@@ -133,7 +133,7 @@ type RetainedReference struct {
 // 源: packages/context/session-reference/src/projection.ts:35-60
 //
 // 用户消息只留两种：压缩检查点，和用户**自己**说的话。别的用户角色消息都是各层
-// 注入的上下文（工作区说明、时间、别的会话的引用），把它们抄进另一个会话的提示词
+// 注入的上下文（工作区说明、时间、别的会话的引用），把它们写进另一个会话的提示词
 // 既没有信息量，又会让注入内容跨会话叠罗汉。
 //
 // 新增: DSH 那边表面事件是一个封闭联合，穷尽 switch 之后靠 assertNever 收尾，
@@ -302,7 +302,7 @@ func RetainReferencedSession(snapshot sessionquery.SurfaceSnapshot, label string
 //
 // 源: packages/context/session-reference/src/projection.ts:140-142
 //
-// 推理块被排除在外不是省字节：那是模型的草稿，跨会话抄过去只会让另一个模型
+// 推理块被排除在外不是省字节：那是模型的草稿，跨会话写过去只会让另一个模型
 // 把别人的中间猜测当成结论。
 func contentText(content llm.Content) string {
 	var parts []string

@@ -92,6 +92,7 @@ func (p *Provider) Name() string { return p.name }
 // 源: packages/subagent/subagent-spawn-in-process/src/index.ts:42
 func (p *Provider) Capabilities() subagent.Capabilities {
 	return subagent.Capabilities{
+		AgentOptions: true,
 		OutputSchema: true,
 		DepthLimit:   true,
 		ToolFilter:   true,

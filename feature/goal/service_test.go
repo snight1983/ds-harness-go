@@ -14,7 +14,7 @@
 //   - **CAS 被绕过去**。改动一律要交出调用方以为的那个修订号；少了这道比对，两个
 //     各拿着一份旧状态的持有方会互相抹掉对方的写入，而日志上看不出任何异常。
 //   - **一次时钟回拨写下一条自己都读不回来的改动**。严格回放要求 updatedAt 不往回
-//     走，照抄墙上时钟会当场破掉本包自己的不变量。
+//     走，照录墙上时钟会当场破掉本包自己的不变量。
 //   - **交出去的视图和缓存共享内存**。[Snapshot.BlockedReason] 是导出的指针，调用方
 //     穿过它写一个字就改掉了这个进程里的目标状态，而日志里一点痕迹都没有。
 //   - **一个观察者炸掉把已经落盘的改动带下水**。通告发在改动之后，观察者说什么都
@@ -611,7 +611,7 @@ func TestClearLeavesATombstoneRef(t *testing.T) {
 // ---- 时钟 ----
 
 func TestMutationTimeNeverWalksBackwards(t *testing.T) {
-	// 严格回放要求 updatedAt 不往回走。一次时钟回拨如果直接照抄，写下的那条改动
+	// 严格回放要求 updatedAt 不往回走。一次时钟回拨如果直接照录，写下的那条改动
 	// 会当场破掉本包自己的不变量——下一次装载就再也折不出来了。
 	service, owner, _, clock := newSingleAgentService(t)
 	created := mustCreate(t, service, owner, "写完这一段")

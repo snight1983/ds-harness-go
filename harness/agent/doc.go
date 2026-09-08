@@ -18,7 +18,7 @@
 //   - [ModelSelectionRef] 与 [InstallModelSelection]：把「这个 agent 下一步用哪个
 //     模型」这一份可变的选择，同时接到提示词装配和请求路由上。
 //
-// 这条切分是 DSH 自己的，理由也照抄：消费方（ACP 桥、子 agent、作业）编程时
+// 这条切分是 DSH 自己的，理由也照录：消费方（ACP 桥、子 agent、作业）编程时
 // 只对着 [Registry] 和 [Agent]，不必依赖具体那个循环包。
 //
 // # 事件在这里是显式登记的观察者
@@ -69,7 +69,7 @@
 // 一个过期的 ctx 只是不再被谁传下去而已。[WithoutInitiator] 还在——它表达的是
 // 「这段活儿故意不认爹」，那个意图和实现手段无关。
 //
-// # 这里没有照抄的部分
+// # 这里没有照录的部分
 //
 // 新增: typert 的 lookups/contexts 登记（index.ts:281-296）不移。typert 是 DSH
 // 自己造的一套运行期类型系统，用来把线上的 agentId 解回宿主对象；Go 里

@@ -404,7 +404,7 @@ type OverrideDoc struct {
 //
 // 新增: DSH 拿一个 REPLAY_CHUNK_TYPES 集合逐个比对字符串。Go 这边
 // [github.com/snight1983/ds-harness-go/llm.UnmarshalStreamChunk] 本来就对不认识的标签交回
-// [github.com/snight1983/ds-harness-go/llm.ErrUnknownChunkType]，那张手抄的集合因此不必存在——而且顺带
+// [github.com/snight1983/ds-harness-go/llm.ErrUnknownChunkType]，那张手写的集合因此不必存在——而且顺带
 // 把每一块的**字段**也验了，DSH 那边只验了标签。
 func readChunks(raw json.RawMessage, file, location string) ([]llm.StreamChunk, error) {
 	var items []json.RawMessage

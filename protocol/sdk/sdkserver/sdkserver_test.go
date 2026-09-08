@@ -1,5 +1,6 @@
-// 本文件的作用：把这台服务器的三个请求、四条通知、以及收摊那条次序敏感的路，
-// 各自用一台真的运行时压一遍。
+// 本文件的作用：把这台服务器握手那三个请求、四条通知、以及收摊那条次序敏感的路，
+// 各自用一台真的运行时压一遍。会话控制面那十个方法在 sessions_test.go，两边共用
+// 本文件里的这套装配夹具。
 //
 // # 这些测试防的是什么错
 //
@@ -155,6 +156,10 @@ type stubLLM struct {
 	entries []llm.ProviderInfo
 	// resolveErr 非 nil 时每次路由解算都失败。
 	resolveErr error
+	// resolve 非 nil 时由它决定解算的结果。真适配器交回来的从来不是入参原样——
+	// 它会把自己那份默认落实进去，`session/select-model` 那条路要的正是解算过的
+	// 那一份。
+	resolve func(llm.CallConfig) (llm.CallConfig, error)
 
 	mutex sync.Mutex
 	// resolved 按次序记下每一次解算收到的那份配置。
@@ -169,6 +174,9 @@ func (s *stubLLM) ResolveCallConfig(_ context.Context, config llm.CallConfig) (l
 	s.mutex.Unlock()
 	if s.resolveErr != nil {
 		return llm.CallConfig{}, s.resolveErr
+	}
+	if s.resolve != nil {
+		return s.resolve(config)
 	}
 	return config, nil
 }
@@ -257,25 +265,66 @@ type stubAgent struct {
 	scope   *scope.Scope
 	live    *coresession.Session
 	options agent.Options
+	// inbox 是那份真的收件箱投影，改队那几条用例靠它读回改完之后的队。
+	inbox *agent.Inbox
 
-	mutex     sync.Mutex
-	followups []llm.Message
+	mutex        sync.Mutex
+	followups    []llm.Message
+	cancels      []cancelNote
+	inboxFailure error
 }
 
-func (a *stubAgent) ID() sessionlog.SessionID                                  { return a.id }
-func (a *stubAgent) Options() agent.Options                                    { return a.options }
-func (a *stubAgent) Session() *coresession.Session                             { return a.live }
-func (a *stubAgent) Inbox() *agent.Inbox                                       { return nil }
-func (a *stubAgent) Scope() *scope.Scope                                       { return a.scope }
-func (a *stubAgent) Status() agent.Status                                      { return agent.StatusIdle }
-func (a *stubAgent) WhenIdle(context.Context) error                            { return nil }
-func (a *stubAgent) Cancel(sessionlog.TurnEndCancelCause, agent.CancelOptions) {}
-func (a *stubAgent) Send(llm.Message, agent.InboxTarget, bool)                 {}
-func (a *stubAgent) Steer(llm.Message)                                         {}
-func (a *stubAgent) Inject(llm.Message)                                        {}
-func (a *stubAgent) Prepend(llm.Message, agent.InboxTarget)                    {}
+// cancelNote 是记下来的一次叫停。
+type cancelNote struct {
+	cause   sessionlog.TurnEndCancelCause
+	options agent.CancelOptions
+}
+
+func (a *stubAgent) ID() sessionlog.SessionID                  { return a.id }
+func (a *stubAgent) Options() agent.Options                    { return a.options }
+func (a *stubAgent) Session() *coresession.Session             { return a.live }
+func (a *stubAgent) Inbox() *agent.Inbox                       { return a.inbox }
+func (a *stubAgent) Scope() *scope.Scope                       { return a.scope }
+func (a *stubAgent) Status() agent.Status                      { return agent.StatusIdle }
+func (a *stubAgent) WhenIdle(context.Context) error            { return nil }
+func (a *stubAgent) Send(llm.Message, agent.InboxTarget, bool) {}
+func (a *stubAgent) Steer(llm.Message)                         {}
+func (a *stubAgent) Inject(llm.Message)                        {}
 func (a *stubAgent) RunMaintenance(ctx context.Context, task func(context.Context) error) error {
 	return task(ctx)
+}
+
+func (a *stubAgent) Cancel(cause sessionlog.TurnEndCancelCause, options agent.CancelOptions) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	a.cancels = append(a.cancels, cancelNote{cause: cause, options: options})
+}
+
+// cancelled 交出到此为止收到的每一次叫停。
+func (a *stubAgent) cancelled() []cancelNote {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	return append([]cancelNote(nil), a.cancels...)
+}
+
+func (a *stubAgent) Prepend(message llm.Message, target agent.InboxTarget) {
+	if a.inbox == nil {
+		return
+	}
+	if err := a.inbox.Prepend(target, message); err != nil {
+		a.recordInboxFailure(err)
+	}
+}
+
+// recordInboxFailure 记下改队时那条本不该出现的失败。
+//
+// 那几条改队方法在 [agent.Agent] 上不交回错误，所以这里攒着，由用例末尾一次问清。
+func (a *stubAgent) recordInboxFailure(err error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	if a.inboxFailure == nil {
+		a.inboxFailure = err
+	}
 }
 
 func (a *stubAgent) Followup(message llm.Message) {
@@ -299,6 +348,7 @@ type scriptedFactory struct {
 
 	mutex   sync.Mutex
 	creates []agent.CreateOptions
+	resumes []agent.ResumeOptions
 	fail    error
 	// gate 非 nil 时，每一次创建都先等它开——收摊那几条竞态用例靠它把创建卡在半路。
 	gate chan struct{}
@@ -322,6 +372,49 @@ func (f *scriptedFactory) CreateAgent(
 ) (agent.Handle, error) {
 	f.mutex.Lock()
 	f.creates = append(f.creates, options)
+	f.mutex.Unlock()
+	return f.spawn(ctx, owner, options.SessionID, coresession.CreateOptions{
+		WorkspaceID:   options.WorkspaceID,
+		ParentSession: options.ParentSession,
+		SeedLength:    options.SeedLength,
+	}, options.AgentOptions, options.Setup)
+}
+
+// Resume 走的是和 CreateAgent 完全同一条铸造路。
+//
+// 这台装配没有持久化后端，所以「把日志读回来」那一步在这里表达成「建一个同名的空
+// 会话」：`session/resume` 那条路上本方法之后的每一步（记进表、装模型选择、撞名）
+// 都不看日志里有什么，而日志本身怎么读回来是
+// [github.com/snight1983/ds-harness-go/harness/agent.Registry.Resume] 那边的事。
+func (f *scriptedFactory) Resume(
+	ctx context.Context,
+	owner *scope.Scope,
+	options agent.ResumeOptions,
+) (agent.Handle, error) {
+	f.mutex.Lock()
+	f.resumes = append(f.resumes, options)
+	f.mutex.Unlock()
+	return f.spawn(ctx, owner, options.ResumeSessionID,
+		coresession.CreateOptions{}, options.AgentOptions, options.Setup)
+}
+
+// resumed 交出到此为止每一次续跑收到的选项。
+func (f *scriptedFactory) resumed() []agent.ResumeOptions {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	return append([]agent.ResumeOptions(nil), f.resumes...)
+}
+
+// spawn 把一个 agent 连它的会话、收件箱、setup 一起铸出来。
+func (f *scriptedFactory) spawn(
+	ctx context.Context,
+	owner *scope.Scope,
+	sessionID sessionlog.SessionID,
+	sessionOptions coresession.CreateOptions,
+	agentOptions agent.Options,
+	setup agent.Setup,
+) (agent.Handle, error) {
+	f.mutex.Lock()
 	failure, gate, enter, disposeFail := f.fail, f.gate, f.enter, f.disposeFail
 	f.mutex.Unlock()
 
@@ -335,20 +428,39 @@ func (f *scriptedFactory) CreateAgent(
 		return agent.Handle{}, failure
 	}
 
-	agentScope, err := scope.New(scope.NewKey(string(options.SessionID)), scope.Options{Parent: owner.Key()})
+	agentScope, err := scope.New(scope.NewKey(string(sessionID)), scope.Options{Parent: owner.Key()})
 	if err != nil {
 		return agent.Handle{}, err
 	}
-	live, err := f.sessions.Create(ctx, agentScope, options.SessionID, coresession.CreateOptions{
-		WorkspaceID:   options.WorkspaceID,
-		ParentSession: options.ParentSession,
-		SeedLength:    options.SeedLength,
-	})
+	live, err := f.sessions.Create(ctx, agentScope, sessionID, sessionOptions)
 	if err != nil {
 		_ = agentScope.Dispose(context.Background())
 		return agent.Handle{}, err
 	}
-	child := &stubAgent{id: options.SessionID, scope: agentScope, live: live, options: options.AgentOptions}
+	inbox, err := agent.NewInbox(live, agent.InboxNotifications{})
+	if err != nil {
+		_ = agentScope.Dispose(context.Background())
+		return agent.Handle{}, err
+	}
+	child := &stubAgent{
+		id: sessionID, scope: agentScope, live: live, options: agentOptions, inbox: inbox,
+	}
+
+	// setup 在公布之前跑，和真造法的次序一样——`session/select-model` 那条路要的
+	// 那份模型选择正是在这一步挂上去的。
+	if setup != nil {
+		commit, err := setup(ctx, agentScope)
+		if err != nil {
+			_ = agentScope.Dispose(context.Background())
+			return agent.Handle{}, err
+		}
+		if commit != nil {
+			if err := commit(); err != nil {
+				_ = agentScope.Dispose(context.Background())
+				return agent.Handle{}, err
+			}
+		}
+	}
 
 	detach, err := f.agents.Enter(child, nil)
 	if err != nil {
@@ -369,10 +481,6 @@ func (f *scriptedFactory) CreateAgent(
 		})
 		return failure
 	}}, nil
-}
-
-func (f *scriptedFactory) Resume(context.Context, *scope.Scope, agent.ResumeOptions) (agent.Handle, error) {
-	return agent.Handle{}, errors.New("这台装配不走续跑")
 }
 
 // ---- 装配 ----
@@ -1571,6 +1679,22 @@ func TestRegisterInvariantsNeedsARegistry(t *testing.T) {
 	}
 }
 
-func (a *stubAgent) Remove(llm.MessageID) {}
+// 下面三条改队的方法转给那份真的收件箱投影，好让 `session/update-queue` 的用例
+// 读得到改完之后那条队；没有收件箱时它们和原先一样是空操作。
+func (a *stubAgent) Remove(messageID llm.MessageID) {
+	if a.inbox == nil {
+		return
+	}
+	if _, err := a.inbox.Remove(messageID); err != nil {
+		a.recordInboxFailure(err)
+	}
+}
 
-func (a *stubAgent) Replace(llm.MessageID, llm.Message) {}
+func (a *stubAgent) Replace(messageID llm.MessageID, message llm.Message) {
+	if a.inbox == nil {
+		return
+	}
+	if _, err := a.inbox.Replace(messageID, message); err != nil {
+		a.recordInboxFailure(err)
+	}
+}

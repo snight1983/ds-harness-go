@@ -43,7 +43,7 @@ func TestSourceFactoriesCarryTheirForm(t *testing.T) {
 	}
 }
 
-// 汇报和结清**有意**是两个名字：并成一个会让一段抄本把孩子从没写过的话记在它头上。
+// 汇报和结清**有意**是两个名字：并成一个会让一段誊本把孩子从没写过的话记在它头上。
 func TestReportAndSettledAreDistinctPlugins(t *testing.T) {
 	if ReportPlugin == SettledPlugin {
 		t.Fatal("汇报和结清不该共用一个来源名")

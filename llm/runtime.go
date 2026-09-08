@@ -4,7 +4,7 @@
 // 源: packages/llm/llm/src/index.ts:262-1026
 //
 // 新增: DSH 那边 LlmRuntime extends Service，登记走 ctx.effect、通知走 cordis 事件、
-// 瀑布走 ctx.waterfall。Go 这边一样也不照抄：生命周期挂在显式传进来的
+// 瀑布走 ctx.waterfall。Go 这边一样也不照录：生命周期挂在显式传进来的
 // [github.com/snight1983/ds-harness-go/scope.Scope] 上，通知是一张显式的观察者表，瀑布是一张
 // 有序的规则表加一次递归下钻——和本仓库 harness/agent、harness/session 完全一致。
 

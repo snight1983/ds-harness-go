@@ -78,6 +78,10 @@ type RunEndInfo struct {
 // [ContinuablePreparer]。每个开关和 [StartRequest] 上的一个选项一一对应：
 // DepthLimit 对 MaxDepth，其余同名。
 type Capabilities struct {
+	// AgentOptions 表示这个提供方管得住调用方指定的孩子 agent 选项——换提供方、
+	// 换模型、换推理档位、换 token 上限。不支持的提供方按它自己那套定孩子的路由，
+	// 于是 [StartRequest.AgentOptions] 会被静默丢掉，所以要在开工前拦下来。
+	AgentOptions bool
 	// OutputSchema 表示这个提供方管得住「最终结果必须是结构化的」。
 	OutputSchema bool
 	// DepthLimit 表示这个提供方管得住 MaxDepth。

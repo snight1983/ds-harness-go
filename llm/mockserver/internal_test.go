@@ -19,7 +19,7 @@ import (
 //
 // 源: packages/test-support/llm-mock-server/src/index.ts:306-311
 //
-// JS 的字符串迭代按码点走，照抄成 Go 的字节切片会把一个多字节字符劈成两半，
+// JS 的字符串迭代按码点走，照录成 Go 的字节切片会把一个多字节字符劈成两半，
 // 线路上就出现半个字符——而这台服务器是用来验别人怎么处理流式文本的，自己
 // 先发出坏字符等于把题目改掉。
 func TestSplitTextCountsCodePointsNotBytes(t *testing.T) {

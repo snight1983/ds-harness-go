@@ -8,6 +8,7 @@
 |---|---|
 | `github.com/snight1983/ds-harness-go/adapter/datastore/internal/dbtest` | [持久化抽象层](modules/datastore.md) |
 | `github.com/snight1983/ds-harness-go/adapter/datastore/kvstore` | [持久化抽象层](modules/datastore.md) |
+| `github.com/snight1983/ds-harness-go/adapter/datastore/searchstore` | [持久化抽象层](modules/datastore.md) |
 | `github.com/snight1983/ds-harness-go/adapter/datastore/sessionstore` | [持久化抽象层](modules/datastore.md) |
 | `github.com/snight1983/ds-harness-go/adapter/datastore` | [持久化抽象层](modules/datastore.md) |
 | `github.com/snight1983/ds-harness-go/adapter/domainjobs` | [后台作业](modules/jobs.md) |
@@ -19,8 +20,12 @@
 | `github.com/snight1983/ds-harness-go/attachment` | [附件与图片](modules/attachment.md) |
 | `github.com/snight1983/ds-harness-go/cmd/llmmockserver` | [LLM 测试与回放](modules/llm-testing.md) |
 | `github.com/snight1983/ds-harness-go/credentials` | [凭据](modules/credentials.md) |
+| `github.com/snight1983/ds-harness-go/feature/agentteam/agentteamtool` | [多 Agent](modules/subagent.md) |
+| `github.com/snight1983/ds-harness-go/feature/agentteam` | [多 Agent](modules/subagent.md) |
+| `github.com/snight1983/ds-harness-go/feature/authorization` | [凭据](modules/credentials.md) |
 | `github.com/snight1983/ds-harness-go/feature/checkpointpolicy` | [Session](modules/session.md) |
 | `github.com/snight1983/ds-harness-go/feature/compaction/basic` | [上下文压缩](modules/compaction.md) |
+| `github.com/snight1983/ds-harness-go/feature/compaction/compactcommand` | [上下文压缩](modules/compaction.md) |
 | `github.com/snight1983/ds-harness-go/feature/compaction/toolresultpruner` | [上下文压缩](modules/compaction.md) |
 | `github.com/snight1983/ds-harness-go/feature/compaction` | [上下文压缩](modules/compaction.md) |
 | `github.com/snight1983/ds-harness-go/feature/context/instructions` | [运行时上下文](modules/context.md) |
@@ -70,6 +75,7 @@
 | `github.com/snight1983/ds-harness-go/feature/todo` | [计划与待办](modules/planning.md) |
 | `github.com/snight1983/ds-harness-go/feature/tokenmeter` | [LLM](modules/llm.md) |
 | `github.com/snight1983/ds-harness-go/feature/turnoutline` | [Session](modules/session.md) |
+| `github.com/snight1983/ds-harness-go/feature/webhook/github` | [Webhook 规则运行时](modules/webhook.md) |
 | `github.com/snight1983/ds-harness-go/feature/webhook` | [Webhook 规则运行时](modules/webhook.md) |
 | `github.com/snight1983/ds-harness-go/feature/workflow/toolralph` | [工作流与 Ralph](modules/ralph.md) |
 | `github.com/snight1983/ds-harness-go/feature/workflow` | [工作流与 Ralph](modules/ralph.md) |

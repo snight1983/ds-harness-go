@@ -60,7 +60,7 @@ func publicJob(snapshot jobs.Snapshot) PublicSnapshot {
 // 源: packages/jobs/tool-jobs/src/index.ts:74-78
 //
 // 不写字面量的理由同 [github.com/snight1983/ds-harness-go/feature/sessionquery/querytool] 那几张白名单：这套值
-// 和注册表认得的那套必须是同一套，抄一遍就意味着以后加一种状态时这里会悄悄落下。
+// 和注册表认得的那套必须是同一套，写一遍就意味着以后加一种状态时这里会悄悄落下。
 var statusNames = []jobs.JobStatus{
 	jobs.StatusRunning,
 	jobs.StatusStopping,

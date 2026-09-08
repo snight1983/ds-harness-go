@@ -352,7 +352,7 @@ func (i *installer) retriesOf(id sessionlog.SessionID) int {
 
 // bumpRetries 把计数记成 retries+1。
 //
-// 收 retries 而不是就地加一，是照抄 DSH 的 `set(agent, retries + 1)`：这一趟
+// 收 retries 而不是就地加一，是照录 DSH 的 `set(agent, retries + 1)`：这一趟
 // 用来和上限比的就是那个读数，写回去的必须是同一个数，否则两条并发的补救会
 // 各自读到同一个数、却把计数推进两格。
 func (i *installer) bumpRetries(id sessionlog.SessionID, retries int) {

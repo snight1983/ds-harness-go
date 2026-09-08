@@ -163,7 +163,7 @@ func TestAnUnknownSourceIsKeptVerbatim(t *testing.T) {
 }
 
 // TestAnUnknownContextKeepsOnlyItsForm 钉住不认识的**形态**只在 Context 上留名字，
-// 载荷则原样落进 Extra，抄写一遍日志不掉字节。
+// 载荷则原样落进 Extra，誊写一遍日志不掉字节。
 //
 // [UnknownContext] 自己不带载荷，压的是那段注释里写的判断：形态的载荷是呈现用的
 // 元数据，消费方 switch 到 default 那一支本来就不读它。但介质上形态的字段和注入方

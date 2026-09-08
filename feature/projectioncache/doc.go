@@ -36,7 +36,7 @@
 //     （崩溃修复截过尾）作废时退化成一次从 seq 0 的整读——阶梯最慢的那一级，
 //     但仍然不会崩。
 //
-// # 这里没有照抄的部分
+// # 这里没有照录的部分
 //
 // DSH 的 SessionProjectionCache 是一个 cordis 的 Service，靠
 // ctx.sessionProjectionCache 供出去，靠 static inject 声明它要的四个服务，

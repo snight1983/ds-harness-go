@@ -24,7 +24,7 @@ import (
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:179-184
 //
-// 逐字照抄。它一半的篇幅在划边界——「只有直接的人明说要 Ralph 或者要换人迭代
+// 逐字照录。它一半的篇幅在划边界——「只有直接的人明说要 Ralph 或者要换人迭代
 // 的时候才用」「普通的长活儿归 goal 那几件工具」。这件工具很贵（一轮一个孩子），
 // 而模型看见「反复推进直到完成」是会主动去够的，所以那两句得写在描述里，光靠
 // 系统提示词那一段不够。
@@ -39,7 +39,7 @@ const toolDescription = "Run a foreground fresh-agent Ralph loop toward one immu
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:410
 //
-// 逐字照抄。中间那句「Completion and blockers are worker reports, not independent
+// 逐字照录。中间那句「Completion and blockers are worker reports, not independent
 // evaluation」是本包那条「不替孩子作证」的立场在提示词里的落点。
 const sectionText = "Use the ralph tool ONLY when the direct human explicitly asks for a Ralph loop " +
 	"or fresh-agent iterative execution. Each Ralph round starts a fresh child with no conversation " +
@@ -135,7 +135,7 @@ func requireFreshProvider(subagents Subagents, name string) error {
 // 源: packages/workflow/tool-ralph/src/index.ts:438-441
 //
 // 查不回来是错，理由写在 [Config.AgentOf] 上。那句话给模型看，所以是英文；
-// 括号里那半句照抄 DSH，虽然 Go 这边没有 undefined 这回事——它是给读日志的人
+// 括号里那半句照录 DSH，虽然 Go 这边没有 undefined 这回事——它是给读日志的人
 // 对上游文档用的。
 func (c *Controller) parentOf(exec *tools.RunContext) (agent.Agent, error) {
 	if exec == nil || exec.Agent == nil {
@@ -196,7 +196,7 @@ func outputSchema() tools.Node {
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:437-475
 //
-// 四道关的次序照抄 DSH，而且**全在开第一个孩子之前**：一次注定跑不成的调用要在
+// 四道关的次序照录 DSH，而且**全在开第一个孩子之前**：一次注定跑不成的调用要在
 // 一分钱都还没花的时候就被拒掉。
 func (c *Controller) execute(
 	ctx context.Context,

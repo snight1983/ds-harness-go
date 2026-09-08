@@ -65,8 +65,7 @@ const (
 //
 // 因此**这几个取值方法之间没有原子性**：连着读 [Workspace.Title] 和
 // [Workspace.SessionIDs]，中间可以夹着另一个副本的一次写，读到的是两个时刻的值。
-// 要一份自洽的多字段快照，眼下没有这条路——真需要的时候再加，而不是现在
-// 先摆一个没人调的方法在这儿。
+// 要一份自洽的多字段值，走 [Workspace.Snapshot]。
 type Workspace interface {
 	// ID 是这条记录稳定的 id。
 	//
@@ -145,6 +144,19 @@ type Workspace interface {
 	// 源: packages/workspace/workspace/src/types.ts:95
 	DetachSession(ctx context.Context, sessionID sessionlog.SessionID) error
 
+	// Snapshot 一次读回这条记录的全部字段，彼此自洽。
+	//
+	// 源: packages/api/workspace-controller/src/feed.ts:23-32（workspaceView）
+	//
+	// 上面那几个取值方法各读各的，连着调会读到两个时刻的值。要把一个工作区
+	// 整个交给别人看（渲染一行、发一帧、比一次差），那种撕裂是看得见的：
+	// 新标题配着旧会话列表，而两者都是真的，只是不同时。
+	//
+	// 这个方法只发一次读，所以交出来的六个字段来自同一个时刻。
+	// 它**不含** [Workspace.Status]——那一位要另外问一次文件系统，
+	// 混进来就等于用一个第二次往返的答案冒充同一时刻的事实。
+	Snapshot(ctx context.Context) (Snapshot, error)
+
 	// Status 现查一次目录在不在，不走缓存。
 	//
 	// 源: packages/workspace/workspace/src/types.ts:103
@@ -152,7 +164,7 @@ type Workspace interface {
 	// 目录不见了**绝不改动这条记录**——它可能只是被临时移走了。
 	//
 	// 查目录的三种失败（不存在、不是目录、文件系统后端自己出错）仍旧一律归到
-	// [StatusMissingDir]，不走 error。这条照抄 DSH（entity.ts:183-187 写明了理由）：
+	// [StatusMissingDir]，不走 error。这条照录 DSH（entity.ts:183-187 写明了理由）：
 	// 调用方问的是「此刻这个目录能不能用」，而这三种情况的答案都是「不能」。
 	// 给它们一个 error 分支，只会让每一个调用点都写一遍同样的 err != nil → missing-dir。
 	//
@@ -160,6 +172,36 @@ type Workspace interface {
 	// （记录被别的副本删了、域后端出故障）。那不是「目录不见了」，把它折进
 	// [StatusMissingDir] 会让一次数据库掉线在界面上显示成「你的目录没了」。
 	Status(ctx context.Context) (Status, error)
+}
+
+// Snapshot 是一个工作区在某一时刻的全部字段，一次读回。
+//
+// 源: packages/api/workspace-controller/src/types.ts:15-27（WorkspaceView）
+//
+// 新增: DSH 那边这个形状住在 api/workspace-controller 里，是「投影给浏览器看」
+// 的传输值。本包把它放在这一层，因为撕裂是**读**的性质，不是传输的性质：
+// 任何一个要同时看两个字段的调用方都需要它，跟它接下来发不发到网上无关。
+//
+// 新增: 多带一位 [Snapshot.TargetKey]。DSH 的 WorkspaceView 没有它，是因为
+// 那边身份和展示是同一条路径（见 [Record]）；本包把两者拆开了，只给展示路径
+// 就等于让调用方拿不到身份。它仍然是不透明的，**不许解析、不许拼接**。
+type Snapshot struct {
+	// ID 是这条记录稳定的 id，同 [Workspace.ID]。
+	ID WorkspaceID
+	// TargetKey 是这个工作区目录的身份，同 [Workspace.TargetKey]。
+	TargetKey fs.TargetKey
+	// Path 是给人看的那条路径，同 [Workspace.Path]。
+	Path string
+	// Title 是展示标题，同 [Workspace.Title]。
+	Title string
+	// SessionIDs 是过了归属判据的会话，次序同 [Workspace.SessionIDs]。
+	//
+	// 它是一份新切片，改它碰不到别处。
+	SessionIDs []sessionlog.SessionID
+	// CreatedAt 是建这条记录的时刻，同 [Workspace.CreatedAt]。
+	CreatedAt time.Time
+	// UpdatedAt 是最后一次落盘写入的时刻，同 [Workspace.UpdatedAt]。
+	UpdatedAt time.Time
 }
 
 // LiveSessions 是此刻在内存里被推进的那些会话。

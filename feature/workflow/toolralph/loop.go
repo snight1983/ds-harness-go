@@ -41,7 +41,7 @@ const (
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:61-65
 //
-// 字段名照抄 DSH，因为它们直接进那份工具输出 schema，也直接进 [renderResult]。
+// 字段名照录 DSH，因为它们直接进那份工具输出 schema，也直接进 [renderResult]。
 type runResult struct {
 	// Status 是这次调用的收场。
 	Status RunStatus `json:"status"`
@@ -90,14 +90,14 @@ func (f *roundFailure) Unwrap() error {
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:154
 //
-// 破折号是 DSH 原文里的 U+2014，照抄——这段字是提示词的一部分。
+// 破折号是 DSH 原文里的 U+2014，照录——这段字是提示词的一部分。
 const firstRoundHandoff = "(none — this is the first round)"
 
 // roundPrompt 排出发给某一轮那个孩子的整段提示词。
 //
 // 源: packages/workflow/tool-ralph/src/index.ts:155-162
 //
-// 六段话逐字照抄，段与段之间空一行（DSH 的 join('\n\n')）。它们是给模型看的，
+// 六段话逐字照录，段与段之间空一行（DSH 的 join('\n\n')）。它们是给模型看的，
 // 所以是英文；每一段各自堵着一种很具体的跑偏：
 //
 //   - 第一段告诉孩子它是谁，并且明说**不许**再调 ralph——不挡的话它会再开一层

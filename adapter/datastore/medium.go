@@ -35,10 +35,11 @@ const (
 	singletonsTable = "datastore_singletons"
 )
 
-// 两种形态在 datastore_units.kind 那一列里的取值。
+// 三种形态在 datastore_units.kind 那一列里的取值。
 const (
 	kindRecords = "records"
 	kindLog     = "log"
+	kindDocs    = "docs"
 )
 
 // PoolConfig 是连接池的那几个数。
@@ -423,6 +424,8 @@ func shapeWord(kind string) string {
 		return "记录集"
 	case kindLog:
 		return "日志集"
+	case kindDocs:
+		return "文档集"
 	default:
 		return kind
 	}

@@ -345,8 +345,8 @@ func (r *Runtime) Start(ctx context.Context, name string, request StartRequest) 
 //
 // 源: packages/subagent/subagent/src/index.ts:508-513
 //
-// 次序是固定的（结构化输出 → 深度上限 → 工具过滤 → 人设），于是一次要了好几样的
-// 请求报出来的永远是同一条。
+// 次序是固定的（agent 选项 → 结构化输出 → 深度上限 → 工具过滤 → 人设），于是一次
+// 要了好几样的请求报出来的永远是同一条。
 func assertCapabilities(provider Provider, request StartRequest) error {
 	capabilities := provider.Capabilities()
 	needs := []struct {
@@ -354,6 +354,10 @@ func assertCapabilities(provider Provider, request StartRequest) error {
 		supported bool
 		name      string
 	}{
+		// 新增: DSH 靠 `agentOptions !== undefined` 判「要没要」。Go 的
+		// [github.com/snight1983/ds-harness-go/harness/agent.Options] 是值类型，四个字段
+		// 全是零值就是没要——和该结构体上「零值即不指定」的约定同一条判据。
+		{request.AgentOptions != (agent.Options{}), capabilities.AgentOptions, "agentOptions"},
 		{request.OutputSchema != nil, capabilities.OutputSchema, "outputSchema"},
 		{request.MaxDepth != nil, capabilities.DepthLimit, "depthLimit"},
 		// 新增: DSH 靠 `toolFilter !== undefined` 判「要没要」。Go 的

@@ -233,7 +233,7 @@ func resolveOptions(options Options) (resolvedOptions, error) {
 //
 // 新增: 摊平之后要**排序**。TS 那边 Object.entries 的顺序由插入序定死，同一份
 // 配置每次跑出来的名册顺序都一样，于是同一个种子选出同一串行为。Go 的 map 遍历
-// 顺序是随机的，照抄就会让「同种子可重放」这条当场失效——而那正是随机模式存在的
+// 顺序是随机的，照录就会让「同种子可重放」这条当场失效——而那正是随机模式存在的
 // 理由。按行为名排序是能让两次进程之间也稳住的最简单办法。
 func resolveRandomWeights(configured map[Behavior]float64) ([]weightedBehavior, error) {
 	if len(configured) == 0 {

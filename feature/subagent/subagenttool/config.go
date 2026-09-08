@@ -14,7 +14,10 @@ import (
 	"github.com/snight1983/ds-harness-go/feature/subagent"
 	"github.com/snight1983/ds-harness-go/harness/agent"
 	"github.com/snight1983/ds-harness-go/harness/systemprompt"
+	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/scope"
+	"github.com/snight1983/ds-harness-go/sessionlog"
+	"github.com/snight1983/ds-harness-go/sessionlog/projection"
 	"github.com/snight1983/ds-harness-go/tools"
 )
 
@@ -93,6 +96,16 @@ type Subagents interface {
 	) (func(context.Context) error, error)
 }
 
+// Agents 是「按会话 id 找回那个活 agent」这一点点活 agent 表。
+//
+// 新增: DSH 是 `ctx.get('agents')?.get(parentId)`——一次可选取用。Go 里它是
+// [Deps.Agents]，为 nil 时同一条路查不到父，于是这个孩子不从父那里继承授权表。
+// 只写出 Get 一个方法，理由同 [Jobs]：这个包只在挑授权表那一步问一次父。
+type Agents interface {
+	// Get 按会话 id 找一个活着的 agent。
+	Get(id sessionlog.SessionID) (agent.Agent, bool)
+}
+
 // Jobs 是一次性后台那条路要的那一点作业注册表。
 //
 // 新增: DSH 是 `ctx.get('jobs')`——一次可选取用，没装就在派发时报错。Go 里它是
@@ -138,7 +151,7 @@ type Config struct {
 	// 那个参数从 schema 里消失，而且一次硬写 true 的调用会被拒。
 	//
 	// 新增: DSH 是 `enableRunInBackground?: boolean`，默认 true。Go 的 bool 零值
-	// 是 false，照抄会把默认值反过来，所以这里把它取反命名——这样零值就是 DSH 的
+	// 是 false，照录会把默认值反过来，所以这里把它取反命名——这样零值就是 DSH 的
 	// 默认行为（露出后台），成例见
 	// [github.com/snight1983/ds-harness-go/invariants.Config.Enabled] 那条说明里同一个问题的另一种解法。
 	DisableRunInBackground bool
@@ -177,6 +190,19 @@ type Config struct {
 	// 它和 [Config.MaxDepth] 只许填一个，两个都填就拒装——那说明调用方对这个孩子
 	// 的递归预算归谁管有两种互相矛盾的想法，猜哪一种都是错的。
 	ProviderManagedDepth bool
+
+	// ModelSelectionSettings 为真表示这件工具向模型开放孩子的模型选择：那件工具
+	// 多出 provider、model、reasoning_effort 三个参数，旁边多装一件只读的
+	// [ListModelsToolName]，而能挑哪几条路由由 [Deps.ModelSelection] 那份用户
+	// 设置说了算。
+	//
+	// 源: packages/subagent/tool-subagent/src/index.ts:60, 108, 319
+	//
+	// 开着的时候 [Deps.Projections]、[Deps.ModelSelection] 和 [Deps.Agent] 三样
+	// 都必填，而且点名的提供方要有
+	// [github.com/snight1983/ds-harness-go/feature/subagent.Capabilities.AgentOptions] 那件能力——
+	// 一个管不住孩子 agent 选项的提供方会把模型挑的那条路由静默丢掉。
+	ModelSelectionSettings bool
 }
 
 // Deps 是装这件工具那一刻要交进来的协作者。
@@ -193,6 +219,34 @@ type Deps struct {
 	// Jobs 是作业注册表，只有一次性后台那条路用得上；为 nil 时那条路报错，
 	// 前台和可续两条路照跑。
 	Jobs Jobs
+
+	// Agent 是这次装配所属的那个 agent，[Config.ModelSelectionSettings] 开着时必填。
+	//
+	// 新增: DSH 那边是 `ctx.agent`，而它在一个宿主或者预设作用域上是 undefined——
+	// 于是它另起一条 `agent/created` 对账，给每一个组合在这条作用域链下的 agent
+	// 各装一份。Go 这边 [Controller.Install] 本来就是**每个 agent 作用域调一次**，
+	// 那条对账没有产出方，所以这里只收那一个 agent。挑授权表那一步就落在装的这一刻，
+	// 和 DSH 在 agent 发布时采样是同一个时机。
+	Agent agent.Agent
+
+	// Agents 是活 agent 表，只在一个孩子要从它父那里继承授权表时问一次；
+	// 为 nil 表示查不到父，那个孩子就没有授权表。
+	Agents Agents
+
+	// Projections 是投影注册表，[Config.ModelSelectionSettings] 开着时必填。
+	//
+	// 那份授权表的单元要**先**由装配方登进这张表（[RegisterModelSelectionProjection]），
+	// 事件类型也要先并进那份词汇表（[ModelSelectionEventTypes]）——本包不在这里替
+	// 装配方登记，理由与 [github.com/snight1983/ds-harness-go/feature/subagent.RegisterProjections]
+	// 相同：同一张表上登两遍同一个键是错，而一套部署可能装好几件派发工具。
+	Projections *projection.Registry
+
+	// ModelSelection 是那台模型选择设置服务，[Config.ModelSelectionSettings] 开着时必填。
+	ModelSelection *ModelSelectionService
+
+	// LLM 是 llm 运行时。挑路由这件事真要落地就得有它：解一条路由、以及那件
+	// 只读发现工具，全靠它。为 nil 时这两条路各自报一句话，别的照跑。
+	LLM *llm.Runtime
 }
 
 // New 造一个控制器，把默认值填上并把那几条装配规矩查一遍。
@@ -234,15 +288,16 @@ func New(config Config) (*Controller, error) {
 		return nil, fmt.Errorf("subagenttool: %w", err)
 	}
 	return &Controller{
-		provider:          config.Provider,
-		toolName:          toolName,
-		agentOf:           config.AgentOf,
-		logger:            logger,
-		backgroundEnabled: !config.DisableRunInBackground,
-		continuable:       mode == ModeContinuable,
-		agentOptions:      config.AgentOptions,
-		persona:           config.Persona,
-		toolFilter:        config.ToolFilter,
-		maxDepth:          maxDepth,
+		provider:            config.Provider,
+		toolName:            toolName,
+		agentOf:             config.AgentOf,
+		logger:              logger,
+		backgroundEnabled:   !config.DisableRunInBackground,
+		continuable:         mode == ModeContinuable,
+		agentOptions:        config.AgentOptions,
+		persona:             config.Persona,
+		toolFilter:          config.ToolFilter,
+		maxDepth:            maxDepth,
+		modelSelectionAsked: config.ModelSelectionSettings,
 	}, nil
 }

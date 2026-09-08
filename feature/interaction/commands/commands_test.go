@@ -646,7 +646,7 @@ func TestSkipInputRecordOmitsArgsWhileTheHandlerStillSeesThem(t *testing.T) {
 	if seen != " keep this once" {
 		t.Fatalf("处理器还是该看得见输入：%q", seen)
 	}
-	// 有一条自己的权威事件拥有这份负载的命令，不该在日志里把它再抄一遍。
+	// 有一条自己的权威事件拥有这份负载的命令，不该在日志里把它再写一遍。
 	if _, present := h.log.payload(t, 0)["args"]; present {
 		t.Fatalf("command/run 不该带 args：%s", h.log.appended[0].raw)
 	}

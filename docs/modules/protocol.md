@@ -35,13 +35,15 @@ SDK 和 ACP 是入站 Agent 接口；MCP 是出站工具接口。MCP Server 不�
 
 `protocol/sdk/sdkprotocol` 定义按行分帧的 JSON-RPC 2.0 传输和稳定线上类型。畸形单行会被跳过，不会终止整个连接；并发写入保持每个消息独占一行。请求取消和连接关闭通过 `context.Context` 与传输 Done 信号传播。
 
-`protocol/sdk/sdkserver` 处理三个请求：
+`protocol/sdk/sdkserver` 处理十三个请求。三个是这条线本身的事：
 
 | 请求 | 行为 |
 |---|---|
 | `initialize` | 保存该连接的工作目录、Provider、模型和输出上限 |
 | `session/prompt` | 首次创建 Agent，把用户输入排入指定会话并返回消息 ID 回执 |
 | `shutdown` | 停止接收新会话并释放该 Server 创建的 Agent |
+
+另外十个是会话控制面：建、续、分叉、改名、列举、检索、取消、换模型、改排队、翻历史。它们自己不产生能力，是把 Agent 注册表、会话查询引擎和 LLM 适配器上已有的能力挂到线上；逐条的语义与两路分界见 [SDK 协议与服务端](sdk.md)。握手之前进来的任何一个请求都会被拒。
 
 服务端转发四类通知：会话事件、Agent 状态、子 Agent 开始和子 Agent 完成。Prompt 的后续执行结果通过通知流观察，不包含在入队回执中。它不创建 HTTP Listener，不决定进程退出，也不关闭宿主共享的 Runtime；输入输出流和进程模型由宿主提供。
 
@@ -129,9 +131,9 @@ flowchart TB
 | 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
 |---|---|---|---|---|
 | Agent Client Protocol仅自动化JSON-RPC服务器，通过stdio驱动harness agent | `acp/acp` | 需要 | `protocol/acp` | — |
-| Host 的 ctx.sessionController 服务与生成的 Client session／skills／fileReferences namespace，负责会话生命周期与历史、模型目录、工作区路径打开、可调用 skill 发现与文件引用 | `api/session-controller` | 抄形状 | `protocol/sdk/sdkprotocol` | 缺口：sdkprotocol 只有 session/prompt。create／resume／fork／rename／list／search／cancel／select-model／update-queue 与历史分页、实时投影推送都没有 |
-| 纯自动化 ACP stdio 应用 profile 组合包，在 base 之上设 coding persona 与默认模型路由，命令提供方接受调用后才启动 ACP bridge | `bundle/acp-app` | 抄形状 | `protocol/acp` | 走 HTTP 不走 stdio，进程外壳那半不要。ACP 场景关掉 session-title-llm 这条取舍已记在裁决里 |
-| SDK stdio 应用 profile 组合包，在 base 之上设 coding persona，命令提供方接受调用后才启动 JSON-RPC server | `bundle/sdk-app` | 抄形状 | `protocol/sdk/sdkserver` | 走 HTTP 不走 stdio JSON-RPC，要的只是「协议服务端／进程生命周期」的分界 |
+| Host 的 ctx.sessionController 服务与生成的 Client session／skills／fileReferences namespace，负责会话生命周期与历史、模型目录、工作区路径打开、可调用 skill 发现与文件引用 | `api/session-controller` | 取形重写 | `protocol/sdk/sdkprotocol` `protocol/sdk/sdkserver` | 缺口：实时投影推送不做（同一语义走 sessionlog/projection 的整值投影，重连重取整值）；工作区路径打开、skill 发现、文件引用三个 namespace 各有自己的门面，不并进这条线 |
+| 纯自动化 ACP stdio 应用 profile 组合包，在 base 之上设 coding persona 与默认模型路由，命令提供方接受调用后才启动 ACP bridge | `bundle/acp-app` | 取形重写 | `protocol/acp` | 走 HTTP 不走 stdio，进程外壳那半不要。ACP 场景关掉 session-title-llm 这条取舍已记在裁决里 |
+| SDK stdio 应用 profile 组合包，在 base 之上设 coding persona，命令提供方接受调用后才启动 JSON-RPC server | `bundle/sdk-app` | 取形重写 | `protocol/sdk/sdkserver` | 走 HTTP 不走 stdio JSON-RPC，要的只是「协议服务端／进程生命周期」的分界 |
 | MCP客户端桥接插件，连接外部MCP服务器并把工具注册到ctx.tools | `mcp/mcp-client` | 需要 | `protocol/mcp` | — |
 | DeepSeek Harness SDK运行时共享协议格式，换行分帧JSON-RPC | `sdk/protocol` | 需要 | `protocol/sdk/sdkprotocol` | — |
 | stdio JSON-RPC服务器插件使进程外SDK客户端驱动harness agent | `sdk/server` | 需要 | `protocol/sdk/sdkprotocol` `protocol/sdk/sdkserver` | — |
