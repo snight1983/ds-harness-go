@@ -360,12 +360,11 @@ func (a *ReactLoopAgent) step(
 		}
 
 		assembler := llm.NewBlockAssembler()
-		var chunkSeqs []int
-		streamErr := a.consumeStream(ctx, request, prepared, turn, step, assembler, &chunkSeqs)
+		streamErr := a.consumeStream(ctx, request, prepared, turn, step, assembler)
 		if streamErr != nil {
 			// 被打断时把已经吐出来的那个安全前缀定稿，重放才读得通。
 			if ctx.Err() != nil {
-				if err := a.appendInterrupted(turn, step, request, assembler, chunkSeqs); err != nil {
+				if err := a.appendInterrupted(turn, step, request, assembler); err != nil {
 					return nil, errors.Join(streamErr, err)
 				}
 			}
@@ -422,7 +421,7 @@ func (a *ReactLoopAgent) step(
 		if usage, ok := assembler.Usage(); ok {
 			data.Usage = &usage
 		}
-		if _, err := a.appendEvent(data, sessionlog.AppendOp{}, chunkSeqs); err != nil {
+		if _, err := a.appendEvent(data, sessionlog.AppendOp{}, nil); err != nil {
 			return nil, err
 		}
 		if _, hitCeiling := assembler.Finish().(llm.MaxTokensFinish); hitCeiling {
@@ -455,15 +454,27 @@ func (a *ReactLoopAgent) step(
 //
 // 源: packages/core/agent-loop/src/agent.ts:345-353
 //
-// 先落日志后喂装配器是有意的：日志是权威的，一条没记下来的分块等于没发生过，
+// 先发布后喂装配器是有意的：日志是权威的，一条没记下来的分块等于没发生过，
 // 而一个吃了它的装配器会装出一条日志重放不出来的消息。
+//
+// 新增: 分块在这里分成两半。带内容的增量（[llm.IsTokenDelta]）只走
+// [github.com/snight1983/ds-harness-go/harness/session.Session.PublishLive]，
+// 交给现场看着的那一方，**不进日志**——它们的内容在这一步收尾时那条
+// assistant/message 里已经完整地有了一份，再逐字存一遍是把同一句话存两遍，
+// 而拆碎那一遍还要为每一两个字付一整个 JSON 信封。不带内容的那些（块的起止、
+// 用量、收尾）照常进日志：一次失败或者被中止的尝试不会有 assistant/message 来
+// 落定它，那条用量分块是它计费事实的唯一去处。
+//
+// 一个例外：一个步骤里**第一条**带内容的增量照样进日志。它不是为了内容，是为了
+// 「模型开始出字了」这个时刻——[github.com/snight1983/ds-harness-go/feature/sessionstats]
+// 的首字延迟和 [github.com/snight1983/ds-harness-go/feature/telemetry] 的首块信号
+// 都只认这一条，而这个时刻在别处再也找不回来。
 func (a *ReactLoopAgent) consumeStream(
 	ctx context.Context,
 	request llm.GenerateOptions,
 	prepared *llm.PreparedCall,
 	turn, step int,
 	assembler *llm.BlockAssembler,
-	chunkSeqs *[]int,
 ) error {
 	var chunks iter.Seq2[llm.StreamChunk, error]
 	var err error
@@ -479,6 +490,7 @@ func (a *ReactLoopAgent) consumeStream(
 	if err := abortedErr(ctx); err != nil {
 		return err
 	}
+	sawToken := false
 	for chunk, err := range chunks {
 		if err != nil {
 			return err
@@ -486,12 +498,17 @@ func (a *ReactLoopAgent) consumeStream(
 		if err := abortedErr(ctx); err != nil {
 			return err
 		}
-		event, appendErr := a.appendEvent(
-			sessionlog.AssistantChunkData{Turn: turn, Step: step, Chunk: chunk}, nil, nil)
-		if appendErr != nil {
-			return appendErr
+		data := sessionlog.AssistantChunkData{Turn: turn, Step: step, Chunk: chunk}
+		if llm.IsTokenDelta(chunk) && sawToken {
+			if err := a.publishLiveEvent(data); err != nil {
+				return err
+			}
+		} else {
+			if _, err := a.appendEvent(data, nil, nil); err != nil {
+				return err
+			}
 		}
-		*chunkSeqs = append(*chunkSeqs, event.Seq)
+		sawToken = sawToken || llm.IsTokenDelta(chunk)
 		assembler.Push(chunk)
 	}
 	return abortedErr(ctx)
@@ -506,7 +523,6 @@ func (a *ReactLoopAgent) appendInterrupted(
 	turn, step int,
 	request llm.GenerateOptions,
 	assembler *llm.BlockAssembler,
-	chunkSeqs []int,
 ) error {
 	content := assembler.InterruptedBlocks()
 	if len(content) == 0 {
@@ -522,7 +538,7 @@ func (a *ReactLoopAgent) appendInterrupted(
 	if usage, ok := assembler.Usage(); ok {
 		data.Usage = &usage
 	}
-	_, err := a.appendEvent(data, sessionlog.AppendOp{}, chunkSeqs)
+	_, err := a.appendEvent(data, sessionlog.AppendOp{}, nil)
 	return err
 }
 

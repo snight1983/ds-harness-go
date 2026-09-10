@@ -45,9 +45,60 @@ type Options struct {
 	// 循环自己那一份（[agent.EventTypes]）由 [New] 并进去，不必在这里重复。
 	ExtraEventTypes []sessionlog.EventType
 
+	// Persistence 是宿主接会话持久化的钩子，为 nil 表示这次装配不接。
+	//
+	// 它必须是一个钩子而不是一个现成的值：持久化后端要活会话存储和事件词汇才造得
+	// 出来，而循环工厂要持久化才接得上续跑——两头都在 [New] 里面，宿主在外面
+	// 没有任何时刻能同时拿到它们。见 [Persistence]。
+	Persistence Persistence
+
 	// Logger 为 nil 时用 [slog.Default]。
 	Logger *slog.Logger
 }
+
+// PersistenceDeps 是接持久化那一刻，宿主手上能拿到的那几样。
+type PersistenceDeps struct {
+	// Scope 是这次装配的根作用域，持久化的登记挂在它上面。
+	Scope *scope.Scope
+	// Sessions 是活会话存储：持久化后端靠它对账「活着的」和「存下来的」。
+	Sessions *session.Store
+	// Vocabulary 是已经并过循环那一份、也并过 [Options].ExtraEventTypes 的事件词汇。
+	//
+	// 交给持久化后端的必须是这一份：它认不得的事件类型在恢复时会被判成未知事件。
+	Vocabulary sessionlog.Vocabulary
+}
+
+// Persistence 是宿主接会话持久化的钩子。
+//
+// [New] 在活会话存储和事件词汇都已经在场、循环工厂还没造出来的那一刻调它一次。
+// 这个位置是唯一可行的：往前挪拿不到那两样，往后挪循环工厂已经定型了。
+//
+// 撤销走作用域，不由这个钩子交回来：实现方把自己的写路径登记在 [PersistenceDeps].Scope
+// 上，[New] 交出来的拆除函数释放那个作用域时会按登记的反序把它摘掉。宿主之后
+// 挂在同一个作用域上的东西（比如重试）因此排在它后面，也就先于它被摘掉。
+//
+// 走 [github.com/snight1983/ds-harness-go/adapter/datastore/sessionstore] 的话，
+// 这个钩子的实现就是造一个 Store 再调它的 Install：
+//
+//	Persistence: func(ctx context.Context, deps harness.PersistenceDeps) (harness.SessionPersistence, error) {
+//		store, err := sessionstore.New(ctx, sessionstore.Deps{
+//			Sessions: deps.Sessions, Vocabulary: deps.Vocabulary,
+//		}, config)
+//		if err != nil {
+//			return nil, err
+//		}
+//		if _, err := store.Install(ctx, deps.Scope); err != nil {
+//			return nil, err
+//		}
+//		return store, nil
+//	}
+type Persistence func(ctx context.Context, deps PersistenceDeps) (SessionPersistence, error)
+
+// SessionPersistence 是循环续跑一段存下来的会话时用得上的那一小块能力。
+//
+// 它就是 [agentloop.SessionPersistence]，在这里起个别名只为让宿主不必为了写一个
+// 钩子而去引循环那个包。
+type SessionPersistence = agentloop.SessionPersistence
 
 // Harness 是拼好之后，宿主手上握着的那几样东西。
 //
@@ -85,9 +136,9 @@ type Harness struct {
 //
 // 交出来的拆除函数不重复执行；两次调用里第二次是空操作。
 //
-// 这份装配**不接**存储后端、持久化和协议入口：那三样各自需要一个真的介质，
-// 由宿主自己决定接哪一个。于是 [agentloop.AgentLoop.Resume] 在这份装配上会报错，
-// 配置里要续跑的项也起不来——恢复需要一份存下来的日志。
+// 这份装配**不接**通用存储后端和协议入口：那两样各自需要一个真的介质，由宿主自己
+// 决定接哪一个。会话持久化则由 [Options].Persistence 那个钩子接——不接的话
+// [agentloop.AgentLoop.Resume] 在这份装配上会报错，恢复需要一份存下来的日志。
 func New(ctx context.Context, options Options) (*Harness, func(context.Context) error, error) {
 	if options.Provider == "" || options.Model == "" {
 		return nil, nil, errors.New("harness: 装一份最小闭环要有提供方和模型")
@@ -159,7 +210,28 @@ func New(ctx context.Context, options Options) (*Harness, func(context.Context) 
 		With(agent.EventTypes()...).
 		With(options.ExtraEventTypes...)
 
-	// 8. 循环工厂。
+	// 8. 会话持久化。它夹在这里是被两头逼出来的：后端要上面那份活会话存储和这份
+	// 词汇，而下面那台循环工厂要它才接得上续跑。宿主在 New 外面没有任何时刻能
+	// 同时拿到这两头，所以这一步只能由本函数代跑。
+	var persistence SessionPersistence
+	if options.Persistence != nil {
+		installed, err := options.Persistence(ctx, PersistenceDeps{
+			Scope:      root,
+			Sessions:   sessions,
+			Vocabulary: vocabulary,
+		})
+		if err != nil {
+			rollback()
+			return nil, nil, fmt.Errorf("harness: 接会话持久化失败：%w", err)
+		}
+		if installed == nil {
+			rollback()
+			return nil, nil, errors.New("harness: 持久化钩子既没报错也没交出东西")
+		}
+		persistence = installed
+	}
+
+	// 9. 循环工厂。
 	//
 	// 它自己会把自己登记成 [agent.Registry] 那份唯一的造法，撤销也折进了交回来的
 	// unwindLoop——所以这里**不要**再调一次 [agent.Registry.SetFactory]，那会撞上
@@ -172,7 +244,7 @@ func New(ctx context.Context, options Options) (*Harness, func(context.Context) 
 		LLM:          models,
 		Tools:        toolRuntime,
 		SystemPrompt: prompts,
-	}, root, agentloop.Config{Logger: logger})
+	}, root, agentloop.Config{Persistence: persistence, Logger: logger})
 	if err != nil {
 		rollback()
 		return nil, nil, fmt.Errorf("harness: 造循环工厂失败：%w", err)

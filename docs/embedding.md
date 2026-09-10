@@ -433,7 +433,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    L3["其余几条"] --> L3a["没有内置的生产会话持久化后端<br/>协调器只负责编排，不决定介质"]
+    L3["其余几条"] --> L3a["协调器只负责编排，不决定介质<br/>成品后端在 adapter/datastore/sessionstore<br/>宿主递一个连接池即可"]
     L3 --> L3b["没有任意代码执行、Shell<br/>本地终端或本地文件工具"]
     L3 --> L3c["Postgres 那一批集成测试<br/>要一个真的数据库连接"]
     L3 --> L3d["portcheck 仍可能报出<br/>尚未做最终裁决的 DSH 能力"]

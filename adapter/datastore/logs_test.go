@@ -61,6 +61,11 @@ func Test流不在时每条读路都报流不存在(t *testing.T) {
 	if err := unit.TrimBefore(t.Context(), "nobody", 1); !errors.Is(err, ErrStreamNotFound) {
 		t.Errorf("弹出该报 ErrStreamNotFound，实际 %v", err)
 	}
+	// 删除同理，而且这一条**不**当成幂等成功：调用方要靠它把「删掉了一份」和
+	// 「本来就没有」分开。
+	if err := unit.DeleteStream(t.Context(), "nobody"); !errors.Is(err, ErrStreamNotFound) {
+		t.Errorf("删除该报 ErrStreamNotFound，实际 %v", err)
+	}
 }
 
 // 起点是个变量：这份日志会从最老的一头弹出，所以「从哪个 seq 起」问的是现存最早
@@ -431,5 +436,86 @@ func Test关掉的日志集每一条路都响(t *testing.T) {
 	}
 	if err := unit.TrimBefore(t.Context(), "s", 1); !errors.Is(err, ErrClosed) {
 		t.Errorf("弹出该报 ErrClosed，实际 %v", err)
+	}
+	if err := unit.DeleteStream(t.Context(), "s"); !errors.Is(err, ErrClosed) {
+		t.Errorf("删除该报 ErrClosed，实际 %v", err)
+	}
+}
+
+// 弹到空和删掉整条是两件事：前者那条流还在、还答得出下一条写在哪儿，
+// 后者这条流就不存在了，再写要重新建。
+func Test删掉整条流和弹到空不是一回事(t *testing.T) {
+	unit := seeded(t, "deleting", "s", 0, 6)
+
+	// 先看弹到空之后是什么样：流还在，起点是下一条要写的 seq。
+	if err := unit.TrimBefore(t.Context(), "s", 99); err != nil {
+		t.Fatalf("清空失败：%v", err)
+	}
+	segment, err := unit.Load(t.Context(), "s", 0)
+	if err != nil {
+		t.Fatalf("清空之后该还读得到这条流：%v", err)
+	}
+	if segment.NextSeq != 6 {
+		t.Fatalf("清空之后下一条是 %d，要的是 6", segment.NextSeq)
+	}
+
+	// 再删掉它：这一下之后连流都没了。
+	if err := unit.DeleteStream(t.Context(), "s"); err != nil {
+		t.Fatalf("删流失败：%v", err)
+	}
+	if _, err := unit.Load(t.Context(), "s", 0); !errors.Is(err, ErrStreamNotFound) {
+		t.Fatalf("删完再读该报 ErrStreamNotFound，实际 %v", err)
+	}
+	if _, err := unit.ReadRevision(t.Context(), "s"); !errors.Is(err, ErrStreamNotFound) {
+		t.Fatalf("删完读令牌该报 ErrStreamNotFound，实际 %v", err)
+	}
+	// 删掉之后同名流重新建得起来，而且下一条从 0 数起，不接旧游标。
+	if err := unit.Append(t.Context(), AppendRequest{
+		Stream: "s", Head: []byte(`{"v":2}`), EnsureStream: true, Entries: entriesFrom(0, 2),
+	}); err != nil {
+		t.Fatalf("删完之后同名流该重新建得起来：%v", err)
+	}
+	segment, err = unit.Load(t.Context(), "s", 0)
+	if err != nil {
+		t.Fatalf("读失败：%v", err)
+	}
+	if got, want := seqsOf(segment.Entries), []int64{0, 1}; !slices.Equal(got, want) {
+		t.Fatalf("重建之后的 seq 是 %v，要的是 %v", got, want)
+	}
+	// 头也是新的那份：旧的那条连同它的头一起没了。
+	if got := string(segment.Head); got != `{"v":2}` {
+		t.Errorf("重建之后的头是 %s，要的是 {\"v\":2}", got)
+	}
+}
+
+// 删一条流不许波及同一个单元里的别的流：那句 DELETE 是按流名限定的。
+func Test删掉一条流不动同单元里别的流(t *testing.T) {
+	unit := newLog(t, "isolated_delete")
+
+	for _, name := range []string{"keep", "drop"} {
+		if err := unit.Append(t.Context(), AppendRequest{
+			Stream: name, Head: []byte(`{}`), EnsureStream: true, Entries: entriesFrom(0, 3),
+		}); err != nil {
+			t.Fatalf("建流 %q 失败：%v", name, err)
+		}
+	}
+
+	if err := unit.DeleteStream(t.Context(), "drop"); err != nil {
+		t.Fatalf("删流失败：%v", err)
+	}
+
+	streams, err := unit.List(t.Context())
+	if err != nil {
+		t.Fatalf("列举失败：%v", err)
+	}
+	if len(streams) != 1 || streams[0].Name != "keep" {
+		t.Fatalf("删完之后列举出来的是 %v，要的是只剩 keep", streams)
+	}
+	segment, err := unit.Load(t.Context(), "keep", 0)
+	if err != nil {
+		t.Fatalf("读留下那条失败：%v", err)
+	}
+	if got, want := seqsOf(segment.Entries), []int64{0, 1, 2}; !slices.Equal(got, want) {
+		t.Fatalf("留下那条的 seq 是 %v，要的是 %v", got, want)
 	}
 }

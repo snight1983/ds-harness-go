@@ -189,6 +189,50 @@ func TestInspect只读不发布(t *testing.T) {
 	}
 }
 
+// 删完这个身份就是全新的：列举里没有它，装载说没有，而同一个 id 建得起来。
+func TestErase把一份存档整个删掉(t *testing.T) {
+	store, meta := seededStore(t, "erased")
+
+	if err := store.Erase(t.Context(), meta.ID); err != nil {
+		t.Fatalf("删存档失败：%v", err)
+	}
+
+	headers, err := store.List(t.Context())
+	if err != nil {
+		t.Fatalf("列举失败：%v", err)
+	}
+	if len(headers) != 0 {
+		t.Fatalf("删完列举出来还有 %v", idsOf(headers))
+	}
+	if _, err := store.Load(t.Context(), meta.ID); !errors.Is(err, persistence.ErrSessionNotFound) {
+		t.Fatalf("删完装载该报 ErrSessionNotFound，实际 %v", err)
+	}
+
+	// 同一个 id 重新建得起来，而且从头写起。
+	mustCreate(t, store, meta)
+	mustAppend(t, store, meta.ID, oneTurnLog(t, 0))
+	loaded, err := store.Load(t.Context(), meta.ID)
+	if err != nil {
+		t.Fatalf("重建之后装载失败：%v", err)
+	}
+	if got, want := seqsOf(loaded.Events), []int{0, 1, 2, 3, 4, 5}; !slices.Equal(got, want) {
+		t.Fatalf("重建之后的 seq 是 %v，要的是 %v", got, want)
+	}
+}
+
+// 一个建了但从没追加过的会话在介质上什么都没有，删它是把册子上那条划走——
+// 划走了同一个 id 才重新建得起来。
+func TestErase一个还没落地的会话(t *testing.T) {
+	store := newStore(t)
+	meta := testMeta("ghost")
+	mustCreate(t, store, meta)
+
+	if err := store.Erase(t.Context(), meta.ID); err != nil {
+		t.Fatalf("删一个还没落地的会话该成功，实际 %v", err)
+	}
+	mustCreate(t, store, meta)
+}
+
 func TestPrepare造出一个还没发布的活会话(t *testing.T) {
 	store, meta := seededStore(t, "prepared")
 

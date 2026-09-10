@@ -35,6 +35,10 @@ type harness struct {
 	runtime  *tools.Runtime
 	reminder *repeattoolreminder.Reminder
 	agent    *scope.Key
+	// agentScope 是 agent 那把钥匙所在的作用域。链的键是钥匙本身，而
+	// [repeattoolreminder.Reminder.InstallStepNotice] 只拿得到作用域，
+	// 所以两者必须同源，见 stepnotice_test.go。
+	agentScope *scope.Scope
 }
 
 // newHarness 造一个注册表，装上这一层，注册一批工具。
@@ -56,7 +60,17 @@ func newHarness(t *testing.T, config repeattoolreminder.Config, toolNames ...str
 			t.Fatalf("注册 %q 失败：%v", name, err)
 		}
 	}
-	return &harness{runtime: runtime, reminder: reminder, agent: scope.NewKey("agent")}
+	agentScope, err := scope.New(scope.NewKey("agent"), scope.Options{})
+	if err != nil {
+		t.Fatalf("造 agent 作用域失败：%v", err)
+	}
+	t.Cleanup(func() { _ = agentScope.Dispose(context.Background()) })
+	return &harness{
+		runtime:    runtime,
+		reminder:   reminder,
+		agent:      agentScope.Key(),
+		agentScope: agentScope,
+	}
 }
 
 // anyArgsTool 造一个收任意参数、回一句 ok 的工具。

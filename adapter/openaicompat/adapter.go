@@ -76,6 +76,17 @@ type AdapterOptions struct {
 	Extensions *ExtensionRegistry
 	// Identity 是每次请求都要带上的产品身份；零值表示 [llm.DefaultAppIdentity]。
 	Identity llm.AppIdentity
+	// WrapTransport 在每条路由的 HTTP 客户端成形之后包一层它自己的传输层；
+	// nil 表示不包。
+	//
+	// 新增: DSH 那边整个传输层归 pi-ai 所有，宿主碰不到，所以没有这个钩子。这边
+	// 自己造客户端（见 [newHTTPClient]），造完就封死在包内部——而线上原文只在这一
+	// 层里出现过：请求体被 SDK 序列化之后、响应体被解析成事件之前。宿主要留审计
+	// 底本、要打点、要注入 trace header，都只有这一个位置够得着。
+	//
+	// 每条路由各包一次，在 [Adapter.current] 重建快照时调用，不在请求路径上。
+	// 包出来的那一层要自己保证并发安全——一条路由的客户端会被多个会话同时用。
+	WrapTransport func(http.RoundTripper) http.RoundTripper
 }
 
 // Adapter 是这条协议上的多提供方适配器。每次操作都重读一遍当下的路由表，
@@ -148,7 +159,7 @@ func (a *Adapter) current() *snapshot {
 	}
 	services := make(map[string]openai.ChatCompletionService, profiles.Len())
 	profiles.All(func(provider string, profile ResolvedProviderProfile) bool {
-		services[provider] = newChatService(profile, a.options.Identity)
+		services[provider] = newChatService(profile, a.options.Identity, a.options.WrapTransport)
 		return true
 	})
 	a.cached = &snapshot{profiles: profiles, services: services}
@@ -169,9 +180,9 @@ func (a *Adapter) current() *snapshot {
 // NewClient 是唯一干净的做法。
 //
 // 代价是也拿不到 openai-go 自己那个默认 http.Client，所以下面自己造一个。
-func newChatService(profile ResolvedProviderProfile, identity llm.AppIdentity) openai.ChatCompletionService {
+func newChatService(profile ResolvedProviderProfile, identity llm.AppIdentity, wrap func(http.RoundTripper) http.RoundTripper) openai.ChatCompletionService {
 	options := []option.RequestOption{
-		option.WithHTTPClient(newHTTPClient(profile.StreamIdleTimeout)),
+		option.WithHTTPClient(newHTTPClient(profile.StreamIdleTimeout, wrap)),
 		// 端点只能来自这条路由。不铺任何默认 baseURL，是为了让一条配错了的路由
 		// 连不上任何东西，而不是安安静静地连上 api.openai.com。
 		option.WithBaseURL(profile.BaseURL),
@@ -205,14 +216,20 @@ func newChatService(profile ResolvedProviderProfile, identity llm.AppIdentity) o
 // http.DefaultTransport 被别人包过（比如 otelhttp）时克隆不了，那就原样用它、
 // 跳过这条超时：把追踪链路拆掉的代价比这条超时更大。这一支照录 openai-go 自己
 // 的取舍（default_http_client.go:24-31）。
-func newHTTPClient(responseHeaderTimeout time.Duration) *http.Client {
-	transport, cloneable := http.DefaultTransport.(*http.Transport)
-	if !cloneable {
-		return &http.Client{Transport: http.DefaultTransport}
+//
+// wrap 是 [AdapterOptions.WrapTransport]，在最后一步包上去——包的是这条路由已经
+// 调好超时的那个传输层，所以宿主那一层看得见的正是真正发出去和收回来的字节。
+func newHTTPClient(responseHeaderTimeout time.Duration, wrap func(http.RoundTripper) http.RoundTripper) *http.Client {
+	var transport http.RoundTripper = http.DefaultTransport
+	if clonable, ok := http.DefaultTransport.(*http.Transport); ok {
+		clone := clonable.Clone()
+		clone.ResponseHeaderTimeout = responseHeaderTimeout
+		transport = clone
 	}
-	clone := transport.Clone()
-	clone.ResponseHeaderTimeout = responseHeaderTimeout
-	return &http.Client{Transport: clone}
+	if wrap != nil {
+		transport = wrap(transport)
+	}
+	return &http.Client{Transport: transport}
 }
 
 // requestHeaders 把部署方写的那些头和归属头合起来，重名时归属头赢。

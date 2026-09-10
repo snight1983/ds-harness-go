@@ -308,6 +308,66 @@ func (c *Coordinator) adopt(ctx context.Context, id sessionlog.SessionID) (*sess
 	}
 }
 
+// Erase 把这个身份的存档整个删掉，并把它从册子上划走。
+//
+// 新增: 上游没有这条操作，理由和取舍见 [ErasingBackend]。
+//
+// 三道拦，次序是要紧的：
+//
+//  1. 后端删不删得动——删不动就当场报 [ErrEraseUnsupported]，不假装删过。
+//  2. 这个身份上正在跑的退场先等完——退场自己也要占这把串行锁，赶在它前面
+//     删掉存档，那趟退场最后那次刷盘会把事件写回一个刚被删掉的身份上。
+//  3. 准备池里有人独占着这一份就拒——那份预留手上攥着一个还没发布的会话，
+//     它一发布就会照着自己的游标往下写。
+//
+// 删掉之后这个身份就是全新的：同一个 id 重新建得起来。
+func (c *Coordinator) Erase(ctx context.Context, id sessionlog.SessionID) error {
+	eraser, ok := Erasable(c.backend)
+	if !ok {
+		return fmt.Errorf("%w：后端 %q 没有这条能力", ErrEraseUnsupported, c.backend.Name())
+	}
+	if err := c.waitForRetirement(ctx, id); err != nil {
+		return err
+	}
+	return c.serialize(ctx, id, func() error { return c.eraseCore(ctx, eraser, id) })
+}
+
+// eraseCore 是 [Coordinator.Erase] 排到队头之后做的事。
+func (c *Coordinator) eraseCore(ctx context.Context, eraser ErasingBackend, id sessionlog.SessionID) error {
+	if err := c.preparations.assertWritable(id); err != nil {
+		return err
+	}
+	tracked := c.stateOf(id)
+	if tracked != nil {
+		c.mutex.Lock()
+		owner := tracked.owner
+		c.mutex.Unlock()
+		if owner != nil {
+			return fmt.Errorf(
+				"%w：会话 %q 还绑在一个活会话上，先让它退场再删", ErrSessionLive, string(id))
+		}
+	}
+
+	err := eraser.Erase(ctx, id)
+	switch {
+	case err == nil:
+	case isNotFound(err) && tracked != nil:
+		// 一个只登记过、还没落地的身份：介质上本来就没有它，划掉册子上那条
+		// 就是这次删除的全部。这不是「没找到」——调用方要删的那个东西确实
+		// 存在过，只是它还没来得及落盘。
+	default:
+		return err
+	}
+
+	c.preparations.invalidate(id)
+	c.mutex.Lock()
+	if c.states[id] == tracked {
+		delete(c.states, id)
+	}
+	c.mutex.Unlock()
+	return nil
+}
+
 // ReadFrom 读出这段存档里 seq 从 fromSeq 起的那些事件，不改动任何东西。
 //
 // 源: packages/session/session-persistence/src/coordinator.ts:832-838

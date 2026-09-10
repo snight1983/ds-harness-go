@@ -184,6 +184,33 @@ type TrimmingBackend interface {
 	TrimBefore(ctx context.Context, id sessionlog.SessionID, beforeSeq int) error
 }
 
+// ErasingBackend 是一个能把一份存档整个删掉的后端。
+//
+// 新增: 上游没有这道缝，它的会话日志建了就永远在。删除是使用方那一侧真实存在
+// 的动作——人在会话列表上点「删掉这一条」——而它落到存储上只有一种说法：
+// 这个身份连同它的全部事件从介质上消失。
+//
+// 它**不是** [TrimmingBackend] 的一个特例。弹掉之后那份存档还在，它答得出
+// 「下一条写在哪儿」，读的一侧靠 [StoredPrefix.BaseSeq] 认出前面那截没了；
+// 删掉之后这个身份就不存在了，再问它得到的是 [ErrSessionNotFound]。
+// 拿「弹到末尾」去顶删除，会造出一份空存档——而一份空存档在
+// [Backend.LoadStored] 眼里是一个合法的、还能接着写的会话。
+//
+// 实现不了的后端整条不实现，[Coordinator.Erase] 那时报 [ErrEraseUnsupported]。
+type ErasingBackend interface {
+	Backend
+
+	// Erase 把这个会话的头和它全部的事件从介质上删掉。
+	//
+	// 删完这个身份必须真的不在了：紧接着的一次 [Backend.LoadStored] 要返回
+	// [ErrSessionNotFound]，而且同一个身份重新建得起来。
+	//
+	// 身份不存在时返回 [ErrSessionNotFound]，**不**当成幂等成功——调用方要靠
+	// 它把「删掉了一份」和「本来就没有」分开，而这两件事在使用方那一侧
+	// 对应的是两句不同的话。
+	Erase(ctx context.Context, id sessionlog.SessionID) error
+}
+
 // Seekable 问一个后端能不能按 seq 寻址。
 //
 // 新增: DSH 那边这三样是接口上的可选成员（`loadStoredFrom?`），调用点写
@@ -218,6 +245,12 @@ func Trimming(backend Backend) (TrimmingBackend, bool) {
 	return trimming, ok
 }
 
+// Erasable 问一个后端能不能把一份存档整个删掉。
+func Erasable(backend Backend) (ErasingBackend, bool) {
+	erasing, ok := backend.(ErasingBackend)
+	return erasing, ok
+}
+
 // LocateWith 用一个后端（如果它认路）定位一份头对应的存档。
 //
 // 新增: 「有位置就带上、没有就算了」这个动作在造 [FormatUnsupportedError]
@@ -230,11 +263,12 @@ func LocateWith(backend Backend, meta sessionlog.SessionHeader) (Location, bool)
 	return locating.Locate(meta)
 }
 
-// 这四行钉住「更宽的接口真的更宽」：哪天有人从 [Backend] 上删掉一个方法、
-// 或者把四个可选接口之一改得不再包含它，这里当场编译不过。
+// 这五行钉住「更宽的接口真的更宽」：哪天有人从 [Backend] 上删掉一个方法、
+// 或者把五个可选接口之一改得不再包含它，这里当场编译不过。
 var (
 	_ Backend = SeekableBackend(nil)
 	_ Backend = LocatingBackend(nil)
 	_ Backend = ClosableBackend(nil)
 	_ Backend = TrimmingBackend(nil)
+	_ Backend = ErasingBackend(nil)
 )

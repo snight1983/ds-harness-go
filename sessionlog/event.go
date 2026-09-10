@@ -41,7 +41,16 @@ const (
 	// （文件变更通知、技能内容、定时通知……）、以及进入的目标续跑轮次。
 	// 三种都把自己的 content 原样投影出去，靠 source 分辨彼此。
 	EventUserMessage EventType = "user/message"
-	// EventAssistantChunk 是一个原始流式分块——留着做 token 级的回放保真。
+	// EventAssistantChunk 是一个原始流式分块。
+	//
+	// 新增: 上游把每一个分块都追加进日志。本仓库不：**带内容的增量只有一个步骤里
+	// 的第一条进日志**（它是「模型开始出字了」这个时刻的唯一载体），其余的走
+	// [github.com/snight1983/ds-harness-go/harness/session.StreamObserver] 这条现场
+	// 广播，不占 seq 也不落盘。不带内容的分块（块的起止、用量、收尾）照常进日志。
+	// 理由和判据在 StreamObserver 上。
+	//
+	// 所以一段本仓库产出的日志里，这个类型是稀疏的；[PackChunkRuns] 那条压缩路径
+	// 面向的是外部录下来的、每一块都在的日志。
 	EventAssistantChunk EventType = "assistant/chunk"
 	// EventAssistantMessage 是一个步骤装配好的助手消息，派生历史用的就是它。
 	//

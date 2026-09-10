@@ -626,7 +626,7 @@ flowchart TD
 | `fs/` | 执行世界文件接口、路径与策略 |
 | `adapter/objectstore/` | 对象存储文件实现 |
 | `attachment/` | 图片准入、保存和请求表示 |
-| `adapter/imagestore/` | 建在文件系统接缝上的内容寻址图片实现 |
+| `adapter/imagestore/` | 内容寻址的图片实现，介质只要读写两条路径的四个原语 |
 | `credentials/` | 凭据 Provider、记录和变化通知 |
 
 ## 深入阅读

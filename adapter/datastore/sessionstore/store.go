@@ -151,6 +151,15 @@ func (s *Store) List(ctx context.Context) ([]sessionlog.SessionHeader, error) {
 	return s.coordinator.List(ctx)
 }
 
+// Erase 把一个会话的存档整个删掉，并把这个身份从册子上划走。
+//
+// 它**不在** [persistence.Store] 上：删除是一条**可选**能力
+// （[persistence.ErasingBackend]），塞进那道人人都要实现的服务面，等于逼一个
+// 只能追加的顺序介质写一个只会报错的方法。
+func (s *Store) Erase(ctx context.Context, id sessionlog.SessionID) error {
+	return s.coordinator.Erase(ctx, id)
+}
+
 // Prepare 从一份存档造一个还没发布的活会话。
 //
 // 它**不在** [persistence.Store] 上，理由写在那个接口的末尾：它要一张活会话表，

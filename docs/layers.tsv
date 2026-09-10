@@ -31,6 +31,7 @@ feature/goal	feature
 feature/goal/goalcommand	feature
 feature/goal/goalrounddriver	feature
 feature/goal/goaltool	feature
+feature/guard/repeattoolcap	feature
 feature/guard/repeattoolreminder	feature
 feature/guard/timeoutpolicy	feature
 feature/interaction/askuser	feature

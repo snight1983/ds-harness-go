@@ -151,6 +151,31 @@ func New(ctx context.Context, deps Deps, owner *scope.Scope, config Config) (*Ag
 		return fail(fmt.Errorf("harness/agentloop: 登记 agent 造法失败：%w", err))
 	}
 
+	// 把工具运行时接到系统提示词的工具位上。
+	//
+	// 源: packages/core/tools/src/index.ts:825（DSH 在 Tools 的构造函数里接这一句）、
+	// packages/core/tools/src/index.ts:972-978（wireSchemas 的 native 那一支）
+	//
+	// 少了它，宿主装上去的工具**派发得动却报不出去**：派发那条路读的是 [Deps].Tools，
+	// 而发给模型的那份工具清单读的是系统提示词装出来的 Tools 字段，两者分头取值。
+	// 于是装配期一切正常、每次调用也都跑得通，只是模型从头到尾不知道有这些工具，
+	// 一次都不会调。
+	//
+	// 新增: DSH 那一句挂在 cordis 的 ctx 上，Tools 的构造函数顺着容器就够得着
+	// systemPrompt 服务。Go 里 tools 是契约包，够不着 harness 底下的注册表——本包
+	// 是唯一同时握着这两样的地方，所以这一句落在这里。非 native 那两种模式本仓库
+	// 没有，所以只取 native 那一支。
+	if err := keep(deps.SystemPrompt.Tools(ctx, owner, func(
+		_ context.Context, assemble systemprompt.AssembleContext,
+	) (systemprompt.ToolProviderResult, error) {
+		return systemprompt.ToolProviderResult{
+			Schemas:    deps.Tools.Schemas(assemble.Scope),
+			KnownNames: deps.Tools.KnownNames(assemble.Scope),
+		}, nil
+	})); err != nil {
+		return fail(fmt.Errorf("harness/agentloop: 登记系统提示词工具清单失败：%w", err))
+	}
+
 	// 新增: DSH 在这里还登记第三个变量 `cwd`，把宿主机工作目录摆给模型看。本仓库
 	// 没有这一项：服务端没有工作目录（见 [sessionlog.SessionHeader.WorkspaceID]），
 	// 告诉模型「你的工作目录是 /x」是一句谎话——它会照着去拼路径、去猜相对位置，

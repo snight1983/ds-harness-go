@@ -500,6 +500,43 @@ func (u *LogUnit) TrimBefore(ctx context.Context, name string, beforeSeq int64) 
 	return nil
 }
 
+// DeleteStream 把一条流连同它全部的条目删掉。
+//
+// 新增: [LogUnit.TrimBefore] 收缩的是一条**还在**的流，删掉整条是另一件事——
+// 收缩之后那条流仍然答得出「下一条写在哪儿」，删掉之后它就不存在了，
+// 再写要重新建。两者共用一句 DELETE 会让「弹到空」和「删掉」分不出来。
+//
+// 两句删在同一个事务里：外键上挂着 ON DELETE CASCADE，但那句级联在
+// 各方言上的开关不一样（SQLite 默认关着），所以条目自己删一遍，
+// 不把正确性押在一个由连接串决定的设置上。
+//
+// 流不在时返回 [ErrStreamNotFound]，**不**当成幂等成功：调用方要靠它把
+// 「删掉了一份」和「本来就没有」分开。
+func (u *LogUnit) DeleteStream(ctx context.Context, name string) error {
+	if err := u.check(); err != nil {
+		return err
+	}
+	return u.medium.inTx(ctx, nil, func(tx *sql.Tx) error {
+		if _, err := u.medium.exec(ctx, tx,
+			`DELETE FROM `+u.entries+` WHERE stream = ?`, name); err != nil {
+			return fmt.Errorf("datastore: 删单元 %q 的流 %q 的条目失败：%w", u.spec.Name, name, err)
+		}
+		result, err := u.medium.exec(ctx, tx,
+			`DELETE FROM `+u.streams+` WHERE name = ?`, name)
+		if err != nil {
+			return fmt.Errorf("datastore: 删单元 %q 的流 %q 失败：%w", u.spec.Name, name, err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("datastore: 删单元 %q 的流 %q 失败：%w", u.spec.Name, name, err)
+		}
+		if affected == 0 {
+			return failf(ErrStreamNotFound, "单元 %q 里没有流 %q", u.spec.Name, name)
+		}
+		return nil
+	})
+}
+
 // Close 释放这个单元，并把单元名放回去，之后同名单元才重新开得起来。**幂等**。
 //
 // 这里不关连接池：连接池是整份介质的，见 [Config.DB]。

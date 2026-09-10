@@ -8,12 +8,16 @@
 package openaicompat
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"iter"
 	"net/http"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -126,6 +130,17 @@ func streamText(chunks []llm.StreamChunk) string {
 		}
 	}
 	return text.String()
+}
+
+// textDeltaCount 数一串块里有几个正文增量。
+func textDeltaCount(chunks []llm.StreamChunk) int {
+	var count int
+	for _, chunk := range chunks {
+		if _, isText := chunk.(llm.TextDeltaChunk); isText {
+			count++
+		}
+	}
+	return count
 }
 
 // TestNewAdapterRejectsMissingHooks 验少了必填钩子在造的时候就被拒。
@@ -635,7 +650,7 @@ func TestNewChatServiceIgnoresProcessEnvironment(t *testing.T) {
 // 的时候才计时，建连这一段它管不着——不设这条超时的话，一个收下连接却永远不回话
 // 的服务端会把这次请求永远挂住。
 func TestNewHTTPClientTakesTheRouteIdleTimeout(t *testing.T) {
-	client := newHTTPClient(1234 * time.Millisecond)
+	client := newHTTPClient(1234*time.Millisecond, nil)
 	transport, cloned := client.Transport.(*http.Transport)
 	if !cloned {
 		t.Skip("这次跑的 http.DefaultTransport 被别人包过，这条超时按设计跳过")
@@ -645,6 +660,155 @@ func TestNewHTTPClientTakesTheRouteIdleTimeout(t *testing.T) {
 	}
 	if transport == http.DefaultTransport {
 		t.Error("改的是全局那个 transport")
+	}
+}
+
+// recordingTransport 是一层把线上原文留下来的传输层，只在用例里用。
+type recordingTransport struct {
+	inner    http.RoundTripper
+	mutex    sync.Mutex
+	requests []string
+	bodies   []string
+}
+
+func (r *recordingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	var sent []byte
+	if request.Body != nil {
+		payload, err := io.ReadAll(request.Body)
+		if err != nil {
+			return nil, err
+		}
+		_ = request.Body.Close()
+		sent = payload
+		request.Body = io.NopCloser(bytes.NewReader(payload))
+	}
+	response, err := r.inner.RoundTrip(request)
+	if err != nil {
+		return nil, err
+	}
+	// 响应体是一条还没读完的 SSE 流，整份读掉会把流式变成一次性等待。所以这里
+	// 换成一个边转发边留底的读法，等调用方自己读到哪儿就录到哪儿。
+	tap := &bodyTap{inner: response.Body, owner: r}
+	response.Body = tap
+	r.mutex.Lock()
+	r.requests = append(r.requests, string(sent))
+	r.mutex.Unlock()
+	return response, nil
+}
+
+func (r *recordingTransport) record(body string) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	r.bodies = append(r.bodies, body)
+}
+
+func (r *recordingTransport) sentRequests() []string {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return slices.Clone(r.requests)
+}
+
+func (r *recordingTransport) receivedBodies() []string {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	return slices.Clone(r.bodies)
+}
+
+// bodyTap 边转发响应体边留底，读完（或者被提前关掉）时把攒下来的交回去。
+type bodyTap struct {
+	inner  io.ReadCloser
+	owner  *recordingTransport
+	seen   bytes.Buffer
+	closed bool
+}
+
+func (b *bodyTap) Read(buffer []byte) (int, error) {
+	count, err := b.inner.Read(buffer)
+	b.seen.Write(buffer[:count])
+	return count, err
+}
+
+func (b *bodyTap) Close() error {
+	if !b.closed {
+		b.closed = true
+		b.owner.record(b.seen.String())
+	}
+	return b.inner.Close()
+}
+
+// TestWrapTransportSeesTheWireBytes 验包上去的那一层看得见真正发出去和收回来的字节。
+//
+// 这个钩子存在的唯一理由就是让宿主留得下审计底本，所以要验的不是「它被调过」，
+// 而是「它手里那份就是线上原文」：请求体里有这次的模型和消息，响应体里有那几个
+// SSE 事件。同时验它不打断流式——正文照样一块块出来，不是攒完一次性给。
+func TestWrapTransportSeesTheWireBytes(t *testing.T) {
+	server := startMock(t, mockserver.Options{
+		Sequence:    []mockserver.Behavior{mockserver.BehaviorSuccess},
+		SuccessText: "hello there",
+		ChunkSize:   4,
+	})
+	tap := &recordingTransport{}
+	adapter := newAdapter(t, fixed(profilesOf(t, "acme", routeTo(server))), func(options *AdapterOptions) {
+		options.WrapTransport = func(inner http.RoundTripper) http.RoundTripper {
+			tap.inner = inner
+			return tap
+		}
+	})
+
+	sequence, err := adapter.Stream(t.Context(), request("acme"))
+	if err != nil {
+		t.Fatalf("派发失败：%v", err)
+	}
+	chunks, err := drain(sequence)
+	if err != nil {
+		t.Fatalf("这条流本该读完：%v", err)
+	}
+	if text := streamText(chunks); text != "hello there" {
+		t.Errorf("包了一层之后正文对不上：%q", text)
+	}
+	if deltas := textDeltaCount(chunks); deltas < 2 {
+		t.Errorf("包了一层把流式压成了一次性给：只有 %d 个正文增量", deltas)
+	}
+
+	requests := tap.sentRequests()
+	if len(requests) != 1 {
+		t.Fatalf("钩子该看到正好一次请求：看到 %d 次", len(requests))
+	}
+	if !strings.Contains(requests[0], `"model":"m"`) || !strings.Contains(requests[0], "hi") {
+		t.Errorf("请求原文不是这次真正发出去的那份：%s", requests[0])
+	}
+
+	bodies := tap.receivedBodies()
+	if len(bodies) != 1 {
+		t.Fatalf("钩子该看到正好一份响应体：看到 %d 份", len(bodies))
+	}
+	// 留底的是 SSE 原文，不是解析结果：正文按 ChunkSize 切在好几个 data: 事件里，
+	// 收尾那条 [DONE] 也在。拿它去对整句 "hello there" 是对不上的，这正是「原文」
+	// 的意思。
+	if !strings.Contains(bodies[0], `"content":"hell"`) || !strings.Contains(bodies[0], "data: [DONE]") {
+		t.Errorf("响应原文不是这次真正收回来的那份：%s", bodies[0])
+	}
+}
+
+// TestWrapTransportKeepsTheRouteIdleTimeout 验包的是已经调好超时的那一层，不是裸的。
+//
+// 顺序反了的话，宿主包出来的传输层底下会是一个没有响应头时限的 transport，
+// 一台收下连接却不回话的服务端就能把请求永远挂住——而这条超时本来是设过的。
+func TestWrapTransportKeepsTheRouteIdleTimeout(t *testing.T) {
+	var wrapped http.RoundTripper
+	client := newHTTPClient(1234*time.Millisecond, func(inner http.RoundTripper) http.RoundTripper {
+		wrapped = inner
+		return inner
+	})
+	if client.Transport != wrapped {
+		t.Error("钩子交出来的那一层没被用上")
+	}
+	transport, cloned := wrapped.(*http.Transport)
+	if !cloned {
+		t.Skip("这次跑的 http.DefaultTransport 被别人包过，这条超时按设计跳过")
+	}
+	if transport.ResponseHeaderTimeout != 1234*time.Millisecond {
+		t.Errorf("包到的是没调过超时的那一层：%v", transport.ResponseHeaderTimeout)
 	}
 }
 

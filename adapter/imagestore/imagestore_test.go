@@ -568,14 +568,6 @@ func TestSaveImagesRefusesTheWholeBatchBeforeWritingAnything(t *testing.T) {
 	}
 }
 
-func TestThisStoreCannotDeriveRequestImages(t *testing.T) {
-	store, _ := newStore(t)
-	_, err := attachment.ReadImageRequest(
-		context.Background(), store, attachment.ImageRef{}, attachment.RequestPolicy{},
-	)
-	requireCode(t, err, attachment.CodeAttachmentProjectionUnsupported)
-}
-
 func TestCancellationIsHonouredOnEveryMethodThatTakesIt(t *testing.T) {
 	store, _ := newStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -590,5 +582,10 @@ func TestCancellationIsHonouredOnEveryMethodThatTakesIt(t *testing.T) {
 	}
 	if _, err := store.ReadImage(ctx, attachment.ImageRef{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("读回要认取消，拿到 %v", err)
+	}
+	// 取消要排在「预算不合法」前面：调用方已经走了的时候，那份策略对不对不再是它要知道的事。
+	_, err := store.ReadImageRequest(ctx, attachment.ImageRef{}, attachment.RequestPolicy{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("派生请求图要认取消，拿到 %v", err)
 	}
 }

@@ -1643,39 +1643,77 @@ func TestARouteWithoutAProviderOrModelFailsTheTurn(t *testing.T) {
 
 // ---- 取消 ----
 
-// TestChunksAreLoggedBeforeTheAssemblerSeesThem 钉住定稿的那条助手消息指回它是从
-// 哪几条分块攒出来的。
+// TestContentDeltasGoLiveOnlyAfterTheFirstOne 钉住带内容的增量不进日志。
 //
 // 源: packages/core/agent-loop/src/agent.ts:345-353
 //
-// 这条回指是「日志是权威的」那句话的可验证形式：没有它，一条助手消息和产生它的
-// 那串分块在日志里是两堆互不相干的事件，谁也证明不了模型真的吐过这些字。
-func TestChunksAreLoggedBeforeTheAssemblerSeesThem(t *testing.T) {
+// 上游把每一个分块都追加进日志，本仓库不——理由在
+// [github.com/snight1983/ds-harness-go/harness/session.StreamObserver] 上。这条
+// 用例验的是那道分法真的成立：日志里带内容的增量恰好一条（首字那个时刻），
+// 其余的一条不落地全走现场广播，而两边加起来仍然是模型吐出来的全部。
+func TestContentDeltasGoLiveOnlyAfterTheFirstOne(t *testing.T) {
 	t.Parallel()
 
 	world := newLoopWorld(t, loopSetup{})
-	world.setScript(textReply("一句话"))
+
+	var live []sessionlog.Event
+	var mutex sync.Mutex
+	detach, err := world.store.OnStream(context.Background(), world.owner,
+		func(_ *session.Session, event sessionlog.Event) {
+			mutex.Lock()
+			defer mutex.Unlock()
+			live = append(live, event)
+		})
+	if err != nil {
+		t.Fatalf("挂现场观察者失败：%v", err)
+	}
+	t.Cleanup(func() { _ = detach(context.Background()) })
+
+	world.setScript([]llm.StreamChunk{
+		llm.TextDeltaChunk{Index: 0, Text: "一"},
+		llm.TextDeltaChunk{Index: 0, Text: "句"},
+		llm.TextDeltaChunk{Index: 0, Text: "话"},
+		llm.FinishChunk{Reason: llm.StopFinish{}},
+	})
 	world.run(t, "在么")
 
-	var chunkSeqs []int
-	var message sessionlog.Event
+	var loggedDeltas, loggedOther int
 	for _, event := range world.live.Events() {
-		switch event.Type {
-		case sessionlog.EventAssistantChunk:
-			chunkSeqs = append(chunkSeqs, event.Seq)
-		case sessionlog.EventAssistantMessage:
-			message = event
+		if event.Type != sessionlog.EventAssistantChunk {
+			continue
+		}
+		var data sessionlog.AssistantChunkData
+		if err := json.Unmarshal(event.Data, &data); err != nil {
+			t.Fatalf("读分块失败：%v", err)
+		}
+		if llm.IsTokenDelta(data.Chunk) {
+			loggedDeltas++
+		} else {
+			loggedOther++
 		}
 	}
-	if len(chunkSeqs) == 0 {
-		t.Fatal("该记下那些分块")
+	if loggedDeltas != 1 {
+		t.Errorf("日志里带内容的增量该恰好一条，实际 %d 条", loggedDeltas)
 	}
-	if len(message.SourceEventSeqs) != len(chunkSeqs) {
-		t.Fatalf("回指该盖住每一条分块：想要 %v，实际 %v", chunkSeqs, message.SourceEventSeqs)
+	if loggedOther == 0 {
+		t.Error("块的起止和收尾那几条该照常进日志")
 	}
-	for index, seq := range chunkSeqs {
-		if message.SourceEventSeqs[index] != seq {
-			t.Fatalf("回指对不上：想要 %v，实际 %v", chunkSeqs, message.SourceEventSeqs)
+
+	mutex.Lock()
+	defer mutex.Unlock()
+	if len(live) == 0 {
+		t.Fatal("剩下那些增量该发给现场观察者")
+	}
+	for _, event := range live {
+		if event.Seq != session.LiveSeq {
+			t.Errorf("现场增量不占日志位置，Seq 该是 %d，实际 %d", session.LiveSeq, event.Seq)
+		}
+		var data sessionlog.AssistantChunkData
+		if err := json.Unmarshal(event.Data, &data); err != nil {
+			t.Fatalf("读现场分块失败：%v", err)
+		}
+		if !llm.IsTokenDelta(data.Chunk) {
+			t.Error("不带内容的分块不该走现场广播，它们进日志")
 		}
 	}
 }

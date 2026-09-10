@@ -52,6 +52,9 @@
   - [LLM 测试与回放](modules/llm-testing.md)
   - [移植与文档门禁工具](modules/migration-tools.md)
 
+- 验证
+  - [用本运行时复刻 agent-lab](validation/agent-lab-replication.md)
+
 - 设计与移植
   - [详细设计](DESIGN.md)
   - [会话日志上限](session-log-limit.md)

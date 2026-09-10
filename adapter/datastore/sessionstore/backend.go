@@ -72,12 +72,13 @@ type Backend struct {
 	logger *slog.Logger
 }
 
-// 这四行钉住这个后端真的填满了那四道缝。
+// 这五行钉住这个后端真的填满了那五道缝。
 var (
 	_ persistence.Backend         = (*Backend)(nil)
 	_ persistence.SeekableBackend = (*Backend)(nil)
 	_ persistence.ClosableBackend = (*Backend)(nil)
 	_ persistence.TrimmingBackend = (*Backend)(nil)
+	_ persistence.ErasingBackend  = (*Backend)(nil)
 )
 
 // NewBackend 在一份介质上打开这个后端。
@@ -373,4 +374,12 @@ func (b *Backend) TrimBefore(ctx context.Context, id sessionlog.SessionID, befor
 			"%w：TrimBefore 的 beforeSeq 不能是负数（给的是 %d）", persistence.ErrMalformedSeq, beforeSeq)
 	}
 	return notFound(b.log.TrimBefore(ctx, string(id), int64(beforeSeq)))
+}
+
+// Erase 把一个会话的头和它全部的事件从介质上删掉。
+//
+// 新增: 一条流连同条目在同一个事务里删完（见 [datastore.LogUnit.DeleteStream]），
+// 所以删不出一份「头还在、事件没了」的半截存档。
+func (b *Backend) Erase(ctx context.Context, id sessionlog.SessionID) error {
+	return notFound(b.log.DeleteStream(ctx, string(id)))
 }

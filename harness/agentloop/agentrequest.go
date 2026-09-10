@@ -251,3 +251,19 @@ func (a *ReactLoopAgent) appendEvent(
 	}
 	return event, nil
 }
+
+// publishLiveEvent 把一份负载排成字节，只发给现场看着的那一方，不进日志。
+//
+// 新增: 和 [ReactLoopAgent.appendEvent] 一对，理由写在
+// [github.com/snight1983/ds-harness-go/harness/session.StreamObserver] 上。
+func (a *ReactLoopAgent) publishLiveEvent(data sessionlog.EventData) error {
+	eventType := data.EventType()
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("harness/agentloop: 排 %s 负载失败：%w", eventType, err)
+	}
+	if err := a.session.PublishLive(sessionlog.Event{Type: eventType, Data: payload}); err != nil {
+		return fmt.Errorf("harness/agentloop: 发布 %s 失败：%w", eventType, err)
+	}
+	return nil
+}

@@ -54,10 +54,40 @@ type DisposedObserver func(session *Session)
 // [Session.Events] 那一条逐字相同，理由也相同：Go 里没有 deepFreeze，
 // 本仓库每一处 json.RawMessage 都是这么约定的。
 //
-// 这里**不**替观察者复制一份。这是流式的热路径——一次响应每个 token 增量就是
-// 一条 assistant/chunk，而挂在这条广播上的观察者有七八个，逐个复制等于把每一份
-// 负载复制七八遍。留着它们共享一份，是拿一条写在文档里的约束换掉这份开销。
+// 这里**不**替观察者复制一份。挂在这条广播上的观察者有七八个，逐个复制等于把每
+// 一份负载复制七八遍。留着它们共享一份，是拿一条写在文档里的约束换掉这份开销。
 type EventObserver func(session *Session, event sessionlog.Event)
+
+// StreamObserver 是只给现场看的那条广播。
+//
+// 新增: DSH 没有这条边——它把每一个 token 增量都当成一条 assistant/chunk 追加进
+// 日志，于是那些增量跟着日志一起落盘。在一次真实会话上量下来，assistant/chunk
+// 占了存储字节的 89%，而它们的内容在同一步骤那条 assistant/message 里已经完整地
+// 有了一份：日志存了两遍同一句话，其中一遍还是拆成一两个字一条存的。
+//
+// 所以增量在本仓库分成两半：**带内容的那些只走这条广播**，不进日志、不占 seq、
+// 不落盘；不带内容的那些（块的起止、用量、收尾）照旧走 [EventObserver]，因为
+// 它们各自携带别处没有的事实（比如一次失败的尝试也照样计费）。判据是
+// [github.com/snight1983/ds-harness-go/llm.IsTokenDelta]，写在
+// [github.com/snight1983/ds-harness-go/harness/agentloop] 那一侧。
+//
+// 它是**另一条**广播而不是 [EventObserver] 上多一个标志位：挂在事件广播上的有
+// 持久化、遥测、状态缓存这些「日志说什么就是什么」的消费方，把一条不进日志的
+// 事件混进去，等于让它们各自记得判一次——漏判一处就是一份和重放对不上的状态。
+// 想要现场增量的（比如一条往浏览器推的 SSE）自己挂这一条。
+//
+// 递进来那条事件的 [github.com/snight1983/ds-harness-go/sessionlog.Event.Seq]
+// 恒为 [LiveSeq]：它没有日志位置，一个拿它当下标或者当续传游标的调用方要能当场
+// 认出来。只读的约束和 [EventObserver] 那条一样。
+type StreamObserver func(session *Session, event sessionlog.Event)
+
+// LiveSeq 是现场增量事件的 [github.com/snight1983/ds-harness-go/sessionlog.Event.Seq]。
+//
+// 新增: 取一个负数是因为日志里的 seq 恒为非负（见
+// [github.com/snight1983/ds-harness-go/sessionlog.Event.Seq]），所以它和任何一条
+// 真事件都不会撞上；给它一个名字是为了让消费方写 `event.Seq == session.LiveSeq`
+// 而不是写一个字面量 -1。
+const LiveSeq = -1
 
 // FlushObserver 是要等的耐久检查点。
 //
@@ -77,6 +107,7 @@ type storeLayer struct {
 	created  *scope.AnonymousEntries[CreatedObserver]
 	disposed *scope.AnonymousEntries[DisposedObserver]
 	events   *scope.AnonymousEntries[EventObserver]
+	stream   *scope.AnonymousEntries[StreamObserver]
 	flush    *scope.AnonymousEntries[FlushObserver]
 }
 
@@ -86,14 +117,15 @@ func newStoreLayer() *storeLayer {
 		created:  scope.NewAnonymousEntries[CreatedObserver](),
 		disposed: scope.NewAnonymousEntries[DisposedObserver](),
 		events:   scope.NewAnonymousEntries[EventObserver](),
+		stream:   scope.NewAnonymousEntries[StreamObserver](),
 		flush:    scope.NewAnonymousEntries[FlushObserver](),
 	}
 }
 
-// IsEmpty 表示这一层四张表全空了，[scope.Layers] 靠它回收空层。
+// IsEmpty 表示这一层五张表全空了，[scope.Layers] 靠它回收空层。
 func (l *storeLayer) IsEmpty() bool {
 	return l.created.IsEmpty() && l.disposed.IsEmpty() &&
-		l.events.IsEmpty() && l.flush.IsEmpty()
+		l.events.IsEmpty() && l.stream.IsEmpty() && l.flush.IsEmpty()
 }
 
 // entry 是一个会话在存储里那一份登记的全部可变状态。
@@ -249,6 +281,23 @@ func (s *Store) OnEvent(
 	return s.layers.Effect(ctx, owner, func(layer *storeLayer) (func(), error) {
 		return layer.events.Append(observer), nil
 	}, scope.EffectOptions{Label: "sessions.OnEvent()"})
+}
+
+// OnStream 登记一个现场增量观察者，返回撤销这次登记的函数。
+//
+// 新增: 这条广播 DSH 没有，理由写在 [StreamObserver] 上。登记落在哪一层的规矩和
+// 另外四个方法完全一样。
+func (s *Store) OnStream(
+	ctx context.Context,
+	owner *scope.Scope,
+	observer StreamObserver,
+) (func(context.Context) error, error) {
+	if observer == nil {
+		return nil, errors.New("harness/session: 现场增量观察者不能是 nil")
+	}
+	return s.layers.Effect(ctx, owner, func(layer *storeLayer) (func(), error) {
+		return layer.stream.Append(observer), nil
+	}, scope.EffectOptions{Label: "sessions.OnStream()"})
 }
 
 // OnFlush 登记一个耐久检查点观察者，返回撤销这次登记的函数。
@@ -749,6 +798,15 @@ func (s *Store) eventObservers(key *scope.Key) []EventObserver {
 	})
 }
 
+// streamObservers 取这个载体作用域上该收到现场增量的那些观察者。
+//
+// 和 [Store.eventObservers] 一样不拿存储的锁，理由也一样。
+func (s *Store) streamObservers(key *scope.Key) []StreamObserver {
+	return collectObservers(s, key, func(layer *storeLayer) *scope.AnonymousEntries[StreamObserver] {
+		return layer.stream
+	})
+}
+
 // collectObservers 把全局层和载体作用域父链上各层的同一张表叠成一份名单。
 //
 // 源: packages/core/session/src/index.ts:374-377（collectSessionCallbacks）
@@ -815,6 +873,25 @@ func (s *Store) callEventObserver(
 		if recovered := recover(); recovered != nil {
 			s.logger.Warn("harness/session: 追加观察者 panic 了",
 				"session", string(id), "seq", event.Seq, "panic", fmt.Sprint(recovered))
+		}
+	}()
+	observer(session, event)
+}
+
+// callStreamObserver 跑一个现场增量观察者，把它的 panic 兜成一条日志。
+//
+// 只记不报，和 [Store.callEventObserver] 同理，而且这里的理由更硬：这条广播上
+// 递出去的东西根本没有落进任何地方，一个观察者坏了不该让正在跑的那一轮回合停住。
+func (s *Store) callStreamObserver(
+	id sessionlog.SessionID,
+	observer StreamObserver,
+	session *Session,
+	event sessionlog.Event,
+) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			s.logger.Warn("harness/session: 现场增量观察者 panic 了",
+				"session", string(id), "type", string(event.Type), "panic", fmt.Sprint(recovered))
 		}
 	}()
 	observer(session, event)

@@ -28,12 +28,12 @@ const idPrefix = "sha256:"
 // 源: packages/attachment/attachment-local/src/store.ts:34
 const nameLimit = 255
 
-// Store 是建在 [fs.FileSystem] 上的内容寻址图片存储。
+// Store 是建在 [Files] 上的内容寻址图片存储。
 //
 // 零值不能用，从 [New] 拿。它是并发安全的：本身不持有任何可变状态，
 // 并发安全由那条文件系统接缝负责（[fs.CreateIfAbsent] 的不覆盖发布由后端保证）。
 type Store struct {
-	fs     fs.FileSystem
+	fs     Files
 	root   string
 	limits attachment.ImageLimits
 }

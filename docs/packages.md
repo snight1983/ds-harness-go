@@ -35,6 +35,7 @@
 | `github.com/snight1983/ds-harness-go/feature/goal/goalrounddriver` | [长期目标](modules/goal.md) |
 | `github.com/snight1983/ds-harness-go/feature/goal/goaltool` | [长期目标](modules/goal.md) |
 | `github.com/snight1983/ds-harness-go/feature/goal` | [长期目标](modules/goal.md) |
+| `github.com/snight1983/ds-harness-go/feature/guard/repeattoolcap` | [运行时 Guard](modules/guards.md) |
 | `github.com/snight1983/ds-harness-go/feature/guard/repeattoolreminder` | [运行时 Guard](modules/guards.md) |
 | `github.com/snight1983/ds-harness-go/feature/guard/timeoutpolicy` | [运行时 Guard](modules/guards.md) |
 | `github.com/snight1983/ds-harness-go/feature/interaction/askuser` | [用户交互](modules/interaction.md) |

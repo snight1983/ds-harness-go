@@ -11,3 +11,11 @@ cover.out
 /*.txt
 /tmp-*.sh
 /tmp_*.py
+
+# Local browser captures and ad hoc image inputs.
+/.playwright-mcp/
+/deck-fixed.png
+/layout-group-open.png
+/storyboard-card-check.png
+/img/image.png
+/img/image copy*.png

@@ -402,6 +402,60 @@ func (s *Session) Append(candidate sessionlog.Event) (sessionlog.Event, error) {
 	return event, nil
 }
 
+// PublishLive 把一条只给现场看的事件发给 [StreamObserver]，**不进日志**。
+//
+// 新增: DSH 没有这条路，理由写在 [StreamObserver] 上。
+//
+// candidate 上由调用方填的是 Type 和 Data；Seq 和 Time 由这里盖，所以它们必须是
+// 零值，填了就报错——和 [Session.Append] 那条一样，默默盖掉调用方填的值是最糟的
+// 处理。SurfaceOp 和 SourceEventSeqs 必须留空：那两样表达的是这条事件在日志里的
+// 位置和它盖掉了谁，而这条事件根本没有位置。
+//
+// 盖上去的 Seq 是 [LiveSeq]。交出去的那一条**不占日志位置**，所以它也不参与表面、
+// 不参与恢复、不会被任何一个投影看见。
+//
+// 会话还没公布（没进 [Store]）时它什么都不做，也不算错：那时候一个观察者都没有,
+// 而一条现场增量本来就是「有人正看着」才有意义。
+func (s *Session) PublishLive(candidate sessionlog.Event) error {
+	if candidate.Seq != 0 || candidate.Time != 0 {
+		return fmt.Errorf(
+			"%w: 事件 %q 的 Seq 与 Time 由会话盖上，发布现场增量时必须留成零值",
+			ErrInvalidAppend, candidate.Type,
+		)
+	}
+	if candidate.SurfaceOp != nil || candidate.SourceEventSeqs != nil {
+		return fmt.Errorf(
+			"%w: 事件 %q 不进日志，不能带 surfaceOp 或 sourceEventSeqs",
+			ErrInvalidAppend, candidate.Type,
+		)
+	}
+	if len(candidate.Data) > 0 && !json.Valid(candidate.Data) {
+		return fmt.Errorf(
+			"%w: session event %q carries non-JSON-serializable data",
+			ErrInvalidAppend, candidate.Type,
+		)
+	}
+
+	s.mutex.Lock()
+	attached := s.entry
+	event := candidate
+	event.Seq = LiveSeq
+	event.Time = s.now()
+	var observers []StreamObserver
+	if attached != nil {
+		observers = attached.store.streamObservers(attached.carrierKey)
+	}
+	s.mutex.Unlock()
+
+	if attached == nil {
+		return nil
+	}
+	for _, observer := range observers {
+		attached.store.callStreamObserver(attached.id, observer, s, event)
+	}
+	return nil
+}
+
 // commit 是 [Session.Append] 拿着锁的那一半：定序、验表面、进日志、收观察者。
 //
 // 源: packages/core/session/src/index.ts:625-647

@@ -14,6 +14,7 @@ import (
 	"sync"
 	"weak"
 
+	"github.com/snight1983/ds-harness-go/harness/agent"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/scope"
 	"github.com/snight1983/ds-harness-go/tools"
@@ -221,11 +222,43 @@ func (r *Reminder) Observe(exec tools.Execution) (llm.Message, bool) {
 	), true
 }
 
+// InstallStepNotice 把 [Reminder.NoticeStep] 接到 agent 循环每步之前那条瀑布上，
+// 返回撤销它的函数。
+//
+// 源: packages/guard/repeat-tool-reminder/src/index.ts:229-232
+//
+// 这条观察者只重置状态，不表态：它永远调 next，既不挂上下文也不否步骤。
+//
+// owner 的含义和 [Reminder.Install] 一样。两个安装函数是分开的，因为它们挂在
+// 两张不同的注册表上；只装其中一个也跑得动，只是少掉对应那半边的能力——只装
+// Install 的话，用户插话不再断链。
+func (r *Reminder) InstallStepNotice(
+	ctx context.Context,
+	agents *agent.Registry,
+	owner *scope.Scope,
+) (func(context.Context) error, error) {
+	if agents == nil {
+		return nil, errors.New("repeattoolreminder: 需要一张 agent 注册表")
+	}
+	observer := func(
+		ctx context.Context,
+		step agent.PreStep,
+		next func(context.Context) (agent.PreStepDecision, error),
+	) (agent.PreStepDecision, error) {
+		if step.Agent != nil {
+			r.NoticeStep(step.Agent.Scope().Key(), step.Messages)
+		}
+		return next(ctx)
+	}
+	return agents.OnPreStep(ctx, owner, observer)
+}
+
 // NoticeStep 是 agent 循环每走一步之前该调的那一下：用户插了话就把链断掉。
 //
 // 源: packages/guard/repeat-tool-reminder/src/index.ts:229-232
 //
 // 「什么算用户插话」这条判断留在本包，见包文档里那段说明。
+// 接线由 [Reminder.InstallStepNotice] 做，导出它是为了让这条规则能被单独测。
 func (r *Reminder) NoticeStep(agent *scope.Key, messages []llm.Message) {
 	if agent == nil {
 		return

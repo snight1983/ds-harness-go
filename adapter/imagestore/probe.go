@@ -8,6 +8,7 @@ package imagestore
 import (
 	"bytes"
 	"image"
+	"image/color"
 
 	// 这四个只为注册解码器，本文件不直接引用它们的标识符。
 	_ "image/gif"
@@ -37,6 +38,39 @@ type detected struct {
 	mediaType attachment.MediaType
 	width     int
 	height    int
+	hasAlpha  bool
+}
+
+// hasAlphaChannel 按解码器报的色彩模型判这段字节带不带 alpha 通道。
+//
+// 源: packages/attachment/attachment-local/src/image.ts:79（metadata.hasAlpha）
+//
+// 新增: sharp 直接把这件事报出来，Go 的 [image.DecodeConfig] 只报色彩模型，
+// 所以这里按模型反推。两边说的是同一句话——**容器里有没有 alpha 平面**，
+// 而不是「像素是不是恰好全不透明」：判前者只要文件头，判后者要把整张栅格扫一遍。
+//
+// 这张表是按本包认的那四种格式来的，不是一条通则：
+//
+//   - 带 alpha 的是 NRGBA / NRGBA64（PNG 的真彩加 alpha、灰度加 alpha，
+//     以及无损 WebP）、NYCbCrA（有损 WebP 带 alpha）、Alpha / Alpha16。
+//   - **RGBA 和 RGBA64 反而是不带的**：image/png 给不带 alpha 的真彩报的正是
+//     这两个模型（cbTC8 / cbTC16）。把它们算成带 alpha 的话，每一张普通 PNG
+//     都会走到那条为抠图准备的 PNG 阶梯上，白白多出好几倍字节。
+//   - 调色板格式（PNG 的 P 型、GIF）报的是调色板本身，翻一遍看有没有不满不透明的条目。
+func hasAlphaChannel(model color.Model) bool {
+	switch model {
+	case color.NRGBAModel, color.NRGBA64Model, color.NYCbCrAModel,
+		color.AlphaModel, color.Alpha16Model:
+		return true
+	}
+	if palette, ok := model.(color.Palette); ok {
+		for _, entry := range palette {
+			if _, _, _, alpha := entry.RGBA(); alpha != 0xffff {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // probe 只读文件头，不解像素。
@@ -62,7 +96,12 @@ func probe(data []byte) (detected, error) {
 			Message: "Unsupported or malformed image data.",
 		}
 	}
-	return detected{mediaType: mediaType, width: config.Width, height: config.Height}, nil
+	return detected{
+		mediaType: mediaType,
+		width:     config.Width,
+		height:    config.Height,
+		hasAlpha:  hasAlphaChannel(config.ColorModel),
+	}, nil
 }
 
 // decodeRaster 把栅格整个解出来，只为证明它解得开。

@@ -81,6 +81,9 @@ func Test这个后端填满的正好是它该填的那几道缝(t *testing.T) {
 	if _, ok := persistence.Trimming(backend); !ok {
 		t.Error("按 seq 弹掉最老那一段是下面那一层的一句话，该满足 TrimmingBackend")
 	}
+	if _, ok := persistence.Erasable(backend); !ok {
+		t.Error("删掉一条流连同它的条目是下面那一层的一个事务，该满足 ErasingBackend")
+	}
 	if _, ok := persistence.Locating(backend); ok {
 		t.Error("所有会话装在同一份介质里，不该满足 LocatingBackend")
 	}
@@ -595,6 +598,85 @@ func Test弹一个不存在的会话报会话不存在(t *testing.T) {
 
 	if err := backend.TrimBefore(t.Context(), "nobody", 1); !errors.Is(err, persistence.ErrSessionNotFound) {
 		t.Fatalf("该报 ErrSessionNotFound，实际 %v", err)
+	}
+}
+
+// 弹到空之后那份存档还在、还答得出「下一条写在哪儿」；删掉之后这个身份就不在了。
+// 拿「弹到末尾」去顶删除，会留下一份在 LoadStored 眼里合法的、还能接着写的空会话。
+func Test删掉存档和弹到空不是一回事(t *testing.T) {
+	backend, meta := seededBackend(t, "erased", 0)
+
+	if err := backend.Erase(t.Context(), meta.ID); err != nil {
+		t.Fatalf("删存档失败：%v", err)
+	}
+
+	if _, err := backend.LoadStored(t.Context(), meta.ID); !errors.Is(err, persistence.ErrSessionNotFound) {
+		t.Fatalf("删完整读该报 ErrSessionNotFound，实际 %v", err)
+	}
+	if _, err := backend.LoadStoredFrom(t.Context(), meta.ID, 0); !errors.Is(err, persistence.ErrSessionNotFound) {
+		t.Fatalf("删完寻址读该报 ErrSessionNotFound，实际 %v", err)
+	}
+	if _, err := backend.ReadStoredRevision(t.Context(), meta.ID); !errors.Is(err, persistence.ErrSessionNotFound) {
+		t.Fatalf("删完读令牌该报 ErrSessionNotFound，实际 %v", err)
+	}
+	// 列举里也不该再有它。
+	headers, err := backend.List(t.Context())
+	if err != nil {
+		t.Fatalf("列举失败：%v", err)
+	}
+	if len(headers) != 0 {
+		t.Fatalf("删完列举出来还有 %d 个会话", len(headers))
+	}
+
+	// 删掉之后同一个身份重新建得起来，而且 seq 从 0 数起，不接旧存档的游标。
+	if err := backend.AppendBatch(t.Context(), meta, oneTurnLog(t, 0), false); err != nil {
+		t.Fatalf("删完之后同一个身份该重新落得下去：%v", err)
+	}
+	stored, err := backend.LoadStored(t.Context(), meta.ID)
+	if err != nil {
+		t.Fatalf("读存档失败：%v", err)
+	}
+	if got, want := seqsOf(stored.Events), []int{0, 1, 2, 3, 4, 5}; !slices.Equal(got, want) {
+		t.Fatalf("重建之后的 seq 是 %v，要的是 %v", got, want)
+	}
+}
+
+// 不当成幂等成功：调用方要靠它把「删掉了一份」和「本来就没有」分开。
+func Test删一个不存在的会话报会话不存在(t *testing.T) {
+	backend := newBackend(t)
+
+	if err := backend.Erase(t.Context(), "nobody"); !errors.Is(err, persistence.ErrSessionNotFound) {
+		t.Fatalf("该报 ErrSessionNotFound，实际 %v", err)
+	}
+}
+
+// 删一份存档不许波及同一份介质里别的会话。
+func Test删一份存档不动别的会话(t *testing.T) {
+	backend := newBackend(t)
+	keep, drop := testMeta("keep"), testMeta("drop")
+	for _, meta := range []sessionlog.SessionHeader{keep, drop} {
+		if err := backend.AppendBatch(t.Context(), meta, oneTurnLog(t, 0), false); err != nil {
+			t.Fatalf("落地 %q 失败：%v", string(meta.ID), err)
+		}
+	}
+
+	if err := backend.Erase(t.Context(), drop.ID); err != nil {
+		t.Fatalf("删存档失败：%v", err)
+	}
+
+	headers, err := backend.List(t.Context())
+	if err != nil {
+		t.Fatalf("列举失败：%v", err)
+	}
+	if len(headers) != 1 || headers[0].ID != keep.ID {
+		t.Fatalf("删完列举出来的是 %v，要的是只剩 %q", headers, string(keep.ID))
+	}
+	stored, err := backend.LoadStored(t.Context(), keep.ID)
+	if err != nil {
+		t.Fatalf("读留下那份失败：%v", err)
+	}
+	if got, want := seqsOf(stored.Events), []int{0, 1, 2, 3, 4, 5}; !slices.Equal(got, want) {
+		t.Fatalf("留下那份的 seq 是 %v，要的是 %v", got, want)
 	}
 }
 

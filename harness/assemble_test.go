@@ -8,6 +8,7 @@ package harness_test
 
 import (
 	"context"
+	"encoding/json"
 	"iter"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/snight1983/ds-harness-go/harness/agent"
 	"github.com/snight1983/ds-harness-go/llm"
 	"github.com/snight1983/ds-harness-go/sessionlog"
+	"github.com/snight1983/ds-harness-go/tools"
 )
 
 // scriptedAdapter 是一个照本子念的适配器：它不连任何提供方，只吐一段固定的文本流，
@@ -156,6 +158,50 @@ func TestAssembledHostSendsThePersonaToTheProvider(t *testing.T) {
 	if !strings.Contains(system, "话很少的助手") {
 		t.Errorf("请求的系统提示词里没有那份人设：%q", system)
 	}
+}
+
+// TestAssembledHostTellsTheProviderAboutRegisteredTools 钉住宿主装上去的工具真的报到了模型那里。
+//
+// 这是一条**只在这一层看得见**的接线：工具运行时和系统提示词注册表各自的测试都
+// 只验自己那一半，而派发那条路读的是工具运行时、发给模型的清单读的是系统提示词
+// 装出来的那份。两者没接上时注册跑得通、调用也跑得通，只是模型从头到尾不知道有
+// 这件工具，一次都不会调——一个装配期和运行期都不报错的失败。
+func TestAssembledHostTellsTheProviderAboutRegisteredTools(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t)
+	undo, err := w.host.Tools.Register(t.Context(), w.host.Scope, &tools.Definition{
+		Name:        "查天气",
+		Description: "报一个城市此刻的天气。",
+		Parameters: tools.Node{
+			Type:       tools.TypeObject,
+			Properties: []tools.Property{{Name: "城市", Schema: tools.Node{Type: tools.TypeString}}},
+			Required:   []string{"城市"},
+		},
+		Output: tools.OutputDefinition{
+			Schema: tools.Node{Type: tools.TypeString},
+			Render: func(_, value json.RawMessage) (llm.Content, error) {
+				return llm.Content{llm.TextBlock{Text: string(value)}}, nil
+			},
+		},
+		Execute: func(context.Context, json.RawMessage, *tools.RunContext) (json.RawMessage, error) {
+			return json.RawMessage(`"晴"`), nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("装一件工具失败：%v", err)
+	}
+	t.Cleanup(func() { _ = undo(context.Background()) })
+
+	w.runTurn(t, "今天穿什么")
+
+	schemas := w.adapter.lastCall(t).Tools
+	for _, schema := range schemas {
+		if schema.Name == "查天气" {
+			return
+		}
+	}
+	t.Errorf("派发出去的请求里没有这件工具，只有 %v", schemas)
 }
 
 // TestVocabularyKnowsEveryEventTheTurnWrote 钉住 [harness.Harness].Vocabulary 盖得住实际写下的事件。

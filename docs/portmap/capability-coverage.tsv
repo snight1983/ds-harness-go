@@ -6,7 +6,7 @@ Host 的 ctx.sessionController 服务与生成的 Client session／skills／file
 浏览器配置界面的 Host Remote 属主，提供脱敏 settings 与凭据元数据读取、不回传密钥的写入，并在 Host 桌面打开 settings 或 preset 位置	api/settings-controller	取形重写	credentials settings	缺口已补：配置界面那条只读路径落在 credentials 的 DescribeRefs（一次问一批引用，带语法关与扇出上限）。上游同样不打码、不枚举引用——脱敏靠「没有任何一条读路径交出值」，不是靠掩码；settings 那一半的 RedactSecrets 早已落地
 Host 的 ctx.workspaceController 与 Client workspace namespace，负责 Workspace 增删改序、Session 重排与归档、完整 Workspace 投影跟随，并拥有选目录 seam	api/workspace-controller	取形重写	feature/workspace	缺口已补：一次读回全部字段的自洽快照落在 feature/workspace 的 Snapshot（多带 TargetKey、不带 Status）。baseline＋增量那一半是有意不落——Go 侧同一语义由 sessionlog/projection 的整值投影承担，重连重取整值
 持久附件服务边界，规范化并持久提交图片	attachment/attachment	需要	attachment	
-dsh-attachment本地实现，对象存放在DSH_HOME/attachments	attachment/attachment-local	不需要	adapter/imagestore	服务端替代实现见 adapter/imagestore；缺前置：本机文件系统
+dsh-attachment本地实现，对象存放在DSH_HOME/attachments	attachment/attachment-local	不需要	adapter/imagestore	服务端替代实现见 adapter/imagestore；介质只要四个原语，不要求本机盘
 供多个bin共用的启动粘合层，提供配置路径解析、环境加载、Profile机制、Loader结算与启动失败处理	boot/app-boot	不需要	—	缺前置：交互式 TTY
 dsh启动器交给引导应用的命令行参数接口，提供参数快照读取与退出请求	boot/cmdline	不需要	—	缺前置：桌面启动器进程（入参走 argv）。服务端入参走 HTTP
 纯自动化 ACP stdio 应用 profile 组合包，在 base 之上设 coding persona 与默认模型路由，命令提供方接受调用后才启动 ACP bridge	bundle/acp-app	取形重写	harness protocol/acp	走 HTTP 不走 stdio，进程外壳那半不要。ACP 场景关掉 session-title-llm 这条取舍已记在裁决里

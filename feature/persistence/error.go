@@ -49,6 +49,22 @@ var (
 	// 也有一条统一的说法可用。
 	ErrMalformedSeq = errors.New("feature/persistence: seq 水位不许是负的")
 
+	// ErrEraseUnsupported 表示这个后端删不掉一份存档。
+	//
+	// 新增: 上游没有删除这件事。一个只能追加的顺序介质（比如一份 JSONL）删得掉
+	// 一整份文件、却删不掉「装在同一份文件里的某一个会话」，所以这条能力是可选的
+	// （[ErasingBackend]），而缺席要在调用的那一刻当场说清楚——回报一句
+	// 「删成功了」而其实什么都没删，会让使用方的列表刷新之后那一条又冒出来。
+	ErrEraseUnsupported = errors.New("feature/persistence: 这个后端删不掉存档")
+
+	// ErrSessionLive 表示这个身份此刻还归一个活会话所有。
+	//
+	// 新增: 上游没有删除这件事，也就没有这条。删一份还有主的存档是危险的：
+	// 那个会话手上还攥着自己的游标，删完它下一批事件会照着旧游标重新落地出
+	// 一份只有尾巴的存档——看上去是一个存在的会话，其实开头整段都没了。
+	// 所以次序不能反：先让会话退场，再删存档。
+	ErrSessionLive = errors.New("feature/persistence: 这个会话还活着")
+
 	// ErrRawArtifactsUnsupported 表示这个后端不提供逐会话的原始存档。
 	//
 	// 一个把所有会话装进同一个数据库的后端就没有「这个会话那份文件」可给。
