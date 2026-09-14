@@ -1,48 +1,50 @@
 # Agent 预设与 Persona
 
-对应包：`feature/preset/agentpresets`、`feature/preset/persona`
+`feature/preset/agentpresets` 和 `feature/preset/persona` 的架构文档。全文只用代码里真实存在的名字：`Preset`、`Root`、`Trust`、`Config`、`Roster`、`Composer`、`Mount`、`ComposeFrom`、`Recompose`、`standingMount`。
+
+---
 
 ## 定位
 
-一套装置里装着几十种能力：读写文件、跑命令、查网页、管计划、开子 agent。但**不是每个会话都该看到全部**——给客服用的那一套不该有 shell，给运维用的那一套不该能对外发帖。
+一个 Agent 能用哪些工具、系统提示词里写着它是谁——这两件事得有人定。最省事的做法是写死在代码里，改一个字就得重新编译发版。
 
-于是需要一个东西来回答：这一次会话，模型手上到底有哪几件工具、系统提示词里写着它是谁。
-
-```mermaid
-flowchart LR
-    subgraph N["没有预设这一层"]
-        A1["装置启动时<br/>把所有能力一股脑装上"] --> A2["每个会话看到的都一样"]
-        A2 --> A3["想给某类用户减两件<br/>只能改代码、重新发一版"]
-    end
-```
+`agentpresets` 换成另一种做法：**把「装哪些工具 + 是什么人设」写成磁盘上的一个目录**，建 Agent 时点一个目录名。
 
 ```mermaid
 flowchart LR
-    subgraph Y["有预设这一层"]
-        B1["部署方把能力编成几套清单"] --> B2["每套一个名字：客服 / 运维 / 研发"]
-        B2 --> B3["建会话时点一个名字"]
-        B3 --> B4["模型看得见什么<br/>就由那份清单说了算"]
+    subgraph HARD["写死在代码里"]
+        A1["工具列表在 Go 源码里"] --> A2["改一个工具<br/>重新编译、重新发版"]
+    end
+    subgraph SOFT["一份预设一个目录"]
+        B1["工具列表在磁盘上的 yml 里"] --> B2["改完即生效<br/>还能让运营自己加"]
     end
 ```
 
-一份预设不是一个配置项，是**磁盘上（或者对象存储上）的一个目录**：
+DSH 那边自带四份：`standard`（完整编码 Agent）、`minimal`（只有 bash 和文件编辑）、`ptc`（工具通过 TypeScript SDK 暴露）、`cordis`（用来造新预设的那份）。**Go 这边一份都没搬**——那四份全是编码 Agent 的工具，只搬机制不搬内容。
+
+### 一份预设在磁盘上是什么
 
 ```mermaid
 flowchart TD
-    D["一个目录，目录名就是它的名字"] --> C["一份组合清单<br/>逐行写着装哪些能力"]
-    D --> M["一份可选的展示文字<br/>给选择器上那张卡片用"]
-    D --> X["以及作者想一起带走的东西<br/>说明、技能文件、素材"]
-    C -.->|"缺了这一份<br/>这个目录就不算一份预设"| C
+    D["一个目录<br/>目录名就是这份预设的 id"] --> C["agent.cordis.yml<br/>装哪些东西，一行一个"]
+    D --> M["preset.yml（可选）<br/>展示名、说明、排序"]
+    D --> X["作者想一起带的东西<br/>skills 目录、素材"]
+    C -.->|"缺这一份<br/>这个目录就不算预设"| C
 ```
 
-而 persona 补的是预设**够不着**的那一样：
+两个文件名是常量：`discovery.CompositionFile = "agent.cordis.yml"`、`metadata.MetadataFile = "preset.yml"`。
 
-```mermaid
-flowchart LR
-    A["一份预设换得掉<br/>模型手上的工具"] --> B["却够不着「你是谁」<br/>那一段系统提示词"]
-    B --> C["于是单出一行专管身份的组合项"]
-    C --> D["同一批工具，换一段身份<br/>就是另一个产品"]
+`agent.cordis.yml` 的每一行长这样：
+
+```yaml
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: You are a helpful software engineer assistant.
+    complete: true
 ```
+
+`id` 是这一行在这份组合里的名字，`name` 点的是哪个能力，`config` 是给它的参数。
 
 ---
 
@@ -50,410 +52,394 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    ROOTS[("几个预设根<br/>随部署发出去的 / 留给本地创作的")] --> DISC["发现：扫一遍，列出名单"]
-    DISC --> LIST["名册：这套部署此刻有哪几份"]
-    LIST --> RES["解算：按名字取一份"]
-    RES --> MNT["常驻装载：把清单里每一行装起来"]
-    COMP[["组装器名册<br/>宿主在编译期登记好的那些安装函数"]] --> MNT
-    MNT --> KEY(("一把常驻钥匙<br/>工具、提示词段落、监听器都登记在它上面"))
-    AG1["agent 甲"] -->|"认它作父"| KEY
-    AG2["agent 乙"] -->|"认它作父"| KEY
-    FS[("内容住的那道缝")] --> DISC
-    FS --> MNT
+    ROOTS[("Config.Roots + Config.UserRoot")] --> DISC["DiscoverPresets：扫一遍，列出 []Preset"]
+    DISC --> RES["Roster.Resolve：按 id 取一份"]
+    RES --> ENS["Roster.ensureStanding：保证它那代装载在"]
+    COMP[["Config.Composers<br/>宿主编译期登记好的安装函数"]] --> ENS
+    ENS --> KEY(("standingMount.key<br/>工具、提示词段落、监听器都登记在它名下"))
+    AG1["agent 甲的 scope.Key"] -->|"BindParent"| KEY
+    AG2["agent 乙的 scope.Key"] -->|"BindParent"| KEY
+    FS[("fs.FileSystem")] --> DISC
+    FS --> ENS
 ```
 
-### 一份预设只装一次
+### `Preset`：扫出来的一份
+
+```go
+type Preset struct {
+    ID          string   // 目录名
+    Trust       Trust    // 由它所在的 Root 决定，不由它自己声明
+    Path        string   // 它那份 agent.cordis.yml 的绝对路径
+    Name        string   // preset.yml 里的展示名，空串回落到 ID
+    Description string
+    Order       *float64 // nil = 没声明，排在声明了的后面
+    Broken      string   // 非空 = 这份装不起来，这句话说为什么
+}
+```
+
+`Order` 用指针是因为 `0` 是一个有意义的位次，Go 的零值分不出「没声明」和「声明了 0」。
+
+`Trust` 只有两个值：`TrustSystem`、`TrustUser`。**它不写在预设自己身上**——一份本地创作的预设要是能自称是随部署发出去的，跟着就免疫删除。
+
+`Broken` 非空的预设**留在名单上**：藏起来的话那个目录仍旧占着 id，而界面上看不到任何可删的东西。判 `Broken` 只做一次**浅**检查——yml 读不读得动、是不是一份行列表、每一行有没有 `name`。它刻意做得比装载器少，抓的是那种让装载器连开始都开始不了的手改。
+
+### `Root`：预设住在哪几个目录
+
+```go
+type Root struct {
+    Path  string // 绝对目录，里面一个子目录一份预设
+    Trust Trust  // 这个根下发现的每一份预设继承的信任
+}
+```
 
 ```mermaid
 flowchart LR
-    subgraph BAD["每个会话装一份"]
-        A1["一百个会话点了同一份预设"] --> A2["同一批插件被立起来一百遍"]
-        A2 --> A3["内存、连接、监听器<br/>全都乘以一百"]
-    end
+    R1["Config.Roots[0]<br/>Trust: system"] --> R2["Config.Roots[1]"] --> R3["Config.UserRoot<br/>Trust: user"]
+    R1 -.->|"靠前的赢下重名 id"| R3
 ```
+
+顺序就是优先级：`Config.resolvedRoots()` 把 `Roots` 按序排好，`UserRoot` **追加在最后**。所以一个占了同名的本地目录会被发出去的那一份遮蔽。
+
+`Roster.roots` 构造时算一次、之后不再变：一组根如果在 `List()` 和照着它答案走的 `Copy()` 之间变了，创作就会写进一个调用方从没见过的目录。
+
+### `Roster`：这个包的主体
+
+```go
+type Roster struct {
+    config       Config
+    fsys         fs.FileSystem                     // 内容读写只透过这一个接口
+    roots        []Root                            // 构造时算一次
+    defaults     DefaultSource                     // 用户设置层，可为 nil
+    standingRoot *scope.Scope                      // 所有 standingMount 挂在它下面
+
+    mutex    sync.Mutex
+    mounts   map[string]*standingMount             // 按预设 id
+    loading  map[string]*loadingMount              // 正在装的那些
+    bindings map[*scope.Key]*scope.ParentBinding   // 组装过的 agent
+}
+```
+
+`bindings` 那一张最值得看：`scope.ParentBinding` 是 `scope` 包里**唯一**的改链权力，攥在这里就让 `Roster` 成为整个进程里唯一能把一个 Agent 从一份预设挪到另一份的东西。
+
+发现是**不记忆的**——`List` 和 `Resolve` 每次都重扫根，不缓存名单：
 
 ```mermaid
 flowchart LR
-    subgraph GOOD["装一份，其余的认亲"]
-        B1["第一个用到它的会话把它装起来"] --> B2["之后每个点它的会话<br/>只是把自己认到它下面"]
-        B2 --> B3["那些工具登记和提示词段落<br/>整台进程里只有一份"]
-    end
+    A["每次都重扫"] --> B["刚创作出来的预设<br/>当场就在选择器里"]
+    A --> C["刚删掉的，下一次读就不见了"]
+    D["缓存一份名单"] -.->|"会出现「存好了<br/>可选择器里没有」的空窗"| D
 ```
 
-```mermaid
-flowchart TD
-    Q["都共用同一份装载了<br/>两个会话怎么互不串"] --> A["那些插件自己按会话键着"]
-    A --> B["它们本来就是为一个共享世界写的<br/>比预设这一层出现得还早"]
-```
-
-### 静态组装：换掉的那一半
-
-```mermaid
-flowchart TD
-    subgraph DSHW["DSH 的做法"]
-        A1["清单里一行写一个包名"] --> A2["运行时按名字把那个包装进来"]
-    end
-    subgraph GOW["这里的做法"]
-        B1["宿主在编译期把带名字的安装函数登记好"] --> B2["清单里一行只是按名字取一个"]
-        B2 --> B3["取不到就是取不到<br/>不会去外面找"]
-    end
-    DSHW -->|"Go 是静态链接的<br/>运行期没有装载别人代码这回事"| GOW
-```
-
-装载器整个换掉了，但**看得见的规矩一条没变**：
-
-```mermaid
-flowchart LR
-    A["换的只是怎么把一行变成一次安装"] --> C["一份预设一份装载，点它的都共享"]
-    A --> D["任何一行装不起来<br/>整份回滚，一行不留"]
-    A --> E["加入靠认一个父作用域<br/>改嫁靠改那条链"]
-```
-
-### 内容住在哪儿，本包一概不知
-
-```mermaid
-flowchart TD
-    P["本包只对一道读写内容的缝说话"] --> Q1["接对象存储：内容在云上"]
-    P --> Q2["接本地介质：内容在盘上"]
-    P --> Q3["接内存介质：测试里用"]
-    P -.->|"服务端没有硬盘这件事<br/>正是这道缝存在的理由"| P
-```
-
-这道缝上有一条**只能由装配方守**的规矩：
-
-```mermaid
-flowchart TD
-    subgraph BADFS["两处共用同一个实例"]
-        A1["模型伸得进去的那个执行世界"] --- A2["这台装置自己的部署配置"]
-        A2 --> A3["于是一个被沙箱关着的会话<br/>能改写这台装置装哪些插件"]
-    end
-```
-
-```mermaid
-flowchart TD
-    subgraph GOODFS["分成两个实例"]
-        B1["执行世界：模型伸得进去"]
-        B2["预设根：只有装配方伸得进去"]
-        B1 -.->|"本包分不出自己拿到的是哪一份<br/>所以这条只能在装配那一步守住"| B2
-    end
-```
-
-### 根的顺序就是优先级，根的信任就是预设的信任
-
-```mermaid
-flowchart LR
-    R1["随部署发出去的根<br/>信任：系统"] --> R2["再一个配置的根"] --> R3["留给本地创作的根<br/>信任：用户"]
-    R1 -.->|"靠前的赢下重名"| R3
-    R3 -.->|"于是一个占了同名的本地目录<br/>被发出去的那一份遮蔽"| R3
-```
-
-信任不写在预设自己身上，是因为它自己说了不算：目录名决定它叫什么，所在的根决定它是谁发的——不然一份本地创作的预设可以自称是随部署发出去的，跟着就免疫删除。
-
-### 组装了名册，就不许有没认预设的 agent 开口
-
-```mermaid
-flowchart TD
-    A["一个 agent 一份预设都没认<br/>却开口对模型说话了"] --> B["它的工具、提示词段落、技能目录<br/>全落在空的全局层上解算"]
-    B --> C["模型什么都收不到"]
-    C --> D["所以装置自带一条检查<br/>装配提示词那一刻当场判"]
-    E["只有作用域、没有 agent 的那种装配"] -.->|"一次冷读、一次诊断<br/>本来就不是 agent，不拿这条判它"| D
-```
-
----
-
-## 从一个目录到一个开得了口的 agent
+### `Mount`：从一个目录到一个能开口的 Agent
 
 ```mermaid
 sequenceDiagram
     participant H as 装配方
-    participant R as 名册
-    participant F as 内容那道缝
-    participant S as 常驻作用域
-    H->>R: 建一个 agent，点名要哪一份
-    R->>F: 重扫一遍根，列出此刻有哪几份
-    F-->>R: 名单
-    R->>R: 这一份是坏的吗
-    R->>F: 读清单，顺手记下它此刻的身份戳
-    R->>S: 逐行装，全装在同一个常驻作用域上
-    S-->>R: 装好了
-    R->>H: 把这个 agent 认到常驻钥匙下面
-    Note over H,R: 这一刻失败会把整次 agent 创建回滚<br/>绝不留下一个组装了一半的会话
+    participant R as Roster
+    participant F as fs.FileSystem
+    H->>R: Mount(ctx, agentKey, "standard")
+    R->>R: resolveMountable：重扫根，Broken 的当场拒
+    R->>F: readCompositionStamp(preset.Path)
+    R->>R: ensureStanding：没有就装一代
+    R->>R: scope.BindParent(agentKey, standing.key)
+    R-->>H: Preset
+    Note over H,R: 这一刻失败会把整次 agent 创建回滚<br/>不留下一个组装了一半的会话
 ```
 
-### 坏掉的预设留在名单上，但装不了
+最后那一步是全部的关键：**Agent 的 `scope.Key` 认预设的 `scope.Key` 作父**。
 
-```mermaid
-flowchart LR
-    subgraph BADH["把坏掉的藏起来"]
-        A1["名单上看不见它"] --> A2["但那个目录还占着这个名字"]
-        A2 --> A3["想新建一份同名的：被拒<br/>想删掉它：界面上没有可点的东西"]
-    end
-```
+预设装起来的工具、提示词段落、监听器全都登记在预设那把 `Key` 名下（也就是 `scope.Layers` 里那一层）；Agent 装配时沿 `parent` 往上走，就把这一层叠进了自己能看见的范围。
 
-```mermaid
-flowchart LR
-    subgraph GOODH["留在名单上，写清坏在哪儿"]
-        B1["名单上有它，还带着一句理由"] --> B2["删得掉、读得到、报得出来"]
-        B2 --> B3["每一条装载路在最前面就拒了它<br/>而不是掉进装载器深处才炸"]
-    end
-```
+> **「层」是什么**：`scope.Layers` 里，一个 `Key` 名下的那批登记就是一层。预设的 `Key` 名下挂了五个工具，那五个就是预设这一层。Agent 能用的 = 自己这一层 + 所有祖先的层 + `global` 那一层。
 
-判健康只做一次**浅**检查：那份清单读不读得动、是不是一份行列表、每一行有没有点名字。它刻意做得比装载器少——不解算名字、不套用配置——抓的是那种让装载器连开始都开始不了的手改。
+### `ComposeFrom` 与 `Recompose`：另外两条认父的路
 
-### 展示文字坏了绝不致命
+| 方法 | 干什么 | 会失败吗 |
+|---|---|---|
+| `Mount` | 按 id 装一份预设，把 agent 认上去 | 会：id 不认识、组合装不起来 |
+| `ComposeFrom` | 认到**另一个 agent 正跑着的那一份**上 | 不会：不读 `Roster`、不装东西、不碰文件 |
+| `Recompose` | 把一个 agent 改认到另一份预设上 | 会：同 `Mount` |
+
+子 Agent 就是靠 `ComposeFrom` 继承父的能力：
 
 ```mermaid
 flowchart TD
-    A["那份展示文字读不出来"] --> B["名单上就显示它的目录名"]
-    B --> C["组合照样装得起来"]
-    D["反过来做"] -.->|"一个写错的名字<br/>会变成一个起不来的 agent"| D
-```
-
-展示不是能力，所以它不进那条判健康的路。
-
-### 子 agent 靠认亲继承父的能力
-
-```mermaid
-flowchart TD
-    subgraph BADC["按名字把父那份预设重新解算一遍"]
-        A1["重扫名册"] --> A2["清单在父启动之后被人改过"] --> A3["孩子拿到的是另一代<br/>可父那段历史不是在它之下产生的"]
-        A1 --> A4["那份预设已经被删了"] --> A5["孩子直接起不来<br/>而父还好端端跑着"]
+    subgraph BADC["按 id 把父那份预设重新解算一遍"]
+        A1["重扫 Roster"] --> A2["yml 在父启动之后被改过"] --> A3["孩子拿到另一代<br/>可父那段历史不是在它之下产生的"]
+        A1 --> A4["那份预设已经被删了"] --> A5["孩子起不来<br/>而父还好端端跑着"]
+    end
+    subgraph GOODC["当前做法：直接认父此刻跑着的那把 Key"]
+        B1["scope.ParentOf(parentKey) 拿到 standing.key"] --> B2["BindParent 到同一个实例"]
+        B2 --> B3["同步、无失败可能<br/>这才用得进建孩子那扇窗"]
     end
 ```
 
+父要是一份预设都没认，`ComposeFrom` 返回空串、不报错——那里模型看得见的东西本来就在 `global` 层里，孩子够得着。
+
+`Recompose` 是**先保证新的在，再挪链**：
+
 ```mermaid
 flowchart LR
-    subgraph GOODC["认亲：直接认父此刻跑着的那一份"]
-        B1["不读名册、不装东西、不碰内容"] --> B2["拿到的正是同一个实例"]
-        B2 --> B3["于是它同步、而且自己没有失败的可能<br/>这才用得进建孩子那扇窗"]
-    end
+    A["resolveMountable + ensureStanding"] --> B["新那一代已经在了"]
+    B --> C["binding.Rebind(standing.key)"]
+    C -.->|"失败时 agent 原封不动<br/>没有拆到一半、需要还原的状态"| C
 ```
 
-父要是一份预设都没认（一套不组装名册的部署），既不认亲也不报错——那里模型看得见的东西本来就在宿主组合里，孩子透过全局层已经够得着。
+只在这个 Agent **什么都还没产出**时合法：对话中途换掉工具，会留下一批新组合根本做不出来的、已经记进日志的工具调用。那道检查归**调用方**——`Recompose` 不读会话历史。
 
-### 一个会话实际跑在哪一份上
+### `Composer`：Go 没有运行时装载别人的代码
 
 ```mermaid
 flowchart TD
-    A["一个还空着的会话可以换预设"] --> B{"之后重建时读什么"}
-    B -->|"只读创建时记的那一栏"| C["按它建出来时那份组合重建"]
-    C -.->|"可它那段历史<br/>根本不是在那份组合之下产生的"| C
-    B -->|"当前做法：从后往前扫日志<br/>最后一次选择算数"| D["按它真正跑过的那一份重建"]
+    subgraph DSHW["DSH 的做法"]
+        A1["yml 里一行写一个 npm 包名"] --> A2["运行时 import 那个包"]
+    end
+    subgraph GOW["这里的做法"]
+        B1["宿主编译期把 Composer 登记进 Config.Composers"] --> B2["yml 里一行只是按 name 取一个"]
+        B2 --> B3["取不到就是 ErrUnknownComposer<br/>不会去外面找"]
+    end
+    DSHW -->|"Go 是静态链接的"| GOW
 ```
 
-```mermaid
-flowchart LR
-    A["为什么这次更改必须落账"] --> B["预设决定模型看得见的工具和提示词段落"]
-    B --> C["而这套装置的规矩是<br/>模型看得见的，都要记进日志"]
-    D["这条记录只进日志"] -.->|"不上模型可见的表面<br/>也不进派生历史"| D
+```go
+type Composer func(ctx context.Context, owner *scope.Scope, config json.RawMessage) (func(context.Context) error, error)
+type ComposerSet map[string]Composer
 ```
 
-### 手上没有 agent 也解算得出来
+装载器整个换掉了，但**看得见的规矩一条没变**：一份预设一份装载、点它的共享；任何一行装不起来整份回滚一行不留；加入靠 `BindParent`、改嫁靠 `Rebind`。
 
-```mermaid
-flowchart LR
-    A["翻一段历史转写稿"] --> B["要拿会话记下的那份预设<br/>解算工具当时怎么呈现"]
-    B --> C["保证那份常驻装载在，就够了"]
-    C --> D["没起 agent、没起会话、没跑任何一轮"]
-```
+`Config.Composers` 留 nil 表示这套部署装不了任何一行——`Roster` 照样发现、照样读写，但每一次 `Mount` 都会失败。
 
----
-
-## 本地创作：只有整目录复制这一种写
+### `fs.FileSystem`：本包不知道内容住在哪儿
 
 ```mermaid
 flowchart TD
-    subgraph BADA["让调用方递一段组合文本进来"]
-        A1["在浏览器里写几行<br/>存下去就是一份新预设"] --> A2["于是任何人都能凭空<br/>给自己配出一套没人授过的能力"]
+    P["Roster 只对 fs.FileSystem 说话"] --> Q1["接 adapter/objectstore：内容在对象存储上"]
+    P --> Q2["接本地后端：内容在盘上"]
+    P --> Q3["接内存后端：测试里用"]
+    P -.->|"服务端没有硬盘这件事<br/>正是这个接口存在的理由"| P
+```
+
+这个接口上有一条**只能由装配方守**的规矩：
+
+```mermaid
+flowchart TD
+    subgraph BADFS["两处共用同一个实例"]
+        A1["模型伸得进去的执行世界"] --- A2["这台装置自己的预设根"]
+        A2 --> A3["于是一个被沙箱关着的会话<br/>能改写这台装置装哪些能力"]
+    end
+    subgraph GOODFS["分成两个实例"]
+        B1["执行世界：模型伸得进去"]
+        B2["预设根：只有装配方伸得进去"]
+        B1 -.->|"Roster 分不出自己拿到的是哪一份<br/>所以只能在装配那一步守住"| B2
     end
 ```
 
+### `Copy` 与 `Remove`：创作只有整目录复制这一种写
+
 ```mermaid
-flowchart LR
-    subgraph GOODA["只有从一份已有的整目录复制"]
-        B1["源是按名字点的"] --> B2["它那个目录照它现在的样子复制过去"]
+flowchart TD
+    subgraph BADA["让调用方递一段 yml 文本进来"]
+        A1["在浏览器里写几行存下去<br/>就是一份新预设"] --> A2["于是任何人都能凭空<br/>给自己配出一套没人授过的能力"]
+    end
+    subgraph GOODA["Copy：只能从一份已有的整目录复制"]
+        B1["源是按 id 点的"] --> B2["它那个目录照现在的样子复制过去"]
         B2 --> B3["副本装得起来，因为源装得起来"]
-        B3 --> B4["而这条路授不出<br/>被复制的那一份本来没有的能力"]
+        B3 --> B4["而这条路授不出<br/>被复制那一份本来没有的能力"]
     end
 ```
 
-### 复制路上的几道闸
+```mermaid
+flowchart TD
+    A["Copy(ctx, from, id, name)"] --> B{"IsPresetID(id)"}
+    B -->|"不合"| X1["InvalidPresetIDError<br/>这个 id 要当目录名用"]
+    B -->|"合"| C{"WritableRoot 有吗"}
+    C -->|"没有"| X2["PresetNotWritableError"]
+    C -->|"有"| D{"List() 里有人占着这个 id 吗"}
+    D -->|"占着"| X3["PresetExistsError：复制从不覆盖"]
+    D -->|"没占"| E["copyTree 整目录复制"]
+    E --> F["copyAndStampMetadata<br/>说明留着，Name 和 Order 不留"]
+    F -.->|"一份和源长得一模一样的副本<br/>会让名单再也分不开它们"| F
+```
+
+`Copy` 检查的是**任何一个根**供得出的 id——包括发出去的那些，因为一个和发出去的预设同名的用户目录会被它遮蔽。复制到一半砸了，刚建的那棵目录整个删掉，**且不带调用方的取消**：请求废了也得把写下去的收回来。
+
+`Remove` 删掉的正好是当前默认时，要把用户那一层的默认清掉：
 
 ```mermaid
 flowchart TD
-    A["要建一份新的"] --> B{"名字合文法吗"}
-    B -->|"不合"| X1["拒：名字要当目录名用<br/>别的形状能跑到根外面去"]
-    B -->|"合"| C{"这套部署有可写的根吗"}
-    C -->|"没有"| X2["拒：发出去的那一套属于部署"]
-    C -->|"有"| D{"任何一个根上有人占着这个名字吗"}
-    D -->|"占着"| X3["拒：复制从不覆盖"]
-    D -->|"没占"| E["整目录复制过去，链接按它指的实体取"]
-    E --> F["重写展示文字：说明留着<br/>名字和名册位次不留"]
-    F -.->|"一份和源长得一模一样的副本<br/>会让名册再也分不开它们"| F
+    A["Remove(ctx, id)"] --> B["DeleteComposition + forgetMount"]
+    B --> C{"defaults.Default() == id 吗"}
+    C -->|"不是"| D["就这样"]
+    C -->|"是"| E["ClearDefault<br/>露出底下 Config.Default"]
+    E -.->|"留着的话每一个<br/>没有明确点名的会话都起不来"| E
 ```
 
-```mermaid
-flowchart LR
-    A["复制到一半砸了"] --> B["刚建的那棵目录整个删掉"]
-    B --> C["撤销这一步不带调用方的取消<br/>请求废了也得把写下去的收回来"]
-    D["不撤的话"] -.->|"轻则名单上看不见它<br/>重则一份装得起来却缺东西的预设"| D
-```
+平时为什么允许存一个**还不存在**的默认：`Roster` 扫的是一批活目录，此刻不在的名字等会话来要时可能已经在了。而刚被这次调用删掉的那个不是这种情况。
 
-### 删掉的那一份如果正是默认
+删掉正被使用的那一份**不拒**：`forgetMount` 只把它从 `mounts` 里摘掉、**不释放**——已经认进去的 Agent 还跑在上面，它由 `Close` 回收。只有新建的会话在名单里看不到它了。
+
+### `persona`：换一行身份
+
+`agentpresets` 换得掉工具，却够不着「你是谁」那一段系统提示词——那个槽位是 `harness/systemprompt` 注册表**自己**的配置，一份预设伸不进去。`persona` 就是补这一条的。
 
 ```mermaid
 flowchart TD
-    A["删掉一份本地创作的预设"] --> B{"它正好是用户挑的那个默认吗"}
-    B -->|"不是"| C["就这样"]
-    B -->|"是"| D["把用户那一层的默认清掉<br/>露出底下部署自己的那个"]
-    D -.->|"留着的话<br/>每一个没有明确点名的会话都起不来"| D
-    E["平时为什么允许存一个还不存在的默认"] --> F["名册是一个活的目录<br/>此刻不在的名字，等会话来要时可能已经在了"]
-```
-
-### 删掉正被使用的那一份，不拒
-
-```mermaid
-flowchart LR
-    A["一份预设正有活会话装着"] --> B["照样删得掉"]
-    B --> C["那些会话留在它们已经装好的那一代上"]
-    C --> D["只有新建的会话<br/>在名单里看不到它了"]
-```
-
----
-
-## Persona：换一行身份
-
-```mermaid
-flowchart TD
-    R["提示词注册表立起来时<br/>无条件在自己这一层放了一份部署方的人设"] --> L1["这一行装到一个有身份的 agent 那一层<br/>→ 遮蔽掉部署方那份"]
+    R["systemprompt.NewRegistry 立起来时<br/>无条件在自己那一层登记了 deployment:persona"] --> L1["persona 装到一个有身份的 agent 那一层<br/>→ 遮蔽掉部署方那份"]
     R --> L2["装到注册表自己那一层<br/>→ 同层重名，当场报错"]
     L2 -.->|"报错好过悄悄并存<br/>两份人设无序共处，没人说得清哪份算数"| L2
 ```
 
 ```mermaid
 sequenceDiagram
-    participant P as 这一行
-    participant R as 提示词注册表
-    P->>R: ① 先按需压制运行期上下文（这一步不会失败）
-    P->>R: ② 再登记人设段落（这一步会撞名失败）
+    participant P as persona.Install
+    participant R as systemprompt 注册表
+    P->>R: ① 按需压制运行期上下文（不会失败）
+    P->>R: ② 登记人设段落（会撞名失败）
     R-->>P: 撞名了
     P->>R: 把 ① 放开
     Note over P,R: 反过来的次序下「前一次成了后一次砸了」<br/>根本不会发生，也就没有需要撤的东西
 ```
 
-放开那一步自己再砸了，两条错一起交出去——吞掉后一条，会让「压制还生效着、却再没人撤得掉」这件事从诊断里整个消失。
+放开那一步自己再砸了，两条错**一起**交出去——吞掉后一条，会让「压制还生效着、却再没人撤得掉」这件事从诊断里整个消失。
+
+`Config.SuppressRuntimeContext` 是取反过的（DSH 是 `includeRuntimeContext?: boolean` 默认 true），这样 Go 的零值就是「照常带上运行期上下文」。
+
+### 一条不变式：组装了 `Roster` 就不许有没认预设的 Agent 开口
 
 ```mermaid
-flowchart LR
-    A["这一行做的"] --> A1["往提示词注册表放一段身份正文"]
-    A --> A2["两个开关：当成整份提示词 / 压掉运行期上下文"]
-    B["不做的"] --> B1["不给工具、不给权限"]
-    B --> B2["不负责渲染，也不负责插值"]
-    B --> B3["不决定自己该装在哪一层"]
+flowchart TD
+    A["一个 agent 一份预设都没认<br/>却开口对模型说话了"] --> B["它的工具、提示词段落、Skill 目录<br/>全落在空的 global 层上解算"]
+    B --> C["模型什么都收不到"]
+    C --> D["RegisterInvariants 装一条检查<br/>装配提示词那一刻当场判"]
+    E["只有作用域、没有 agent 的那种装配"] -.->|"一次冷读、一次诊断<br/>本来就不是 agent，不拿这条判它"| D
 ```
+
+`invariant.go` 里的 `AssemblingAgent` 就是那个「这次装配到底是不是一个 agent」的判定，由装配方交进来。
 
 ---
 
 ## 生命周期与并发
 
+### 一份预设只装一次：`standingMount`
+
 ```mermaid
-stateDiagram-v2
-    state "装载中" as LOADING
-    state "服役中" as SERVING
-    state "退居：不再接新人" as RETIRED
-    [*] --> LOADING: 第一个用到它的会话
-    LOADING --> SERVING: 每一行都装起来了
-    LOADING --> [*]: 有一行装不起来，已装的逆序摘干净
-    SERVING --> SERVING: 又有 agent 认进来
-    SERVING --> RETIRED: 清单的身份戳变了
-    SERVING --> [*]: 整棵树拆解
-    RETIRED --> [*]: 整棵树拆解
+flowchart LR
+    subgraph BAD["每个会话装一份"]
+        A1["一百个会话点了同一份预设"] --> A2["同一批能力立起来一百遍"]
+        A2 --> A3["内存、连接、监听器全乘以一百"]
+    end
+    subgraph GOOD["当前做法"]
+        B1["第一个用到它的会话装起来"] --> B2["之后每个点它的会话<br/>只是 BindParent 到同一把 Key"]
+        B2 --> B3["整台进程里只有一份登记"]
+    end
 ```
 
-装失败的那一代**不留**，于是内容被修好之后，下一个会话会重试。
+```go
+type standingMount struct {
+    key     *scope.Key                    // agent 认作父的那把
+    scope   *scope.Scope                  // 释放边界，只在 Close 时回收
+    dispose func(context.Context) error   // 这份组合的摘除函数
+    stamp   string                        // 装它时那份 yml 的版本戳
+}
+```
 
-### 单飞：两个会话同时要同一份
+`scope` 字段**绝不按会话释放**——一百个会话共用它，谁走都不能拆。它由 `Roster.Close` 在整棵树拆解时统一回收，摘除按装的**反序**跑，和一次失败装载的回滚同序。
+
+```mermaid
+stateDiagram-v2
+    state "loading" as LOADING
+    state "在 mounts 里服役" as SERVING
+    state "被 forgetMount 摘掉<br/>不再接新人" as RETIRED
+    [*] --> LOADING: 第一个用到它的会话
+    LOADING --> SERVING: 每一行都装起来了
+    LOADING --> [*]: 有一行装不起来，已装的逆序摘干净、这一代不留
+    SERVING --> SERVING: 又有 agent BindParent 进来
+    SERVING --> RETIRED: stamp 过期，或者 Copy / Remove
+    SERVING --> [*]: Roster.Close
+    RETIRED --> [*]: Roster.Close
+```
+
+### 两个会话同时要同一份
 
 ```mermaid
 sequenceDiagram
     participant A as 会话甲
     participant B as 会话乙
-    participant R as 名册
-    A->>R: 要这一份
-    R->>R: 立一块「正在装」的牌子，然后去读内容
-    B->>R: 也要这一份
-    R-->>B: 看见牌子，排队等着
-    R-->>A: 装好了
-    R-->>B: 放行，拿到的是同一份
-    Note over R: 读内容的时候不占着锁<br/>否则一次慢读会把整个名册卡住
+    participant R as Roster
+    A->>R: ensureStanding
+    R->>R: 在 loading 里放一个 loadingMount，然后放开 mutex 去读文件
+    B->>R: ensureStanding
+    R-->>B: 看见 loading 里有，<-pending.done 等着
+    R-->>A: 装好，进 mounts
+    R-->>B: 放行，回到循环开头，拿到同一份
+    Note over R: 读文件的时候不占着 mutex<br/>否则一次慢读会把整个 Roster 卡住
 ```
 
-### 换代看的是身份戳
+装失败的那一代**不留**（`err != nil` 时不写进 `mounts`），于是文件被修好之后下一个会话会重试。
+
+### `stamp`：什么时候开下一代
 
 ```mermaid
 flowchart TD
-    A["有人要这一份"] --> B["读一次清单此刻的身份戳"]
+    A["ensureStanding 命中 mounts"] --> B["readCompositionStamp 读一次当前戳"]
     B --> C{"读得出来吗"}
     C -->|"读不出来"| D["继续用当前这一代"]
-    D -.->|"一份装载必须熬得过它那个文件消失<br/>为一次探问让会话起不来说不过去"| D
-    C -->|"读得出来"| E{"和这一代记着的那个一样吗"}
+    D -.->|"一份装载必须熬得过它那个文件消失<br/>为一次 stat 让会话起不来说不过去"| D
+    C -->|"读得出来"| E{"和 mounted.stamp 一样吗"}
     E -->|"一样"| F["用当前这一代"]
-    E -->|"不一样"| G["为之后建出来的会话开下一代"]
+    E -->|"不一样"| G["带守卫地从 mounts 里删掉，循环重来"]
     G --> H["已经认进去的会话<br/>留在它们跑着的那一代上"]
 ```
+
+那道守卫（`if r.mounts[preset.ID] == mounted`）是必需的：一个和这里抢的调用方可能已经开出了下一代，把**那个**指针丢掉会分出第三代来。
+
+`stamp` 是 `fs.Info.Version` 给的一枚**不必读得懂的令牌**：对象存储给它自己那套版本标记，本地介质给它自己那套。这里只做一件事——和上一次比一比。两次都答不出身份（都是空串）时不换代：为一份看不出变没变过的组合每次都开一代，等于把单飞整个作废。
+
+盖戳必须在读文件**之前**：
 
 ```mermaid
 flowchart LR
     subgraph BADS["先读内容再盖戳"]
         A1["读到一半有人改了它"] --> A2["盖上去的是改后的戳"] --> A3["装进去的却是改前的内容<br/>而且从此一直显得当前"]
     end
-```
-
-```mermaid
-flowchart LR
-    subgraph GOODS["先盖戳再读（当前做法）"]
-        B1["一次和装载抢跑的编辑"] --> B2["让戳显得过期"] --> B3["下一个会话去换代<br/>而不是信任一份比戳还老的组合"]
+    subgraph GOODS["先盖戳再读（composeStanding 的做法）"]
+        B1["一次和装载抢跑的编辑"] --> B2["让戳显得过期"] --> B3["下一个会话去换代"]
     end
-```
-
-身份戳本身是一枚**不必读得懂的令牌**：对象存储给的是它自己那套版本标记，本地介质给的是它自己那套。这里拿它只做一件事——和上一次比一比。两次都答不出身份时不换代：为一份看不出变没变过的组合每次都开一代，等于把单飞整个作废。
-
-### 发现不记忆
-
-```mermaid
-flowchart LR
-    A["每次列举、每次解算<br/>都重扫一遍根"] --> B["进程跑着的时候<br/>刚创作出来的当场就在名单上"]
-    A --> C["刚被删掉的，下一次读时就不见了"]
-    D["缓存一份名单"] -.->|"会让创作流出现一段<br/>「存好了，可选择器里没有」的空窗"| D
 ```
 
 ### 并发上的几条
 
 ```mermaid
 flowchart TD
-    A["一把锁护住那两份按名字排的记录"] --> B["读内容、装东西一律在锁外"]
-    C["常驻装载绝不按会话释放"] --> D["它由整棵树拆解时统一回收"]
-    E["扫根的顺序、名单的排序都是显式定死的"] --> F["否则同样的一批目录<br/>会排出不同顺序的选择器"]
-    G["改嫁：新那一代先保证在，再挪链"] --> H["于是失败时这个 agent 原封不动<br/>没有拆到一半、需要还原的状态"]
+    A["一把 mutex 护住 mounts / loading / bindings"] --> B["读文件、跑 Composer 一律在锁外"]
+    C["standingMount.scope 绝不按会话释放"] --> D["只由 Roster.Close 回收"]
+    E["扫根的顺序、[]Preset 的排序都是显式定死的"] --> F["否则同样的一批目录<br/>会排出不同顺序的选择器"]
+    G["Recompose：新那一代先保证在，再 Rebind"] --> H["失败时这个 agent 原封不动"]
 ```
 
 ---
 
 ## 失败语义
 
-```mermaid
-flowchart TD
-    A["出了岔子"] --> B{"哪一类"}
-    B -->|"点了个名册里没有的名字"| C["报「不认识」，并把此刻有哪些一并交出去<br/>这是一次坏请求"]
-    B -->|"预设在，可它的组合装不起来"| D["报「装不起来」，逐行列出哪一行为什么<br/>这是一份部署要去修的坏预设"]
-    B -->|"名字不合文法 / 没有可写的根 / 名字被占了"| E["三种各报各的<br/>不合并成一句「不行」"]
-    B -->|"展示文字读不出来"| F["降级：回落到显示目录名，照样装得起来"]
-    B -->|"身份戳读不出来"| G["继续服役，不换代"]
-    B -->|"装到一半有一行失败"| H["已装的逆序摘干净，这一代不留<br/>内容修好后下一个会话会重试"]
-    B -->|"人设那次登记撞名"| I["报错，并把已经生效的压制放开"]
-```
+| 错误 | 什么时候 | 谁该动手 |
+|---|---|---|
+| `UnknownPresetError` | 点了个 `Roster` 里没有的 id，附带此刻有哪些 | **调用方**打错了 |
+| `PresetMountError` | 预设在，但它那份组合装不起来 | **部署方**要去修 |
+| `InvalidPresetIDError` | `Copy` 的新 id 不合 `^[a-z0-9][a-z0-9-]*$` | 调用方 |
+| `PresetNotWritableError` | 这套部署没有 `TrustUser` 的根 | 装配方 |
+| `PresetExistsError` | 这个 id 已经被某个根占了 | 调用方 |
+| `ErrUnknownComposer` | yml 里一行点了个 `Composers` 里没有的 name | 部署方 |
+| `ErrInvalidConfig` | `New` 时配置本身不成立 | 装配方 |
 
-前两类为什么必须分开：一个不认识的名字是**调用方**打错了，一份用不了的组合是**部署方**要去修的东西——合成一句话，两边都不知道该谁动手。
+前两类为什么必须分开：一个不认识的 id 是**调用方**打错了，一份用不了的组合是**部署方**要去修的东西——合成一句「不行」，两边都不知道该谁动手。
+
+两处刻意降级、不报错：
+
+- `preset.yml` 读不出来，名单上回落到显示目录名，组合照样装得起来。反过来做的话，一个写错的展示名会变成一个起不来的 Agent。
+- `stamp` 读不出来，继续服役、不换代。
+
+`persona.Install` 那次登记撞名时，会把已经生效的压制放开；放开本身再失败，两条错一起交出去。
 
 ---
 
@@ -461,31 +447,57 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Y["这两个包做的"] --> Y1["把一批目录变成一份名单<br/>并当场判它们健康不健康"]
-    Y --> Y2["一份预设装一次，让点它的 agent 共享"]
-    Y --> Y3["记住一个会话实际跑在哪一份上"]
-    Y --> Y4["给一个 agent 换一段身份"]
-    N["不做的"] --> N1["不下载、不编译、不动态执行任意代码<br/>清单里一行只能取一个编译期登记好的安装函数"]
-    N --> N2["不决定预设住在哪儿<br/>根路径和背后接哪个后端都由装配方给"]
-    N --> N3["不替调用方写组合文本<br/>创作只有整目录复制这一种写法"]
-    N --> N4["不给 agent 授权<br/>加入只是认一个父作用域<br/>看得见什么由作用域的分层规矩定"]
-    N --> N5["不判「现在换预设合不合适」<br/>会话中途换掉工具会不会留下做不出来的历史，归调用方判"]
-    N --> N6["人设只影响系统提示词<br/>不授予工具，也不授予任何外部权限"]
+    Y["这两个包做的"] --> Y1["把一批目录扫成一份 []Preset<br/>并当场判它们健康不健康"]
+    Y --> Y2["一份预设装一次，点它的 agent 共享"]
+    Y --> Y3["yml 变了就为之后的会话开下一代"]
+    Y --> Y4["记住一个会话实际跑在哪一份上"]
+    Y --> Y5["给一个 agent 换一段人设"]
 ```
+
+```mermaid
+flowchart TD
+    N["不做的"] --> N1["不下载、不编译、不动态执行任意代码<br/>一行只能取一个编译期登记好的 Composer"]
+    N --> N2["不决定预设住在哪儿<br/>根路径和 fs.FileSystem 都由装配方给"]
+    N --> N3["不替调用方写 yml<br/>创作只有 Copy 这一种写法"]
+    N --> N4["不给 agent 授权<br/>加入只是 BindParent，看得见什么由 scope 的分层规矩定"]
+    N --> N5["不判「现在换预设合不合适」<br/>Recompose 不读会话历史"]
+    N --> N6["persona 只影响系统提示词<br/>不授予工具，也不授予任何外部权限"]
+```
+
+---
+
+## 谁在用它
+
+**目前没有非测试调用方。** `Roster` 能力完整、测过，但仓库里没有装配点组装它，第一个接入方 `aiboys-go` 也没有 import。
+
+原因是它只有一种 Agent 形态、用户也不选。哪天要做「用户自己配团队」，这条路是现成的：人设放磁盘上，改完即生效，不用重新编译。
+
+---
 
 ## 对应的 DSH 能力
 
-下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
+下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
 
-| 上游能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
+| DSH 能力 | DSH 包 | 裁决 | 落在哪个 Go 包 | 这里缺什么 |
 |---|---|---|---|---|
 | 按preset组装agent，工具和提示词仅存在一份供所有已加入agent使用 | `preset/agent-presets` | 需要 | `feature/preset/agentpresets` | — |
 | 可组装的agent人设，可遮蔽部署级人设或成为完整系统提示词 | `preset/persona` | 需要 | `feature/preset/persona` | — |
 
 ## 相关源码
 
-- `feature/preset/agentpresets/`
-- `feature/preset/persona/`
-- `fs/`
-- `scope/`
-- `harness/systemprompt/`
+| 路径 | 内容 |
+|---|---|
+| `feature/preset/agentpresets/preset.go` | `Preset`、`Root`、`Trust`、`Config`、两个错误类型 |
+| `feature/preset/agentpresets/roster.go` | `Roster`、`Mount`、`ComposeFrom`、`Recompose`、`ensureStanding` |
+| `feature/preset/agentpresets/discovery.go` | `ScanRoot`、`DiscoverPresets`、`Broken` 那道浅检查 |
+| `feature/preset/agentpresets/mount.go` | `Composer`、`ComposerSet`、`mountComposition`、`readCompositionStamp` |
+| `feature/preset/agentpresets/authoring.go` | `CopyComposition`、`DeleteComposition`、`WritableRoot` |
+| `feature/preset/agentpresets/session.go` | 会话日志里记「这次选了哪一份」 |
+| `feature/preset/agentpresets/invariant.go` | `RegisterInvariants`、`AssemblingAgent` |
+| `feature/preset/persona/persona.go` | `Config`、`Install` |
+
+---
+
+## 深入阅读
+
+[scope](scope.md) · [systemprompt](systemprompt.md) · [Agent](agent.md) · [子 Agent](subagent.md)

@@ -28,6 +28,53 @@ flowchart TD
 
 ---
 
+## 先分清：角色与来源不是一回事
+
+一条消息有两条互相独立的信息：
+
+- **角色（role）**回答“模型应当把它当成谁说的话”。角色会影响指令优先级。
+- **来源（source）**回答“程序里的哪个部件产生了它”。来源用于识别、回放和投影，不提高指令优先级。
+
+本仓库的 `llm.Message` 只有三个角色：
+
+| 角色 | 含义 |
+|---|---|
+| `system` | 系统提示 |
+| `user` | 用户侧输入 |
+| `assistant` | 模型输出 |
+
+本仓库**没有** `developer` 和 `tool` 角色。工具结果使用 `user` 角色，再用
+`source=tool` 和工具结果内容块标明它来自工具。插件补充的信息也使用 `user` 角色，
+再用 `source=plugin` 标明它不是用户亲手输入的。
+
+`feature/context` 的三个子包最终生成的全是 `user` 角色消息：
+
+| 补充信息 | 角色 | 来源 |
+|---|---|---|
+| 工作区指令 | `user` | 插件来源 |
+| 会话引用快照 | `user` | 插件来源 |
+| 时间读数 | `user` | 插件来源 |
+
+所以这里的准确说法是：**这些信息没有拼进 `system` 角色的系统提示词，而是作为
+额外的 `user` 角色消息进入模型输入。**外面的 `<system-reminder>` 只是正文标签，
+不会把一条 `user` 消息变成 `system` 消息。
+
+### 其他 Harness 放在哪个角色
+
+| 实现 | 项目指令等运行时补充信息放在哪里 |
+|---|---|
+| Claude Code | 放进额外的 `user` 角色内容，常用 `<system-reminder>` 包裹；Claude API 的真正系统提示是单独的 `system` 输入 |
+| Codex | 放进 `developer` 角色。它是 OpenAI 协议里的独立角色，权限高于 `user`，不等于 `system` |
+| Grok | `AGENTS.md` 等项目指令作为额外的 `user` 角色项目指令项注入，不拼进主系统提示 |
+| LangChain | 没有替应用作统一决定；应用既能改 `SystemMessage`，也能追加 `HumanMessage`、`ToolMessage` 等消息 |
+| LangGraph | 没有替应用作统一决定；图节点向消息状态写入什么角色，就以什么角色传给模型 |
+
+因此不能笼统地说这些实现“都是作为对话消息传入”：Claude Code、Grok 和本仓库
+选择 `user`，Codex 选择权限不同的 `developer`，LangChain 和 LangGraph 则把选择权
+留给应用代码。
+
+---
+
 ## 架构
 
 ```mermaid

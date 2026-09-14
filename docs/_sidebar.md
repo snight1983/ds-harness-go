@@ -18,7 +18,9 @@
 
 - 扩展能力
   - [Skill、提示词与预设](modules/skill.md)
+  - [Agent Skills 开放规范中文版](agent-skills-spec-zh.md)
   - [多 Agent](modules/subagent.md)
+  - [Subagent 与队友模式](subagent-and-agent-team.md)
   - [存储、文件与附件](modules/storage.md)
   - [持久化抽象层](modules/datastore.md)
   - [后台任务、目标与工作流](modules/workflow.md)
@@ -47,6 +49,8 @@
   - [SDK 协议与服务端](modules/sdk.md)
   - [ACP 接入](modules/acp.md)
   - [MCP 客户端](modules/mcp.md)
+  - [MCP 协议规范中文版](mcp-protocol-spec-zh.md)
+  - [A2A 协议规范中文版](a2a-protocol-spec-zh.md)
   - [不变量诊断](modules/invariants.md)
   - [通用运行时工具](modules/utilities.md)
   - [LLM 测试与回放](modules/llm-testing.md)
@@ -59,6 +63,8 @@
   - [详细设计](DESIGN.md)
   - [会话日志上限](session-log-limit.md)
   - [性能与压力基线](performance-baseline.md)
+  - [结构化输出可靠性](structured-output-reliability.md)
+  - [运行预算与权限](runtime-budgets-and-permissions.md)
   - [包级移植裁决](portmap/rulings.md)
   - [符号级裁决](portmap/decisions.md)
   - [能力覆盖表](portmap/capabilities.md)

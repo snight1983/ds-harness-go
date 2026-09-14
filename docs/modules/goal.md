@@ -26,6 +26,51 @@ flowchart LR
     end
 ```
 
+## 先回答三个核心问题
+
+### 目标是谁创建的
+
+有两条入口：
+
+1. 人直接执行 `/goal <目标>`，命令层调用目标服务创建。
+2. 人正常说话，模型判断这是一项需要多轮持续推进的任务，然后调用 `create_goal`。
+
+第二条路里，**“这句话像不像长期任务”由模型判断**。框架没有另跑一个意图分类器。框架只做硬校验：调用必须发生在顶层 agent 正在处理直接人类输入的回合里，子 agent 和自动续推轮次都不能创建目标。
+
+所以模型并非随时都能给自己创建目标。它可以理解人的意图，但创建预算的授权仍然来自这一轮真实的人类输入。
+
+### 创建后怎么运行
+
+```mermaid
+flowchart TD
+    A["人执行 /goal<br/>或模型调用 create_goal"] --> B["服务追加 goal/change<br/>phase = active<br/>activation = armed"]
+    B --> C{"agent 是否空闲"}
+    C -->|"否"| D["等当前轮结束"]
+    D --> C
+    C -->|"是"| E{"目标仍 active、armed<br/>而且轮数未用完"}
+    E -->|"是"| F["驱动器追加一条<br/>带 goal 来源的 user 消息"]
+    F --> G["agent 开始下一轮"]
+    G --> C
+    E -->|"否"| H["不再续推"]
+```
+
+驱动器不理解业务，也不自己调用模型。它只在 agent 空闲时检查目标状态，然后通过 agent 的收件箱递入一条“继续完成当前目标”的用户消息。消息真正进入会话日志后，这一轮才计入 `RoundsStarted`。
+
+### 谁判断完成
+
+**执行任务的模型判断。**模型认为目标确实完成后，先调用 `get_goal` 取得最新 `goal_id` 和 `revision`，再调用 `update_goal(action = complete)`。
+
+框架随后只校验：
+
+- 调用来自直接人类回合或当前目标的自动续推轮次；
+- `goal_id` 和 `revision` 指向当前版本；
+- 当前阶段允许转成 `complete`；
+- 参数符合工具的 JSON Schema。
+
+框架**不会检查文件是否真的改完、测试是否真的通过、外部系统是否真的达到目标**。这里的 `complete` 是模型提交并通过状态机校验的一条声明，不是独立验收结果。
+
+这意味着当前实现可能发生“模型误判完成”。若业务要求可靠验收，需要在 `update_goal(complete)` 前后增加独立 verifier，读取明确的验收条件和真实证据；现有 Goal 模块没有这一层。
+
 一件会自己往下推的东西，最要紧的问题不是「怎么推」，而是**谁有权让它动起来、以及它什么时候必须停**。这四个包大半的设计都在回答这两个问题。
 
 ---
@@ -51,6 +96,20 @@ flowchart TD
 | 模型工具 | **这次调用够不够格** | 状态本身对不对 |
 | 斜杠命令 | 人敲的这行字是什么意思、结果怎么说 | 任何状态 |
 | 轮次驱动器 | 什么时候递下一条「接着干」 | 目标本身成不成立 |
+
+### 当前仓库是否已经启用
+
+**没有。**四个包的源码和测试都已经存在，但当前仓库的非测试装配代码没有导入并调用 `(*goal.Service).Install`、`(*goaltool.Controller).Install`、`(*goalcommand.Controller).Install` 或 `goalrounddriver.Install`。
+
+因此要区分三件事：
+
+| 层次 | 当前状态 |
+|---|---|
+| 功能代码是否存在 | 存在 |
+| 单元测试是否存在 | 存在 |
+| 当前应用是否完成装配并在运行时启用 | 没有 |
+
+未装配时，普通聊天看不到三个 Goal Tool，`/goal` 不存在，agent 空闲后也不会自动续跑。
 
 ---
 
@@ -110,6 +169,20 @@ flowchart TD
 | 阶段 | 这个目标**本身**还成立吗 |
 | 活化 | **这个进程**此刻可以自动往下推它吗 |
 
+### 状态怎么变化
+
+| 操作 | 操作前 | 操作后 | 自动续推资格 |
+|---|---|---|---|
+| `create` | 没有目标，或上一目标已完成 | `active`，新 ID，修订号 1 | `armed` |
+| `edit` | 有当前目标 | 阶段不变，修订号加 1 | 保持原样 |
+| `pause` | `active` | `paused`，修订号加 1 | `disarmed` |
+| `resume` | `active + disarmed`、`paused` 或 `blocked`，且轮数未耗尽 | `active`，修订号加 1 | `armed` |
+| `complete` | `active`、`paused` 或 `blocked` | `complete`，修订号加 1 | `disarmed` |
+| `block` | `active` | `blocked`，记录原因，修订号加 1 | `disarmed` |
+| `clear` | 有当前目标 | 当前目标变空，留下带下一修订号的墓碑 | `disarmed` |
+
+每一次耐久操作都先验证调用方拿到的 ID 和修订号，再追加新的 `goal/change`。因此两个调用方同时拿着旧状态修改时，只会有一个成功。
+
 ### 为什么活化绝不落盘
 
 ```mermaid
@@ -155,7 +228,9 @@ flowchart TD
 
 **为什么「完成」和「卡住」要松一档**：否则一个自动推进的目标永远没人能宣布它做完了——推它的是模型，而模型没资格说停。
 
-「卡住」还多一道闸：在一个自动轮次里，非得**同一个卡点连着熬过若干轮**才准报，免得模型第一次遇上难处就把目标停掉。
+「卡住」还多一道闸：在一个自动轮次里，至少要达到配置的轮数阈值，默认是 3 轮，免得模型第一次遇上难处就把目标停掉。
+
+这里有一个必须说清的边界：程序只检查 `RoundsStarted >= 3`。它**没有保存并比较前三轮的阻塞原因**，所以“同一个卡点连续存在三轮”仍由提示词要求模型自行判断，并没有得到程序级证明。
 
 这三条规矩全钉在**会话日志**上，不钉在调用参数上：
 
@@ -332,6 +407,34 @@ flowchart TD
     N --> N5["驱动器不跑模型、不执行工具<br/>它只递一条消息"]
 ```
 
+## 与其他 Harness 的 Goal 规则对比
+
+| Harness | 目标怎么创建 | 怎么继续运行 | 怎么认定完成 | 是否独立验收 |
+|---|---|---|---|---|
+| 本项目 | `/goal` 直接创建；模型也可从直接人类请求中推断并调用 `create_goal` | agent 空闲后由驱动器自动追加 Goal Round，默认最多 256 轮 | 执行模型调用 `update_goal(complete)` | 否 |
+| DSH | 与本项目相同 | 与本项目相同 | 执行模型调用 `update_goal` | 否 |
+| Codex | 只有用户或 system/developer 明确要求创建 Goal 时，模型才可调用 `create_goal`；不能从普通任务自行推断 | Thread 空闲且 Goal 为 active 时自动续轮，并统计 Token 和耗时 | 执行模型按完成审计提示自检后调用 `update_goal(complete)` | 否，仍是同一个模型自检 |
+| Grok | 用户通过 `/goal <objective> [--budget <tokens>]` 创建 | Planner 先生成计划和验收条件，随后自动续轮 | 执行模型提交 `completed: true`，Goal Classifier/Verifier 再裁决 | 是；`NotAchieved` 会拒绝完成并继续 |
+| LangChain | 没有内置的持久 Goal 协议 | 由应用自己写 middleware/agent loop | 由应用定义 | 由应用决定 |
+| LangGraph | 没有内置的持久 Goal 协议 | 由应用用状态字段、循环边和 checkpointer 组合 | 由条件边或节点定义 | 由应用决定 |
+
+最关键的差异不是有没有 `Goal` 这个名字，而是“模型说完成以后，框架是否再查一次”：
+
+- 本项目、DSH、Codex 都把执行模型的完成声明作为最终结果。Codex 的完成提示更严格，但仍没有第二个执行者复核。
+- Grok 默认随 Goal 模式开启 Classifier/Verifier。它会检查工作区、测试和证据；`Achieved` 才真正完成，`NotAchieved` 会继续工作。
+- Grok 的旧验证路径仍有 `FailOpenAchieved` 分支，会把部分验证基础设施故障当成完成；较新的 workflow/drain 路径已把这类故障改成自动暂停。因此具体行为还取决于启用的是哪条运行路径。
+- LangChain 和 LangGraph 提供的是搭建材料，没有替应用规定目标入口、续跑规则或完成标准。
+
+Claude Code 的普通 Agent Loop 会在一次用户回合中持续调用工具，直到模型给出最终回答；Task/Todo 和 Stop Hook 可以辅助持续工作，但没有可按上述源码结构确认的同类持久 Goal 状态机。Claude Code 没有公开完整源码，因此这一项只能描述可观察机制，不能和其余几项做同等强度的源码结论。
+
+### 对比结论的源码依据
+
+- DSH：`packages/goal/goal`、`packages/goal/tool-goal`、`packages/goal/goal-round-driver`。
+- Codex：`codex-rs/ext/goal/src/spec.rs`、`codex-rs/ext/goal/src/tool.rs`、`codex-rs/ext/goal/src/runtime.rs`、`codex-rs/ext/goal/templates/goals/continuation.md`。
+- Grok：`crates/codegen/xai-grok-shell/src/session/goal_classifier.rs`、`crates/codegen/xai-grok-shell/src/session/acp_session_impl/goal.rs`、`crates/codegen/xai-grok-shell/src/session/slash_commands.rs`。
+- LangChain：`libs/langchain_v1/langchain/agents/middleware/todo.py`；它是 Todo 中间件，不是持久 Goal 状态机。
+- LangGraph：`libs/langgraph/langgraph/graph`；它提供图状态和执行机制，没有 `create_goal`、`update_goal` 这套内置协议。
+
 ## 对应的 DSH 能力
 
 下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。
@@ -349,3 +452,21 @@ flowchart TD
 - `feature/goal/goaltool/`
 - `feature/goal/goalcommand/`
 - `feature/goal/goalrounddriver/`
+
+## 测试覆盖
+
+| 测试文件 | 主要验证内容 |
+|---|---|
+| `feature/goal/fold_test.go`、`types_test.go` | 事件格式、严格回放、状态跃迁、轮数来源 |
+| `feature/goal/service_test.go` | 创建、编辑、暂停、恢复、完成、阻塞、清除、缓存与活化生命周期 |
+| `feature/goal/projection_test.go` | 宽松投影和重建 |
+| `feature/goal/invariant_test.go` | 非法日志流拒绝 |
+| `feature/goal/goaltool/goaltool_test.go` | 三个 Tool 的 Schema、权限和动作分流 |
+| `feature/goal/goalcommand/goalcommand_test.go` | `/goal` 解析、状态控制和附件处理 |
+| `feature/goal/goalrounddriver/*_test.go` | 自动续轮、检查点、竞争消息、失败收尾和安装生命周期 |
+
+本模块的独立验证命令是：
+
+```text
+go test ./feature/goal/...
+```

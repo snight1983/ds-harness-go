@@ -513,4 +513,4 @@ flowchart LR
 
 ## 深入阅读
 
-[Agent 控制面](agent.md) · [Session](session.md) · [Tools](tools.md) · [系统提示词装配](systemprompt.md) · [LLM](llm.md)
+[Agent 控制面](agent.md) · [Session](session.md) · [Tools](tools.md) · [系统提示词装配](systemprompt.md) · [LLM](llm.md) · [运行预算与权限](../runtime-budgets-and-permissions.md)

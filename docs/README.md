@@ -46,6 +46,8 @@
 - [详细设计](DESIGN.md)：服务端边界、移植原则和各能力块的底层设计。
 - [会话日志上限](session-log-limit.md)：存档按条数封顶、从最老的一头丢，以及由此带来的 `Seq` 起点约定。
 - [性能与压力基线](performance-baseline.md)：长会话、并发 Agent、持久化、SDK 洪泛和 shutdown 的实测数字与判读方法。
+- [结构化输出可靠性](structured-output-reliability.md)：JSON、Schema 与业务校验，四套源码实现，以及正确提交和错误纠正。
+- [运行预算与权限](runtime-budgets-and-permissions.md)：token、模型调用和工具调用预算的归属，五套源码对比，以及权限裁决边界。
 - [包级移植裁决](portmap/rulings.md)：DSH 每个包的移植或排除决定。
 - [符号级裁决](portmap/decisions.md)：逐符号实现依据。
 - [能力覆盖表](portmap/capabilities.md)：能力与当前实现的对应关系。

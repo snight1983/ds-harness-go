@@ -9,7 +9,7 @@
 如果让 agent 循环直接对着某一家的协议写，换一家就得把循环重写一遍：
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph BAD["循环直接贴着某一家写"]
         A1["agent 循环"] --> A2["某厂商的请求格式"]
         A2 --> A3["某厂商的流式格式"]
@@ -19,7 +19,7 @@ flowchart LR
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph GOOD["中间隔一层统一词汇"]
         B1["agent 循环"] --> B2["一套模型无关的说法：<br/>消息、内容块、工具定义、流式分块、失败"]
         B2 --> B3["适配器"] --> B4["某厂商"]
@@ -28,6 +28,27 @@ flowchart LR
 ```
 
 这一层就是那套统一词汇，加上一个把请求路由到某个适配器的运行时。
+
+### 各家到底差在哪里
+
+逻辑上，各家做的都是同一件事：交进去一组消息和工具，拿回来模型回复。但线上协议并不相同。以“用户问天气，模型决定调用天气工具”为例：
+
+| 环节 | OpenAI | Anthropic Claude | Google Gemini |
+|---|---|---|---|
+| 系统提示词 | 放在消息或单独的 instructions 中，取决于所用接口 | 顶层 `system` 字段 | 顶层 `systemInstruction` 字段 |
+| 消息角色 | `system`、`user`、`assistant`、`tool` | 主要是 `user`、`assistant` | `user`、`model` |
+| 一条消息的内容 | `content` 或多个输入内容项 | 文本、图片、工具等 content block | `contents[].parts[]` |
+| 工具定义 | `tools[].function` | `tools[]` 中直接声明名称和输入结构 | `functionDeclarations[]` |
+| 模型发起工具调用 | `tool_calls` 或 function-call 输出项 | `tool_use` block | `functionCall` part |
+| 程序送回工具结果 | 带调用 ID 的工具输出 | `tool_result` block，放进 `user` 消息 | `functionResponse` part |
+| 流式返回 | 文本或输出项的增量事件 | `content_block_start`、`content_block_delta` 等事件 | 持续返回 candidate 和 part |
+| 结束原因 | `stop`、`tool_calls`、`length` 等 | `end_turn`、`tool_use`、`max_tokens` 等 | `STOP`、`MAX_TOKENS` 等 |
+| 用量字段 | 输入、输出和缓存 token 字段 | 输入、输出和缓存 token 字段，但结构不同 | `promptTokenCount`、`candidatesTokenCount` 等 |
+| 鉴权 | 通常是 Bearer token | `x-api-key`，并带协议版本 | API key 或 OAuth |
+
+推理和图片也没有共同格式：OpenAI、Claude、Gemini 各自使用不同的推理参数和返回块；图片分别使用各自的图片输入项、source block、`inlineData` 或 `fileData`。即使一个服务声称兼容 OpenAI 协议，也可能只兼容文本，不兼容工具、图片、推理或完整的流式事件。
+
+因此，agent 循环只使用本包的统一消息、工具和流式分块。每家适配器负责两次翻译：发出前把统一请求翻译成该厂商的协议，收到后再把该厂商的响应翻译回来。
 
 **它是空的。** 一个刚造出来的运行时不含任何模型，也不会自作主张去连哪家云。
 
@@ -59,7 +80,7 @@ flowchart TD
 **为什么日志只能碰值那一半**：
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["如果落盘的数据牵扯到某个厂商 SDK 的类型"] --> B["那份历史就跟那个 SDK 绑死了"]
     B --> C["SDK 升级、换厂商、换语言重读<br/>都要先把它解开"]
     D["只落值"] --> E["一段历史在哪儿都读得回来"]
@@ -100,7 +121,7 @@ flowchart TD
 ## 消息与内容
 
 ```mermaid
-flowchart LR
+flowchart TD
     M["一条消息"] --> B1["文本块"]
     M --> B2["图片块"]
     M --> B3["工具调用块"]
@@ -120,7 +141,7 @@ flowchart TD
 ### 跨边界一律复制
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["交出去的消息和内容"] --> B["内部切片复制一份"]
     B --> C["调用方拿到之后随便改"]
     C --> D["改不到别的组件手里那一份"]
@@ -142,7 +163,7 @@ flowchart TD
 ## 一次调用带什么
 
 ```mermaid
-flowchart LR
+flowchart TD
     C["一份调用配置"] --> C1["提供方路由名"]
     C --> C2["模型标识"]
     C --> C3["最大输出量"]
@@ -163,7 +184,7 @@ flowchart TD
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph GOOD["同一步里取同一份快照"]
         B1["提示词变量"] --> B2["同一份步骤快照"]
         B3["请求路由"] --> B2
@@ -185,7 +206,7 @@ flowchart TD
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["分块可以逐条写进事件"] --> B["最终那条完整消息也落盘"]
     B --> C["恢复和界面展示<br/>不依赖当时那条网络流还活着"]
 ```
@@ -195,7 +216,7 @@ flowchart LR
 ## 失败：一份能落盘的事实，不是一个 Go 错误基类
 
 ```mermaid
-flowchart LR
+flowchart TD
     F["一次失败"] --> F1["稳定的失败代码"]
     F --> F2["是哪个提供方"]
     F --> F3["一句能展示给人的说明"]
@@ -214,7 +235,7 @@ flowchart TD
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["调用方按代码分流"] --> B["行"]
     C["调用方去解析错误文字"] -.->|"对方改一个词就全崩"| D(("×"))
 ```
@@ -241,7 +262,7 @@ sequenceDiagram
 ### 为什么等待要写两条事件
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["只写「安排了重试」"] --> B["回放时看不出这中间等了多久"]
     C["安排 ＋ 等完了 两条都写"] --> D["延迟和抖动都在账上"]
     D --> E["回放时解释得清「实际发生过哪几次尝试」"]
@@ -258,7 +279,7 @@ flowchart TD
 ### 两种模式，以及策略变了怎么办
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["普通模式"] --> A1["受最大次数限制"]
     B["always 模式"] --> B1["由策略明确允许一直重试"]
     C["策略变了"] --> C1["开一条新的重试链"]
@@ -282,7 +303,7 @@ flowchart TD
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["「OpenAI 兼容」"] --> B["只说明线上协议的形状"]
     B -.->|"不保证每个兼容服务的扩展字段都一样"| B
 ```
@@ -315,7 +336,7 @@ flowchart TD
 第三条是故意的：
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["贡献方备不出自己那个字段"] --> B["说明这次请求本来要带的东西没带上"]
     B --> C["照旧发出去"] --> D["换来一次「看起来成了、其实少了半份内容」的调用"]
     D -.->|"这种成功比失败难查得多"| D
@@ -349,7 +370,7 @@ flowchart TD
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["统计的维度"] --> A1["输入"]
     A --> A2["输出"]
     A --> A3["缓存命中"]
@@ -372,7 +393,7 @@ flowchart TD
 ### 单回合的精确用量：一个字都不估
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["吃一段回合开始到回合结束的事件"] --> B["只加提供方亲口报过的数"]
     B --> C{"中间少一角"}
     C -->|"是"| D["整份不给"]
@@ -382,7 +403,7 @@ flowchart LR
 ### 这不是账单
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["估算"] --> B["够用来做压缩和预算决策"]
     A -.->|"不能当计费依据"| C["生产计费要以提供方的实际用量<br/>或者一套独立计量为准"]
 ```
@@ -401,7 +422,7 @@ flowchart TD
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["密钥换了"] --> B["只影响后续请求"]
     B -.->|"绝不回头改已经落盘的历史事实"| C(("×"))
     D["多租户部署"] --> E["租户隔离必须在提供方路由之前完成"]
@@ -440,15 +461,17 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Y["这几个包做的"] --> Y1["统一模型消息、流、配置和失败的说法"]
-    Y --> Y2["提供方路由和适配器的登记与注销"]
-    Y --> Y3["重试、用量计量、一个 OpenAI 兼容实现"]
-    N["不做的"] --> N1["不管 agent 回合和工具循环"]
-    N --> N2["不定义系统提示词的内容"]
-    N --> N3["不做用户鉴权，也不做租户计费"]
-    N --> N4["不保证不同模型行为一致"]
-    N --> N5["不把密钥存进会话"]
-    N --> N6["不提供所有厂商的协议"]
+    Y["这几个包做的"]
+    Y --> Y1["统一模型消息、流、配置和失败的说法"]
+    Y1 --> Y2["提供方路由和适配器的登记与注销"]
+    Y2 --> Y3["重试、用量计量、一个 OpenAI 兼容实现"]
+    Y3 --> N["到这里为止，下面这些不做"]
+    N --> N1["不管 agent 回合和工具循环"]
+    N1 --> N2["不定义系统提示词的内容"]
+    N2 --> N3["不做用户鉴权，也不做租户计费"]
+    N3 --> N4["不保证不同模型行为一致"]
+    N4 --> N5["不把密钥存进会话"]
+    N5 --> N6["不提供所有厂商的协议"]
 ```
 
 ## 对应的 DSH 能力
@@ -479,4 +502,4 @@ flowchart TD
 
 ## 深入阅读
 
-[凭据](credentials.md) · [附件与图片](attachment.md) · [LLM 测试与回放](llm-testing.md)
+[凭据](credentials.md) · [附件与图片](attachment.md) · [LLM 测试与回放](llm-testing.md) · [运行预算与权限](../runtime-budgets-and-permissions.md)

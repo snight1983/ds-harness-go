@@ -390,6 +390,175 @@ flowchart TD
     N --> N5["/compact 不认参数，也不收图片"]
 ```
 
+## 当前仓库有没有用上
+
+结论：**实现已经写完，但当前仓库的正式运行装配没有启用它。**
+
+这里要区分三件事：
+
+1. `feature/compaction` 已经定义了事件、压缩接口和日志不变量。
+2. `feature/compaction/basic`、`toolresultpruner` 和 `compactcommand` 已经有可运行实现和测试。
+3. 当前仓库没有生产代码创建压缩引擎，也没有把自动触发器和 `/compact` 装进运行时。
+
+源码搜索没有找到包外的生产代码调用以下入口：
+
+- `basic.NewEngine`
+- `basic.Install`
+- `toolresultpruner.New`
+- `compactcommand.New` 和 `Controller.Install`
+
+因此，当前默认运行链路不会因为达到 token 压力线而自动压缩，也不会处理 `/compact`，更不会自动裁剪过大的工具结果。
+
+有几个模块已经能够**读懂压缩结果**：
+
+- `feature/tokenmeter` 识别压缩事件，重新计算模型当前能看到的 token。
+- `feature/replay` 识别摘要事件，重建重放脚本。
+- `feature/context/sessionref` 能报告一段会话是否压缩过。
+
+这些属于消费能力，不会主动发起压缩。当前状态可以画成：
+
+```mermaid
+flowchart TD
+    A["压缩事件和接口<br/>已经实现"]
+    A --> B["basic 摘要引擎<br/>已经实现"]
+    B --> C["自动触发安装函数<br/>已经实现"]
+    C --> D["正式装配没有调用 Install"]
+    D --> E["默认 Harness 运行时<br/>没有启用压缩"]
+```
+
+外部程序可以导入这些包并自行装配，所以更准确的说法是：**库具备能力，本仓库没有交出一套已经接通的成品运行时。**
+
+### 真正启用时需要接哪些线
+
+```mermaid
+flowchart TD
+    A["把 compaction.EventTypes<br/>加入会话 Vocabulary"]
+    A --> B["创建 ToolResultPruner<br/>可选"]
+    B --> C["创建 basic.Engine<br/>注入计量器、模型目录和 LLM Stream"]
+    C --> D["调用 basic.Install<br/>监听步骤压力和模型超窗"]
+    D --> E["创建 compactcommand.Controller"]
+    E --> F["安装 /compact<br/>可选"]
+```
+
+缺第一步，带压缩事件的日志会被词汇检查拒绝。缺 `basic.Install`，引擎只能被业务代码手动调用。缺命令安装，用户就没有 `/compact` 入口。
+
+## 其他 Harness 的做法
+
+下面的结论来自各仓库源码，不来自产品文档。
+
+### DSH
+
+DSH 与本仓库的设计最接近，因为本仓库这一组包就是按它的结构重写的。
+
+DSH 的基础 Bundle 默认装入：
+
+- `compaction-basic`
+- `command-compact`
+- `compaction-tool-result-pruner`
+
+所以 DSH 是**已经启用的成品能力**。它在每个 Agent 步骤之前检查压力；默认达到模型窗口的 80% 时开始压缩。模型明确返回上下文超窗后，它也会压缩并重试。压缩前先尝试裁剪大工具结果；用户还可以执行 `/compact`。
+
+它和本仓库使用相同的追加式事务形状：`start → summary/prune → replace → end`。原始日志不删除，模型看到的表面被替换。
+
+源码位置：
+
+- `deepseek-harness-dsh-v0.1.2-alpha.3/packages/compaction/compaction-basic/src/index.ts`
+- `deepseek-harness-dsh-v0.1.2-alpha.3/packages/bundle/base/cordis.patch.yml`
+
+### Codex
+
+Codex 把压缩直接放在 Session 和 Turn 的核心执行链里，不需要应用额外挂一个通用中间件。
+
+它支持：
+
+- token 达到模型的自动压缩上限后压缩。
+- 切换到上下文窗口更小的模型之前压缩。
+- 手动 Compact Task。
+- Provider 支持时调用远程 `/responses/compact`；不支持时在本地发总结请求。
+- 压缩请求本身超窗时，逐步丢弃最老的输入后重试。
+
+压缩完成后，Codex 直接替换内存中的有效历史，同时追加一条 `Compacted` rollout 记录；这条记录带 `replacement_history`，恢复会话时据此重建当前历史。
+
+这和本仓库的目标相同：保留可恢复依据，同时缩短模型输入。记录形状不同：本仓库用四条通用会话事件表达一次事务，Codex 用一条专用 `Compacted` rollout 项保存替换历史。
+
+源码位置：
+
+- `codex-main/codex-rs/core/src/session/turn.rs`
+- `codex-main/codex-rs/core/src/tasks/compact.rs`
+- `codex-main/codex-rs/core/src/compact.rs`
+- `codex-main/codex-rs/core/src/session/mod.rs`
+
+### Grok
+
+Grok 也把压缩直接集成在 Session Actor 中，而且触发点更多：
+
+- 模型请求之前按上下文占用百分比检查。
+- Tool 结果进入历史后，发现已经超过窗口时立即检查。
+- 切换到更小窗口的模型时检查。
+- 用户执行 `/compact`；它允许附带压缩要求。
+
+Grok 还实现了后台预生成第一阶段摘要、两阶段压缩、不同压缩模式，以及按失败原因暂停自动压缩。比如认证失败等登录刷新，额度失败等下一次成功响应，结构或尺寸错误则保持暂停，避免每一步重复撞同一个错误。
+
+它会替换当前聊天历史，同时持久化 `CompactionCheckpoint`；恢复时读取检查点得到压缩后的历史。它比本仓库和 DSH 更偏成品应用，状态和故障分支也更多。
+
+源码位置：
+
+- `grok-build/crates/codegen/xai-grok-shell/src/session/compaction.rs`
+- `grok-build/crates/codegen/xai-grok-shell/src/session/compaction_config.rs`
+- `grok-build/crates/common/xai-grok-compaction/src/code_compaction/compact.rs`
+- `grok-build/crates/codegen/xai-grok-pager/src/slash/commands/compact.rs`
+
+### LangChain
+
+LangChain 提供可选的 `SummarizationMiddleware`。应用创建 Agent 时必须主动把它加进中间件列表；LangChain 不会默认替所有 Agent 开启。
+
+它在调用模型之前执行，可以按消息数、token 数或上下文占比触发。触发后调用摘要模型，然后用：
+
+```text
+RemoveMessage(REMOVE_ALL_MESSAGES)
++ 摘要消息
++ 需要保留的新消息
+```
+
+更新 Agent 状态。它会寻找安全切点，避免拆开 AI Tool Call 和 Tool Result。摘要调用的临时错误会重试，重试耗尽后错误继续向上抛，不会伪造摘要。
+
+LangChain 另有可选的 `ContextEditingMiddleware`，可以在模型请求前把旧 Tool Result 换成 `[cleared]`。它改的是这一次请求使用的消息副本，与本仓库把裁剪事件写进会话日志的做法不同。
+
+源码位置：
+
+- `langchain-master/libs/langchain_v1/langchain/agents/middleware/summarization.py`
+- `langchain-master/libs/langchain_v1/langchain/agents/middleware/context_editing.py`
+
+### LangGraph
+
+LangGraph 本身没有规定一套压缩策略。它提供的是实现压缩所需的底层机制：
+
+- `pre_model_hook` 可以在模型调用前改消息。
+- `RemoveMessage(REMOVE_ALL_MESSAGES)` 可以清空并替换消息状态。
+- `add_messages` Reducer 负责应用删除和替换。
+- 可选 Checkpointer 负责保存修改后的 Graph State。
+
+什么时候压、调用哪个摘要模型、保留多少、失败后是否重试，都由应用或 LangChain 中间件决定。没有 Checkpointer 时，替换只存在于当前运行状态；配置了 Checkpointer 后，新的消息状态才会随 Graph Checkpoint 持久化。
+
+源码位置：
+
+- `langgraph-main/libs/prebuilt/langgraph/prebuilt/chat_agent_executor.py`
+- `langgraph-main/libs/langgraph/langgraph/graph/message.py`
+- `langgraph-main/libs/langgraph/langgraph/graph/state.py`
+
+## 横向结论
+
+| 项目 | 当前是否默认启用 | 自动触发 | 手动入口 | 压缩结果如何保存 |
+|---|---|---|---|---|
+| 本仓库 | 否，只有实现 | 安装后支持压力和超窗 | 安装后支持 `/compact` | 四条追加事件加表面替换 |
+| DSH | 是 | 步骤压力、超窗恢复 | `/compact` | 四条追加事件加表面替换 |
+| Codex | 是 | token 上限、模型切换等 | Compact Task | `Compacted` rollout 加替换历史 |
+| Grok | 是 | 请求前、Tool 后超窗、模型切换 | `/compact`，可带要求 | 替换聊天历史并写 CompactionCheckpoint |
+| LangChain | 否，应用选择中间件 | 消息数、token、窗口比例 | 没有统一内置命令 | 更新 Agent 消息状态 |
+| LangGraph | 否，应用自行实现 | 应用定义 | 应用定义 | 可选 Checkpointer 保存 Graph State |
+
+本仓库的实现完整度接近 DSH，审计能力也比直接覆盖消息状态更强。当前真正的缺口是**装配**：代码能压，但默认运行时从来没有调用它。
+
 ## 对应的 DSH 能力
 
 下表由 [`docs/packages.md`](../packages.md) 与 [能力覆盖表](../portmap/capability-coverage.tsv) 机器 join 得到：本篇覆盖的 Go 包，承接的是上游 DSH 的哪几条能力，以及各自还缺什么。落点列由源码里的 `// 源:` 注释反查，不是手写的。

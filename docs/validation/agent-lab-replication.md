@@ -6,7 +6,7 @@
 
 > 把一个真实的、已经在跑的对话式 Agent 产品完整重做一遍，这套运行时够不够用？
 
-被验对象是 `C:\codestudy\agent-lab`——一个用 LangChain + LangGraph 写的商品带货视频创作 Agent，有十个工具、一个九人创意讨论群、事件溯源的会话日志、一套完整界面。复刻落在两个既有仓库里：后端 `C:\code\aiboys-go`，前端 `C:\code\aiboy`。
+被验对象是 `agent-lab` 仓库——一个用 LangChain + LangGraph 写的商品带货视频创作 Agent，有十个工具、一个九人创意讨论群、事件溯源的会话日志、一套完整界面。复刻落在两个既有仓库里：后端 `aiboys-go`，前端 `aiboy`。
 
 ```mermaid
 flowchart LR

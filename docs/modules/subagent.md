@@ -448,6 +448,8 @@ flowchart LR
 
 一个会话可以带一群队友干活。队友就是可续孩子；团队这一层只多给三样东西。
 
+Subagent、队友模式以及其他 Harness 的实现对比，见[《Subagent 与队友模式》](../subagent-and-agent-team.md)。
+
 ```mermaid
 flowchart LR
     L["队长会话<br/>团队身份 = 它的会话身份"]
