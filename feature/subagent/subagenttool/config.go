@@ -137,6 +137,19 @@ type Config struct {
 	// description 同时回答的两件事。
 	Description string
 
+	// DescriptionOnly 为真时 [Config.Description] 就是这件工具的**全部**说明，
+	// 那段通用的「Delegate a task to a subagent…」不再附在后面。
+	//
+	// # 什么时候要它
+	//
+	// 同族工具装好几件时（六位各管一维的专家），那段通用文字是**逐字重复**的：六
+	// 件加起来多出三千多个字符，说的却是同一件事。工具说明越长，模型在一堆同族工具
+	// 里挑得越费劲，而它挑错一次的代价是一次白花的调用。
+	//
+	// 参数怎么填不靠那段通用文字——schema 里每个字段自己写明了。所以只留 [Config.Description]
+	// 那一句，信息没少，字少了一大半。
+	DescriptionOnly bool
+
 	// AgentOf 从一把作用域钥匙找到那个 agent，必填。
 	//
 	// 新增: DSH 的 exec.agent 就是 agent 对象本身。Go 这边它是一把不透明的钥匙，
@@ -318,6 +331,7 @@ func New(config Config) (*Controller, error) {
 		install:             config.Install,
 		maxDepth:            maxDepth,
 		descriptionOverride: config.Description,
+		descriptionOnly:     config.DescriptionOnly,
 		modelSelectionAsked: config.ModelSelectionSettings,
 	}, nil
 }

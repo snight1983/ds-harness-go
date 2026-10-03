@@ -49,6 +49,8 @@ type Controller struct {
 	toolFilter        tools.Restriction
 	// install 是给每个孩子那次装配的额外一笔，见 [Config.Install]。
 	install subagent.ChildInstaller
+	// descriptionOnly 见 [Config.DescriptionOnly]：只要调用方那一句，不要通用那几段。
+	descriptionOnly bool
 	maxDepth          *int
 
 	// descriptionOverride 非空时**放在**那件工具默认说明的前面，而不是替换它。
@@ -486,6 +488,27 @@ func outputSchema() tools.Node {
 // newTool 造那件工具，措辞由提供方那句「孩子看不看得到父的历史」定下来。
 //
 // 源: packages/subagent/tool-subagent/src/index.ts:300-440
+// described 交回这件工具给模型看的那段说明。
+//
+// 分两半：调用方自己那一句（[Config.Description]）讲这件事是什么，通用那几段讲
+// 孩子看不看得见这段对话、参数怎么填。装了 [Config.DescriptionOnly] 就只要前一半。
+//
+// # 为什么需要这个开关
+//
+// 同族工具装好几件时（比如六位各管一维的专家），后一半是**逐字重复**的：六件加
+// 起来多出几千个字符，而它们说的是同一件事。工具说明越长，模型在一堆同族工具里挑
+// 得越费劲，而它挑错一次的代价是一次白花的调用。
+//
+// 参数怎么填不靠那段通用文字：schema 里每个字段自己写明了。
+func (c *Controller) described(words wording, selectionEnabled, inheritsConversation bool) string {
+	if c.descriptionOnly {
+		return c.descriptionOverride
+	}
+	return leadingDescription(c.descriptionOverride) +
+		toolDescription(words.description, c.backgroundEnabled, c.continuable) +
+		choiceDescription(selectionEnabled, inheritsConversation)
+}
+
 func (c *Controller) newTool(inheritsConversation bool) *tools.Definition {
 	words := providerWording(inheritsConversation)
 	properties := []tools.Property{
@@ -515,10 +538,8 @@ func (c *Controller) newTool(inheritsConversation bool) *tools.Definition {
 		})
 	}
 	return &tools.Definition{
-		Name: c.toolName,
-		Description: leadingDescription(c.descriptionOverride) +
-			toolDescription(words.description, c.backgroundEnabled, c.continuable) +
-			choiceDescription(selectionEnabled, inheritsConversation),
+		Name:        c.toolName,
+		Description: c.described(words, selectionEnabled, inheritsConversation),
 		Parameters: tools.Node{
 			Type:       tools.TypeObject,
 			Properties: properties,
