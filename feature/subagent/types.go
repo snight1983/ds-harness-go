@@ -130,6 +130,13 @@ type StartRequest struct {
 	// 进程内的后端把它登记成孩子身上一段带作用域的 `deployment:persona`，
 	// **盖掉**部署自己那份人设，且只对这一个孩子生效。空串表示不换。
 	Persona string
+	// Install 是可选的、只给这个孩子的额外一笔装配，见 [ChildComposition.Install]。
+	//
+	// 它不走 Capabilities：它不是那套「每一样开工期能力都要提供方支持」的东西，
+	// 而是装配方在孩子的作用域上自己登记一笔。进程内的后端跑它；进程外的后端
+	// 拿不到这个函数（它过不了那道进程边界），所以那边**静默忽略**——所以要用它
+	// 的装配方得自己知道自己在跟哪个后端说话。
+	Install ChildInstaller
 }
 
 // ResolvedStartRequest 是服务解算出持久的孩子描述符之后，交给提供方的那份一次性请求。

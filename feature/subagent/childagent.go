@@ -181,7 +181,23 @@ type ChildComposition struct {
 	Persona string
 	// ToolFilter 是只给这个孩子的工具范围；零值表示不过滤。
 	ToolFilter tools.Restriction
+	// Install 是装配方给**这一个**孩子那次装配的额外一笔，在孩子的创建窗口里跑。
+	//
+	// 它存在的理由：有些东西既不是人设也不是工具范围，却同样是**每个孩子各不
+	// 相同**的。技能的可见性就是一个——六个专家各有一份技能，而技能登记是带
+	// 作用域的，只能在「知道这是哪个孩子」的那一刻登记；登记在根作用域上就等于
+	// 每个人都看得见所有人的技能。
+	//
+	// 它**不持久化**：函数存不进孩子那份描述符，所以冷恢复出来的孩子拿不到这一
+	// 笔。要用它的装配方得自己接受这一点。
+	Install ChildInstaller
 }
+
+// ChildInstaller 是给孩子那次装配的额外一笔。
+//
+// 交回的撤销函数**有意被丢掉**：owner 就是这个孩子自己的作用域，作用域一处置这
+// 笔登记就跟着没了——和 [ApplyChildComposition] 里其余几笔同一个道理。
+type ChildInstaller func(ctx context.Context, childScope *scope.Scope) (func(context.Context) error, error)
 
 // DelegationContext 是每一个进程内孩子都看得到的那句派发范围陈述。
 //
@@ -281,6 +297,11 @@ func ApplyChildComposition(
 			return fmt.Errorf("%w：给子 agent 设工具范围需要工具运行时", ErrInvalidRequest)
 		}
 		if _, err := services.Tools.Restrict(ctx, childScope, composition.ToolFilter); err != nil {
+			return err
+		}
+	}
+	if composition.Install != nil {
+		if _, err := composition.Install(ctx, childScope); err != nil {
 			return err
 		}
 	}

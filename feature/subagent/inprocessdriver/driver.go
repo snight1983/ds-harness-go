@@ -109,6 +109,7 @@ func StartInProcessRun(
 		if err := subagent.ApplyChildComposition(setupCtx, childScope, parent, subagent.ChildComposition{
 			Persona:    request.Persona,
 			ToolFilter: request.ToolFilter,
+			Install:    request.Install,
 		}, services.Composition); err != nil {
 			return nil, err
 		}

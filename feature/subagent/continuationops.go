@@ -138,7 +138,11 @@ func (m *ContinuationManager) StartContinuable(
 			delegatedPolicies: delegatedPolicies,
 		},
 		agentOptions: ResolveChildAgentOptions(parent, request.AgentOptions),
-		composition:  ChildComposition{Persona: request.Persona, ToolFilter: request.ToolFilter},
+		composition: ChildComposition{
+			Persona:    request.Persona,
+			ToolFilter: request.ToolFilter,
+			Install:    request.Install,
+		},
 	})
 	if err != nil {
 		return ContinuableStart{}, err

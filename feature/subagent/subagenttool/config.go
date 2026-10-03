@@ -182,6 +182,16 @@ type Config struct {
 	// 在这里没有产出方：一个零值就是「不过滤」，不是一个写坏了的过滤器。
 	ToolFilter tools.Restriction
 
+	// Install 是给每个孩子那次装配的额外一笔，见 [subagent.ChildComposition.Install]。
+	//
+	// 它比 ToolFilter 更能表达「每个孩子各不相同」：工具范围只能摘掉工具，而这一
+	// 笔能在孩子自己的作用域上登记任何东西——技能可见性就是一个（六个专家各有
+	// 一份技能，登记在根上就人人看得见，只能登记在孩子身上）。
+	//
+	// 它只对进程内的后端有效；进程外的后端拿不到这个函数。见
+	// [github.com/snight1983/ds-harness-go/feature/subagent.StartRequest.Install]。
+	Install subagent.ChildInstaller
+
 	// MaxDepth 是给每个孩子的派发深度绝对上限，nil 取 [DefaultMaxDepth]。
 	// 0 是有意义的取值：它禁止一切再派发。要提供方的 DepthLimit 能力，
 	// 这一条在**装的时候**就查，不是等到第一次派发。
@@ -305,6 +315,7 @@ func New(config Config) (*Controller, error) {
 		agentOptions:        config.AgentOptions,
 		persona:             config.Persona,
 		toolFilter:          config.ToolFilter,
+		install:             config.Install,
 		maxDepth:            maxDepth,
 		descriptionOverride: config.Description,
 		modelSelectionAsked: config.ModelSelectionSettings,

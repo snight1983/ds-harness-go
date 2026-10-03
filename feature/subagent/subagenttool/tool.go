@@ -47,6 +47,8 @@ type Controller struct {
 	agentOptions      agent.Options
 	persona           string
 	toolFilter        tools.Restriction
+	// install 是给每个孩子那次装配的额外一笔，见 [Config.Install]。
+	install subagent.ChildInstaller
 	maxDepth          *int
 
 	// descriptionOverride 非空时**放在**那件工具默认说明的前面，而不是替换它。
@@ -189,6 +191,7 @@ func (c *Controller) startRequest(
 		AgentOptions: childOptions,
 		Persona:      c.persona,
 		ToolFilter:   c.toolFilter,
+		Install:      c.install,
 		MaxDepth:     c.maxDepth,
 	}
 }
