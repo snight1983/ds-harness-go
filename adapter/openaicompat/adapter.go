@@ -530,6 +530,17 @@ func (a *Adapter) streamWithSnapshot(
 	if len(options.Stop) > 0 {
 		params.Stop = openai.ChatCompletionNewParamsStopUnion{OfStringArray: slices.Clone(options.Stop)}
 	}
+	// **一步只准发一个工具调用。**
+	//
+	// 本地 llama.cpp 那台在一条消息里出现第二个 `<tool_call>` 时**一个都解析不出来**：
+	// 整段退回成正文里的字。实测过——同一条链路上「一步一个调用」14 次全成，
+	// 「一步多个调用」5 次全败，而且败的时候结构化调用数是 0。
+	//
+	// 点了这个字段以后提供方会让模型一步只交一个，于是每一步都落回那条能解析的路。
+	// 代价是少了并行；换来的是调用不再凭空消失——一次白花的调用比一次慢的调用贵。
+	//
+	// 字段本身是 OpenAI 兼容面上的标准字段，不认它的网关只会忽略。
+	params.ParallelToolCalls = param.NewOpt(false)
 	// 空的线上拼法表示这一档什么都不发（只有 off 那一档允许这样），
 	// 见 [ModelProfile].ReasoningEfforts。
 	if reasoning.Wire != "" {
