@@ -7,6 +7,8 @@
 
 package subagenttool
 
+import "strings"
+
 // wording 是一次装配定下来的那两段措辞。
 //
 // 源: packages/subagent/tool-subagent/src/index.ts:220
@@ -136,6 +138,18 @@ func toolDescription(base string, backgroundEnabled, continuable bool) string {
 	default:
 		return base + oneShotSuffix
 	}
+}
+
+// leadingDescription 把一段调用方自己的说明放到默认说明前面。空串时一个字都不加。
+//
+// 它是给「同族工具」用的：装六件各管一维的专家工具时，默认说明逐字相同，模型只能
+// 靠工具名猜该请谁；调用方写的这一段把「我管哪一维、什么时候请我」摆在第一句。
+func leadingDescription(override string) string {
+	trimmed := strings.TrimSpace(override)
+	if trimmed == "" {
+		return ""
+	}
+	return trimmed + "\n\n"
 }
 
 // backgroundDescription 是 run_in_background 那个参数的说明。

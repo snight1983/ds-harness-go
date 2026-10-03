@@ -129,6 +129,14 @@ type Config struct {
 	// 同一个工具运行时里装两份就得给两个不同的名字。
 	ToolName string
 
+	// Description 是这件工具说明里**放在最前面**的那一段，空串表示不加。
+	//
+	// 装好几件同族工具时（比如六位各管一维的专家）默认说明是逐字相同的，模型只能
+	// 靠工具名猜该请谁。这一段用来把「我管哪一维、什么时候请我」写进描述里——那句
+	// 也正是 [github.com/snight1983/ds-harness-go/feature/skill] 那份技能规范要求
+	// description 同时回答的两件事。
+	Description string
+
 	// AgentOf 从一把作用域钥匙找到那个 agent，必填。
 	//
 	// 新增: DSH 的 exec.agent 就是 agent 对象本身。Go 这边它是一把不透明的钥匙，
@@ -298,6 +306,7 @@ func New(config Config) (*Controller, error) {
 		persona:             config.Persona,
 		toolFilter:          config.ToolFilter,
 		maxDepth:            maxDepth,
+		descriptionOverride: config.Description,
 		modelSelectionAsked: config.ModelSelectionSettings,
 	}, nil
 }

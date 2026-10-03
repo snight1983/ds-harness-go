@@ -49,6 +49,13 @@ type Controller struct {
 	toolFilter        tools.Restriction
 	maxDepth          *int
 
+	// descriptionOverride 非空时**放在**那件工具默认说明的前面，而不是替换它。
+	//
+	// 放在前面是因为一类工具要在第一句就说清「我管哪一维、什么时候请我」——模型挑
+	// 工具看的正是这一段。而后面的默认说明讲的是参数怎么填、孩子看不看得见这段
+	// 对话，那些每个孩子都要，替换掉就不是专家工具而是一件残废工具了。
+	descriptionOverride string
+
 	// modelSelectionAsked 是 [Config.ModelSelectionSettings] 那一位：装配**要**
 	// 这件事。真正开没开还要看装的那一刻这条会话有没有一张授权表，那是 policy。
 	modelSelectionAsked bool
@@ -506,7 +513,8 @@ func (c *Controller) newTool(inheritsConversation bool) *tools.Definition {
 	}
 	return &tools.Definition{
 		Name: c.toolName,
-		Description: toolDescription(words.description, c.backgroundEnabled, c.continuable) +
+		Description: leadingDescription(c.descriptionOverride) +
+			toolDescription(words.description, c.backgroundEnabled, c.continuable) +
 			choiceDescription(selectionEnabled, inheritsConversation),
 		Parameters: tools.Node{
 			Type:       tools.TypeObject,
