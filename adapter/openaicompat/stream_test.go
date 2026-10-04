@@ -318,7 +318,7 @@ func collectChunks(t *testing.T, body, model string, contextWindow int) ([]llm.S
 	t.Helper()
 	var chunks []llm.StreamChunk
 	var failure error
-	for chunk, err := range streamChunks(sseStream(body), model, contextWindow) {
+	for chunk, err := range streamChunks(sseStream(body), model, contextWindow, nil) {
 		if err != nil {
 			failure = err
 			break
@@ -559,7 +559,7 @@ func TestStreamChunksStopsWhenCallerStops(t *testing.T) {
 		"data: [DONE]\n\n"
 
 	count := 0
-	for range streamChunks(sseStream(body), "m", 0) {
+	for range streamChunks(sseStream(body), "m", 0, nil) {
 		count++
 		if count == 2 {
 			break

@@ -384,12 +384,15 @@ func streamChunks(
 	stream *ssestream.Stream[openai.ChatCompletionChunk],
 	model string,
 	contextWindow int,
-) iter.Seq2[llm.StreamChunk, error] {
-	return func(yield func(llm.StreamChunk, error) bool) {
+	raw *rawSession,
+) iter.Seq2[llm.StreamChunk, error] {	return func(yield func(llm.StreamChunk, error) bool) {
 		var assembly blockAssembly
 		var usage llm.TokenUsage
 		finishReason := ""
 		stopped := false
+		// 这一次流里见过什么。收尾时要拿它判一件事——见下面 [unparsedCall]。
+		var contentSeen strings.Builder
+		var reasoningSeen strings.Builder
 		emit := func(chunk llm.StreamChunk) {
 			if stopped {
 				return
@@ -413,7 +416,10 @@ func streamChunks(
 				if choice.Index != 0 {
 					continue
 				}
+				raw.chunk(chunk.RawJSON())
 				assembly.applyDelta(choice.Delta, emit)
+				contentSeen.WriteString(choice.Delta.Content)
+				reasoningSeen.WriteString(rawReasoning(choice.Delta))
 				if choice.FinishReason != "" {
 					finishReason = choice.FinishReason
 				}
@@ -434,9 +440,69 @@ func streamChunks(
 		if stopped {
 			return
 		}
+		// 收尾那一行：服务端说它为什么停、适配器拼出了几件调用、有没有正文。
+		raw.note(fmt.Sprintf("finish_reason=%q tool_calls=%d has_content=%v",
+			finishReason, len(assembly.callOrder), assembly.hasContent()))
+		// 一次**没被解析出来的工具调用**。
+		//
+		// 本地那台推理服务的解析时灵时不灵：模型明明按模板吐了完整的
+		// `<tool_call><function=…><parameter=…></tool_call>`，它有时代劳转成
+		// `tool_calls` 分片，有时整段留在 `reasoning_content` 里，然后报 `stop`。
+		//
+		// 那三样凑齐就是这件事：报的是 stop、正文一片没有、思考里躺着一个闭合的
+		// 调用。这时这一轮其实什么都没做，可它看上去和「答完了却什么都没说」一样
+		// ——上面几层分不出来，界面上也就什么都看不见。
+		//
+		// 这里只**报出来**：交给上层一条失败事实。不去把那段字捡回来执行——那是
+		// 替提供方兜底，会把一个它该修的毛病盖住。
+		finish := mapFinishReason(finishReason, model, assembly.hasContent(), usage, contextWindow)
+		if unparsedCall(finishReason, contentSeen.Len(), len(assembly.callOrder), reasoningSeen.String()) {
+			raw.note("unparsed tool call: the provider left a complete <tool_call> in reasoning_content")
+			emit(llm.UsageChunk{Usage: usage})
+			emit(llm.FinishChunk{Reason: llm.ErrorFinish{Failure: llm.Failure{
+				Message: "提供方没有把这一次工具调用解析出来：模型按模板给出了完整的 " +
+					"<tool_call>，服务端却把它留在 reasoning_content 里并报了 stop。" +
+					"这一次调用没有发生，也没有正文。",
+				Code: "UNPARSED_TOOL_CALL",
+			}}})
+			return
+		}
 		emit(llm.UsageChunk{Usage: usage})
 		emit(llm.FinishChunk{
-			Reason: mapFinishReason(finishReason, model, assembly.hasContent(), usage, contextWindow),
+			Reason: finish,
 		})
 	}
+}
+
+// rawReasoning 取出这条增量里那段推理文本，取不到就是空串。
+//
+// 和 [blockAssembly.applyDelta] 读的是同一个字段；这里只为了记一份原始的样子。
+// unparsedCall 判这一次是不是「提供方没把工具调用解析出来」。
+//
+// 三样同时成立才算：报的是正常收尾、正文一个字都没有、一件调用都没拼出来，而思考
+// 里躺着一个**闭合的** `<tool_call>…</tool_call>`。
+//
+// 最后那一条要闭合标签：一个只有开标签的思考可能只是模型在自言自语，把那种也算上
+// 会误报。
+func unparsedCall(finishReason string, contentLen, callCount int, reasoning string) bool {
+	if finishReason != "stop" || contentLen > 0 || callCount > 0 {
+		return false
+	}
+	open := strings.Index(reasoning, "<tool_call>")
+	if open < 0 {
+		return false
+	}
+	return strings.Contains(reasoning[open:], "</tool_call>")
+}
+
+func rawReasoning(delta openai.ChatCompletionChunkChoiceDelta) string {
+	raw, present := delta.JSON.ExtraFields[reasoningContentField]
+	if !present {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal([]byte(raw.Raw()), &text); err != nil {
+		return "<unparsable>"
+	}
+	return text
 }

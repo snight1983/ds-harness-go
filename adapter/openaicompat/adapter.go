@@ -6,6 +6,7 @@
 package openaicompat
 
 import (
+	"encoding/json"
 	"context"
 	"fmt"
 	"iter"
@@ -78,7 +79,6 @@ type AdapterOptions struct {
 	Identity llm.AppIdentity
 	// WrapTransport 在每条路由的 HTTP 客户端成形之后包一层它自己的传输层；
 	// nil 表示不包。
-	//
 	// 新增: DSH 那边整个传输层归 pi-ai 所有，宿主碰不到，所以没有这个钩子。这边
 	// 自己造客户端（见 [newHTTPClient]），造完就封死在包内部——而线上原文只在这一
 	// 层里出现过：请求体被 SDK 序列化之后、响应体被解析成事件之前。宿主要留审计
@@ -87,6 +87,11 @@ type AdapterOptions struct {
 	// 每条路由各包一次，在 [Adapter.current] 重建快照时调用，不在请求路径上。
 	// 包出来的那一层要自己保证并发安全——一条路由的客户端会被多个会话同时用。
 	WrapTransport func(http.RoundTripper) http.RoundTripper
+	// RawLogDir 是「把发出去的请求体和返回的原文各存一份」落到哪个目录。
+	//
+	// **空串表示不记，这是默认。**开启之后一次请求写两个文件、约 1.7 MB，所以它只该
+	// 在查一件事的时候临时打开。写不进去不会让请求失败，见 [rawSession]。
+	RawLogDir string
 }
 
 // Adapter 是这条协议上的多提供方适配器。每次操作都重读一遍当下的路由表，
@@ -558,6 +563,13 @@ func (a *Adapter) streamWithSnapshot(
 	}
 	callOptions = append(callOptions, extensionOptions(fields)...)
 
+	// 发出去的那一半也存一份原文。只记返回的一半看不出「模型把调用写成了字」还是
+	// 「工具清单里压根没有它」——那两件事的差别全在请求里。
+	raw := rawOpen(a.options.RawLogDir)
+	if encoded, err := json.Marshal(params); err == nil {
+		raw.request(encoded)
+	}
+
 	service := snap.services[options.Provider]
 	stream := service.NewStreaming(streamCtx, params, callOptions...)
 	if err := stream.Err(); err != nil {
@@ -574,7 +586,7 @@ func (a *Adapter) streamWithSnapshot(
 		defer close(items)
 		// 关流归生产者所有：消费者那边关会和这边正在进行的读撞在一起。
 		defer func() { _ = stream.Close() }()
-		for chunk, err := range streamChunks(stream, model.ID, model.ContextWindow) {
+		for chunk, err := range streamChunks(stream, model.ID, model.ContextWindow, raw) {
 			select {
 			case items <- streamItem{chunk: chunk, err: err}:
 			case <-streamCtx.Done():

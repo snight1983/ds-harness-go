@@ -46,7 +46,7 @@ func FuzzStreamChunks(f *testing.F) {
 		open := map[int]llm.BlockType{}
 		var chunks []llm.StreamChunk
 		var failure error
-		for chunk, err := range streamChunks(stream, "fuzz-model", 0) {
+		for chunk, err := range streamChunks(stream, "fuzz-model", 0, nil) {
 			if err != nil {
 				failure = err
 				break
