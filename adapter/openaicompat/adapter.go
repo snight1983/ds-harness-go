@@ -87,11 +87,19 @@ type AdapterOptions struct {
 	// 每条路由各包一次，在 [Adapter.current] 重建快照时调用，不在请求路径上。
 	// 包出来的那一层要自己保证并发安全——一条路由的客户端会被多个会话同时用。
 	WrapTransport func(http.RoundTripper) http.RoundTripper
-	// RawLogDir 是「把发出去的请求体和返回的原文各存一份」落到哪个目录。
+	// RawLogDir 是「把发出去的请求体和返回的原文各存一份」落到哪条路径。
 	//
 	// **空串表示不记，这是默认。**开启之后一次请求写两个文件、约 1.7 MB，所以它只该
 	// 在查一件事的时候临时打开。写不进去不会让请求失败，见 [rawSession]。
+	//
+	// 它是一条路径，不是一台机器上的目录：落地的介质由 [RawLogFiles] 给。
 	RawLogDir string
+	// RawLogFiles 是 [RawLogDir] 那条缝，nil 表示不记。
+	//
+	// 新增: DSH 那边这条记录直接写宿主进程的文件系统，所以只要一个目录就够了。这边
+	// 跑的地方没有可用硬盘，存储全在数据库和对象存储上，所以介质必须是装配时给的
+	// 一件事——本包只声明它要用 [RawLogFiles] 上那三个原语。
+	RawLogFiles RawLogFiles
 }
 
 // Adapter 是这条协议上的多提供方适配器。每次操作都重读一遍当下的路由表，
@@ -565,9 +573,9 @@ func (a *Adapter) streamWithSnapshot(
 
 	// 发出去的那一半也存一份原文。只记返回的一半看不出「模型把调用写成了字」还是
 	// 「工具清单里压根没有它」——那两件事的差别全在请求里。
-	raw := rawOpen(a.options.RawLogDir)
+	raw := rawOpen(streamCtx, a.options.RawLogFiles, a.options.RawLogDir)
 	if encoded, err := json.Marshal(params); err == nil {
-		raw.request(encoded)
+		raw.request(streamCtx, encoded)
 	}
 
 	service := snap.services[options.Provider]
@@ -586,7 +594,7 @@ func (a *Adapter) streamWithSnapshot(
 		defer close(items)
 		// 关流归生产者所有：消费者那边关会和这边正在进行的读撞在一起。
 		defer func() { _ = stream.Close() }()
-		for chunk, err := range streamChunks(stream, model.ID, model.ContextWindow, raw) {
+		for chunk, err := range streamChunks(streamCtx, stream, model.ID, model.ContextWindow, raw) {
 			select {
 			case items <- streamItem{chunk: chunk, err: err}:
 			case <-streamCtx.Done():

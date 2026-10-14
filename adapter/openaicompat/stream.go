@@ -6,6 +6,7 @@
 package openaicompat
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -376,17 +377,22 @@ func (a *blockAssembly) applyDelta(delta openai.ChatCompletionChunkChoiceDelta, 
 // 源: packages/llm/llm-pi-ai/src/stream.ts:127-211
 //
 // model 是这次请求点的模型 id，只进诊断文案；contextWindow 是目录里它的上下文容量，
-// 为 0 表示不做基于用量的溢出判定。
+// 为 0 表示不做基于用量的溢出判定。ctx 只交给 [rawSession.flush]——那次写是这次请求
+// 的一部分，请求的期限和取消都该管得住它。
 //
 // 交出来的序列一定以 usage 加 finish 收尾——除非底层流自己报错，那时最后一项
 // 是那条错误。调用方提前不取了的话，[ssestream.Stream] 由调用方关闭。
 func streamChunks(
+	ctx context.Context,
 	stream *ssestream.Stream[openai.ChatCompletionChunk],
 	model string,
 	contextWindow int,
 	raw *rawSession,
 ) iter.Seq2[llm.StreamChunk, error] {
 	return func(yield func(llm.StreamChunk, error) bool) {
+		// 落盘归这一层所有：从哪一步退出，那半截原文都该留下来。
+		defer raw.flush(ctx)
+
 		var assembly blockAssembly
 		var usage llm.TokenUsage
 		finishReason := ""
