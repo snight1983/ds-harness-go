@@ -385,7 +385,8 @@ func streamChunks(
 	model string,
 	contextWindow int,
 	raw *rawSession,
-) iter.Seq2[llm.StreamChunk, error] {	return func(yield func(llm.StreamChunk, error) bool) {
+) iter.Seq2[llm.StreamChunk, error] {
+	return func(yield func(llm.StreamChunk, error) bool) {
 		var assembly blockAssembly
 		var usage llm.TokenUsage
 		finishReason := ""

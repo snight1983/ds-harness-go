@@ -51,7 +51,7 @@ type Controller struct {
 	install subagent.ChildInstaller
 	// descriptionOnly 见 [Config.DescriptionOnly]：只要调用方那一句，不要通用那几段。
 	descriptionOnly bool
-	maxDepth          *int
+	maxDepth        *int
 
 	// descriptionOverride 非空时**放在**那件工具默认说明的前面，而不是替换它。
 	//

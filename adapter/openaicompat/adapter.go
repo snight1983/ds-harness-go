@@ -6,8 +6,8 @@
 package openaicompat
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"fmt"
 	"iter"
 	"maps"
